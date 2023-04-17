@@ -8,6 +8,8 @@ get_representative_country <- function(income_group){
   
 }
 
+
+
 #use an age-distribution defined by probability of death from severe disease if hospitalised
 get_ifr_dist <- function(){
 
@@ -15,15 +17,17 @@ get_ifr_dist <- function(){
   return(prob_severe_death_treatment)
 }
 
-
-
 # Run scenarios
-run_scenario <- function(target_pop = 1e6,
+run_scenario_2 <- function(target_pop = 1e6,
                          income_group = "HIC",
                          R0 = 3,
                          Rt1 = 0.8,
+                         Rt1a = 0.8,
+                         Rt1b = 0.8,
                          Rt2 = 3,
                          timing1 = 30,
+                         timing1a = 40,
+                         timing1b = 70,
                          timing2 = 365,
                          ifr_scaling = 1,
                          coverage = 0, 
@@ -54,7 +58,8 @@ run_scenario <- function(target_pop = 1e6,
   le_vector <- life_expectancy %>% 
                select(age_group,{{income_group}}) %>%
                rename(life_expect = {{income_group}})
-   
+    
+    
  
   # IFR scaling
   
@@ -185,8 +190,8 @@ run_scenario <- function(target_pop = 1e6,
 
   
   # R
-  R0 <- c(R0, Rt1, Rt2)
-  tt_R0 <- c(0, timing1, timing2)
+  R0 <- c(R0, Rt1, Rt1a, Rt1b, Rt2)
+  tt_R0 <- c(0, timing1, timing1a, timing1b, timing2)
   
   r1 <- run_booster( 
     time_period = runtime, 
@@ -326,12 +331,12 @@ format_out <- function(out, scenarios){
       unique()
   # Combine runs and counterfactual and estimate summaries
  # out2 <- filter(out1, vaccine_start < 365)
-  summaries <- left_join(out1, outcf,by=c("target_pop","income_group","R0","Rt1","Rt2","timing1", "ifr_scaling","coverage", 
+  summaries <- left_join(out1, outcf,by=c("target_pop","income_group","R0","Rt1","Rt1a", "Rt1b", "Rt2","timing1", "timing1a", "timing1b", "ifr_scaling","coverage", 
                                           "vaccination_rate", "duration_R", "duration_V", "dur_vacc_delay", "seeding_cases",
                                           "efficacy_infection_v1","efficacy_disease_v1", "efficacy_infection_v2", "efficacy_disease_v2",
-                                          "lower_priority", "lower_vaccine", "runtime", "two_vaccines"))
+                                          "lower_priority", "lower_vaccine", "runtime","two_vaccines"))
   summaries <- left_join(summaries, vsl, by=c("income_group"))
-  summaries_age <- summarise_age_outputs(summaries)
+  summaries_age <- summarise_age_outputs(summaries) 
   final <- select(summaries_age,-contains("output_age"))
 }
 
