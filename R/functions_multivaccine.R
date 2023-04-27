@@ -50,7 +50,7 @@ run_scenario <- function(target_pop = 1e6,
   pop_standardise <- target_pop / sum(pop)
   pop <- pop * pop_standardise
   mm <- squire::get_mixing_matrix(country = rep_country)
-  life_expectancy <- read.csv("data/life_expectancy.csv")
+  life_expectancy <- read.csv("data/life_expectancy_discounted.csv")
   le_vector <- life_expectancy %>% 
                select(age_group,{{income_group}}) %>%
                rename(life_expect = {{income_group}})
@@ -79,6 +79,8 @@ run_scenario <- function(target_pop = 1e6,
   prob_hosp <- ratio_deaths_severe_to_hosp*prob_severe_death_treatment
   prob_severe <- prop_hosp_severe*prob_hosp
   prob_non_severe_death_treatment <- ratio_deaths_non_severe_to_deaths_severe*prob_severe_death_treatment
+  
+  
   
   #vaccine 1 stockpiled and immediately rollout out to elderly populations 
   #vaccine 2 produced after a year with higher efficacy and rolled out first to the elderly then to the rest of the pop
@@ -218,7 +220,7 @@ run_scenario <- function(target_pop = 1e6,
   
   o1 <- nimue::format(r1,
                       compartments = c("S", "E", "IMild", "ICase", "IICU", "IHospital", "IRec", "R", "D"),
-                      summaries = c("deaths", "infections", "vaccinated_second_dose", "vaccinated_booster_dose", "hospitalisations"),
+                      summaries = c("deaths", "infections", "vaccinated_second_dose", "vaccinated_booster_dose", "hospitalisations","hospital_occupancy", "ICU_occupancy", "hospital_demand_cum"),
                       reduce_age = TRUE) %>%
     filter(t>1) 
   
@@ -262,7 +264,7 @@ run_scenario <- function(target_pop = 1e6,
 
   o2 <- nimue::format(r1,
                       compartments = c("S", "E", "IMild", "ICase", "IICU", "IHospital", "IRec", "R", "D"),
-                      summaries = c("deaths", "infections", "vaccinated_second_dose", "vaccinated_booster_dose", "hospitalisations"),
+                      summaries = c("deaths", "infections", "vaccinated_second_dose", "vaccinated_booster_dose", "hospitalisations", "hospital_occupancy", "ICU_occupancy"),
                       reduce_age = FALSE) %>%
     filter(t>1)
   
@@ -312,10 +314,12 @@ run_scenario <- function(target_pop = 1e6,
 # Format output
 format_out <- function(out, scenarios){
   # Combine_inputs and outputs
-  out1 <- bind_cols(scenarios, bind_rows(out)) %>%
+  
+  
+ out1 <- bind_cols(scenarios, bind_rows(out)) %>%
     mutate(timing2 = unlist(timing_2_output)) %>%
     select( - timing_2_output) %>%
-    mutate(contact_reduction = timing2*(1-Rt1/R0))
+    mutate(contact_reduction = timing2*(1-Rt1/R0)) 
     
   outcf <- filter(out1, (vaccine_1_start == runtime & vaccine_2_start == runtime)) %>%
       mutate(contact_reduction_cf = timing2*(1-Rt1/R0)) %>%
@@ -331,30 +335,36 @@ format_out <- function(out, scenarios){
                                           "efficacy_infection_v1","efficacy_disease_v1", "efficacy_infection_v2", "efficacy_disease_v2",
                                           "lower_priority", "lower_vaccine", "runtime", "two_vaccines"))
   summaries <- left_join(summaries, vsl, by=c("income_group"))
-  summaries_age <- summarise_age_outputs(summaries)
+  summaries_age <- summarise_age_outputs(summaries, median_hospital_days)
   final <- select(summaries_age,-contains("output_age"))
 }
 
 
 ## reads in data set x 
-summarise_age_outputs <- function(x) {
-  mutate(x, 
+summarise_age_outputs <- function(x, median_hospital_days) {
+ mutate(x, 
          infections = round(map_dbl(output_age, pull_total, outcome = "infections"), 2),
          hospitalisations = round(map_dbl(output_age, pull_total, outcome = "hospitalisations"),2),
          deaths = round(map_dbl(output_age, pull_total, outcome = "deaths"), 2),
          yll = round(map_dbl(output_age, summarise_yll), 2),
+         yll_prod= round(map_dbl(output_age, summarise_yll_prod), 2),
          ifr = deaths/infections,
          infections_cf = round(map_dbl(output_age_cf, pull_total, outcome = "infections"), 2),
          hospitalisations_cf = round(map_dbl(output_age_cf, pull_total, outcome = "hospitalisations"), 2),
          deaths_cf = round(map_dbl(output_age_cf, pull_total, outcome = "deaths"), 2),
          yll_cf = round(map_dbl(output_age_cf, summarise_yll), 2),
+         yll_prod_cf = round(map_dbl(output_age_cf, summarise_yll_prod), 2),
          ifr_cf = deaths_cf/infections_cf,
          infections_averted = infections_cf - infections,
          hospitalisations_averted = hospitalisations_cf - hospitalisations,
+         coi_sum = hospitalisations_averted*median_hospital_days*coi_1,
          deaths_averted = deaths_cf - deaths,
-         vsl_sum = deaths_averted*vsl,
          deaths_averted_prop = deaths_averted / deaths_cf,
-         years_life_saved = yll_cf - yll )#,
+         years_life_saved = yll_cf - yll, 
+         years_prod_saved = yll_prod_cf-yll_prod,
+         vsly_sum = years_life_saved * vsly,
+         prod_loss =years_prod_saved *gni,
+         vsl_sum = deaths_averted *vsl)#,
      #    vaccine_1 = round(map_dbl(output_age, pull_max, outcome = "V1")), #not sure if this is doing the right thing but not using the output currently
      #    vaccine_2 = round(map_dbl(output_age, pull_max, outcome = "V2"))
 }
@@ -379,6 +389,19 @@ summarise_yll <- function(x, lifespan){
   filter(x, compartment == "deaths") %>%
     mutate(yll = life_expect*value) %>%
     pull(yll) %>%
+    sum()
+}
+
+summarise_yll_prod <- function(x){
+  
+  prod_ages <- c("15-20","20-25","25-30","30-34","35-40","40-45","45-50","50-55","55-60","60-65")
+  
+  working_le <- read.csv ("./data/working_life_expectacy.csv") %>% select (c("age_group",disc_le))
+  
+  filter(x, compartment == "deaths") %>%
+    filter(age_group %in% prod_ages ) %>% left_join(working_le, by="age_group") %>%
+    mutate(yll_p = disc_le *value) %>%
+    pull(yll_p) %>%
     sum()
 }
 

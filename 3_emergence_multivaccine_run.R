@@ -4,7 +4,9 @@
 ## Lift restrictions when 80% coverage of 60+ population
 
 ## Load VSL estimates ####
-vsl <- read.csv("data/vsl.csv")
+vsl <- read.csv("data/vsly.csv")
+
+median_hospital_days <- 7.5 # from ISARIC review
 
 ### Load functions #############################################################
 source("R/functions_multivaccine.R")
@@ -31,11 +33,12 @@ vaccination_rate <- 0.02  # vaccination rate per week as percentage of populatio
 
 duration_R <- 5*365 # duration of infection-induced immunity
 duration_V <- 5*365 # duration of vaccine-induced immunity
-dur_vacc_delay <- 1 # mean duration from vaccination to protection
+dur_vacc_delay <- 14 # mean duration from vaccination to protection
 seeding_cases <- 1 # define as the number of cases at first sequencing - will need to explore
 runtime <- 500
 vaccine_1_start <- c(30, 60, 90, runtime)
-vaccine_2_start <- c(130, 160, 190, runtime) # note that this needs to be after v1 has been completed - at 2% per week this takes 50-60 days in HIC
+## assume that sequencing occurs 7 days after detection, and SARS-X vaccine available 100 days after sequencing
+vaccine_2_start <- c(137, 167, 197, runtime) # note that this needs to be after v1 has been completed - at 2% per week this takes 50-60 days in HIC
 lower_priority <- 14  #60+
 lower_vaccine <- 4 #15+ 
 two_vaccines <- c(0,1)
@@ -68,8 +71,8 @@ scenarios <- expand_grid(target_pop = target_pop,
                         runtime = runtime) %>%
   filter(Rt2 == R0) %>%
   filter(
-    ((two_vaccines==1) & (vaccine_1_start == timing1) & (vaccine_2_start == 100 + timing1)) |
-    ((two_vaccines==0) & (vaccine_1_start == runtime) & (vaccine_2_start == 100 + timing1)) |
+    ((two_vaccines==1) & (vaccine_1_start == timing1) & (vaccine_2_start == 107 + timing1)) |
+    ((two_vaccines==0) & (vaccine_1_start == runtime) & (vaccine_2_start == 107 + timing1)) |
     ((vaccine_1_start == runtime) & (vaccine_2_start == runtime))
   ) %>%
   filter ((timing2 == timing1 + 30))
