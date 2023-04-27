@@ -6,7 +6,9 @@
 ## Lift restrictions when 80% coverage of 60+ population achieved or after 30 days for counterfactual
 
 ## Load VSL estimates ####
-vsl <- read.csv("data/vsl.csv")
+vsl <- read.csv("data/vsly.csv")
+median_hospital_days <-  7.5
+
 
 ### Load functions #############################################################
 source("R/functions_multivaccine_secondary.R")
@@ -14,16 +16,16 @@ source("R/functions_multivaccine_secondary.R")
 ### Specify parameters ###############################################################
 
 target_pop <- 1e6
-income_group <- "UMIC" # c("HIC","UMIC","LMIC","LIC")
+income_group <-  c("HIC","UMIC","LMIC","LIC")
 R0 <-  c(1.5,2.5,4) 
 Rt1 <- 1.0 # before actual introduction
 Rt1a <- R0 # from introduction
 Rt1b <- 1.1 # NPIs introduced
 Rt2 <- R0   # Rt at lifting
 timing1 <- 1  # keep low level of infection until actual importation
-timing1a <- c(20, 50, 80) # this is the time of importation
-timing1b <- c(50, 80, 110) # this is the time that lockdown - 30 days after importation
-timing2 <-  c(80, 110, 140)   # lifting of NPIs - default of 30 day lockdown for no vaccine, code calculates timing 2 when elderly population vaccinatedifr_scaling <- 1.0 #c(0.1,0.5,1,2) # IFR in UK population with uniform attack rate - can take values 0.1, 0.5, 2
+timing1a <- c(20, 50, 80, 110, 140, 170) # this is the time of importation
+timing1b <- c(50, 80, 110, 140, 170, 200) # this is the time that lockdown - 30 days after importation
+timing2 <-  c(80, 110, 140, 170, 200, 230)   # lifting of NPIs - default of 30 day lockdown for no vaccine, code calculates timing 2 when elderly population vaccinatedifr_scaling <- 1.0 #c(0.1,0.5,1,2) # IFR in UK population with uniform attack rate - can take values 0.1, 0.5, 2
 ifr_scaling <- c(0.1,0.5,1,2) # IFR in UK population with uniform attack rate - can take values 0.1, 0.5, 2
 coverage <- 0.8      # proportion of the population vaccinated
 efficacy_infection_v1 <- 0.35 
@@ -38,11 +40,12 @@ vaccination_rate <- 0.02  # vaccination rate per week as percentage of populatio
 
 duration_R <- 5*365 # duration of infection-induced immunity
 duration_V <- 5*365 # duration of vaccine-induced immunity
-dur_vacc_delay <- 1 # mean duration from vaccination to protection
+dur_vacc_delay <- 14 # mean duration from vaccination to protection
 seeding_cases <- 1 # define as the number of cases at first identification 
 runtime <- 500
 vaccine_1_start <- c(30, runtime) #c(30, 60, 90, runtime)
-vaccine_2_start <- c(130, runtime) #c(130, 160, 190, runtime) # note that this needs to be after v1 has been completed - at 2% per week this takes 50-60 days in HIC
+## assume that sequencing occurs 7 days after detection, and SARS-X vaccine available 100 days after sequencing
+vaccine_2_start <- c(137, runtime) #c(130, 160, 190, runtime) # note that this needs to be after v1 has been completed - at 2% per week this takes 50-60 days in HIC
 lower_priority <- 14  #60+
 lower_vaccine <- 4 #15+ 
 two_vaccines <- c(0,1)
@@ -79,7 +82,7 @@ scenarios <- expand_grid(target_pop = target_pop,
                         runtime = runtime) %>%
   filter(Rt2 == R0) %>%
   filter(
-    ((two_vaccines==1) &  (vaccine_2_start == 100 + vaccine_1_start)) |
+    ((two_vaccines==1) &  (vaccine_2_start == 107 + vaccine_1_start)) |
       ((two_vaccines==0) & (vaccine_1_start == runtime)) |
       ((vaccine_1_start == runtime) & (vaccine_2_start == runtime))
   ) %>%
