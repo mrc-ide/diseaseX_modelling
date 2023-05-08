@@ -68,7 +68,7 @@ scenarios <- expand_grid(target_pop = target_pop,
 nrow(scenarios)
 
 #### Run the model #############################################################
-plan(multicore, workers = 2)
+plan(multicore, workers = 4)
 system.time({out <- future_pmap(scenarios, run_scenario, .progress = TRUE)})
 
 #### Format output #############################################################

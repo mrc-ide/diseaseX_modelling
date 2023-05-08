@@ -10,6 +10,7 @@ median_hospital_days <- 7.5 # from ISARIC review
 
 ### Load functions #############################################################
 source("R/functions_multivaccine.R")
+source("main.R")
 
 ### Specify parameters ###############################################################
 
@@ -81,7 +82,7 @@ scenarios <- expand_grid(target_pop = target_pop,
 nrow(scenarios)
 
 #### Run the model #############################################################
-plan(multicore, workers = 2)
+plan(multicore, workers = 6)
 system.time({out <- future_pmap(scenarios, run_scenario, .progress = TRUE)})
 
 #### Format output #############################################################

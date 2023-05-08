@@ -62,6 +62,10 @@ df_deaths <- df1 %>%
   filter((vaccine_start_label=="No vaccine" & two_vaccines==0) | vaccine_start_label == "SARS-X " 
          | vaccine_start_label == "BPSV + SARS-X")
 
+df_deaths_tot <- df_deaths %>%
+  group_by(vaccine_start_label, detection_time_label) %>%
+  summarise(total = sum(value))
+
 g1a <- ggplot() +
   geom_line(data = df_deaths, aes(x = t, y = (value),col=vaccine_start_label),linewidth=1.1) +
   facet_wrap(vars(detection_time_label)) +
