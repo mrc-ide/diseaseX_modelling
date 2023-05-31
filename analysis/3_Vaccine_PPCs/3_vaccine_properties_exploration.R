@@ -1,5 +1,5 @@
 # Load required libraries
-source(here::here("main.R"))
+source(here::here("main.R"));
 
 # Load functions
 source(here::here("CEPI_DiseaseX_Modelling/R/functions_multivaccine.R"))
@@ -274,7 +274,7 @@ ggplot() +
   lims(x = c(0, 1000)) 
 
 pop_df <- data.frame(age_group = sort(unique(check$age_group)),
-                     population = pop)
+                     population = standard_pop)
 
 
   # geom_segment(data = df, 
