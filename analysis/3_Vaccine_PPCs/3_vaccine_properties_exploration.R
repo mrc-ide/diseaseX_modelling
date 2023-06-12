@@ -1,5 +1,5 @@
 # Load required libraries
-source(here::here("main.R"))
+source(here::here("main.R"));
 
 # Load functions
 source(here::here("CEPI_DiseaseX_Modelling/R/functions_multivaccine.R"))
