@@ -18,9 +18,9 @@ source(here::here("CEPI_DiseaseX_Modelling/R/functions_multivaccine.R"))
 
 ### Demographic Parameters
 target_pop <- 1e6                                                        # size of the population to simulate 
-income_group <- "HIC"                                                    # income strata 
+income_group <- "UMIC"                                                    # income strata 
 rep_country <- get_representative_country(income_group = income_group)   # representative country  
-raw_pop <- squire::get_population(country = rep_country)$n                   
+raw_pop <- squire::get_population(country = "Argentina")$n                   
 standard_pop <- round(raw_pop * target_pop / sum(raw_pop))               # standardised population size
 mm <- squire::get_mixing_matrix(country = rep_country)                   # mixing matrix for that country
 
@@ -58,12 +58,11 @@ efficacy_infection_v2 <- 0.55              # vaccine efficacy against infection 
 efficacy_disease_v2 <-  0.9                # vaccine efficacy against disease - specific vaccine
 duration_R <- 1000 * 365                   # duration of infection-induced immunity - assumed large as not considering waning (currently)
 duration_V <- 1000 * 365                   # duration of vaccine-induced immunity for both vaccines - assumed large as not considering waning (currently) - also need to make vaccine specific
-dur_vacc_delay <- 25                       # mean duration from vaccination to protection
-                                           # changing this alters the point the boostered elderly coverage tops out - AGAIN NOTE THIS IS CONCERNING, WONDER WHETHER SECONDARY DOSES IS FALLING OUTSIDE OF THE PRIMARY DOSES TT AND HENCE NOT BEING DONE. 
+dur_vacc_delay <- 1                        # mean duration from vaccination to protection
 vaccine_1_start <- 50 #50 #5               # time when BNPC starts being distributed
-vaccine_2_start <- 250 #250 #10            # note that this needs to be after v1 has been completed - WHY - NEED TO CHECK THIS???
+vaccine_2_start <- 150 #250 #10            # note that this needs to be after BPSV i.e. v1 for 60+ has been completed to avoid having double vax rate (i.e. v1 BPSV and v2 spec for 60+ happening at once)
 coverage <- 0.75                           # proportion of the population vaccinated
-vaccination_rate <- 0.01                   # vaccination rate per week as percentage of population
+vaccination_rate <- 0.04                   # vaccination rate per week as percentage of population
                                            # From Azra/SAFIR: 5% per week in HIC/UMIC, 2% per week in LMIC/LIC
                                            #                  = 16 weeks (112 days) for HIC/UMIC, 40 weeks (280 days) for LMIC/LIC to reach 80% coverage
 lower_priority <- 13                       # index of the youngest age group given priority w.r.t vaccines (14 = 60+)
@@ -84,7 +83,10 @@ time_to_coverage_v1 <- ceiling(elderly_pop_to_vaccinate / v1_daily_doses) # calc
                                                                           # This is required as we're using a single vaccine_efficacy_infection
                                                                           # matrix and so we have to stop vaccinating when we've covered 60+s
                                                                           # as otherwise according to the matrix, they'd start receiving diseaseX-specific
-
+minimum_spec_development_time_allowed <- (time_to_coverage_v1 + second_dose_delay + dur_vacc_delay)
+if (minimum_spec_development_time_allowed > (vaccine_2_start - vaccine_1_start)) {
+  stop("Virus-specific vaccine developed too soon given speed of vaccination campaign")
+}
 # Note that the below assumes 1) only 60+ vaccinated with BNPSC vaccine
 # 2) no synergy between BNPSC and diseaseX-specific vaccine
 
@@ -135,10 +137,11 @@ vaccine_booster_follow_up_coverage <- c(rep(0, min(priority_age_groups) - 1), re
 vaccine_booster_initial_coverage <- c(rep(0, min(priority_age_groups) - 1), rep(1, length(priority_age_groups)))
 
 # Running the model
-runtime <- 1000
+runtime <- 600
+tictoc::tic()
 r1 <- run_booster( 
   time_period = runtime,                                                     # time to run the model for
-  population = standard_pop,                                                          # population to be simulated
+  population = standard_pop,                                                 # population to be simulated
   contact_matrix_set = mm,                                                   # mixing matrix
   R0 = R0,                                                                   # basic reproduction number
   tt_R0 = 0,                                                                 # timing of changes in R0 to mimic NPIs
@@ -169,6 +172,7 @@ r1 <- run_booster(
   tt_booster_doses = tt_booster_doses,                                       # Timings for variable booster dose vaccination rate 
   vaccine_booster_follow_up_coverage = vaccine_booster_follow_up_coverage,   # Vector describing which age-groups are eligible for follow-up boosters (re-boostering, basically)
   vaccine_booster_initial_coverage = vaccine_booster_initial_coverage)       # Vector describing which age-groups are eligible for initial boosters
+tictoc::toc()
 # when Greg puts vaccine_booster_initial_coverage back in, we'll be able to solve
 # the issue of <60s getting boosters; we won't be able to prioritise within this group
 # though - i.e. it'll just be the priority groups all getting the vaccine (rather than 80+ first, then younger etc)
@@ -219,10 +223,10 @@ output2 <- rbind(output, o1a)
 
 # first vaccine = BNPSC vaccine for priority age-groups, disease X specific for rest
 # booster vaccine = disease X specific for priority age-groups
-check <- nimue::format(r1, compartments = c("vaccinated_second_dose", "vaccinated_booster_dose"), 
+check <- nimue::format(r1, compartments = c("vaccinated_first_dose", "vaccinated_second_dose", "vaccinated_booster_dose"), 
                        reduce_age = FALSE) %>%
   filter(t > 1,
-         compartment == "vaccinated_second_dose" | compartment == "vaccinated_booster_dose") %>%
+         compartment == "vaccinated_first_dose" | compartment == "vaccinated_second_dose" | compartment == "vaccinated_booster_dose") %>%
   group_by(replicate, t, age_group) 
 
 pop_df <- data.frame(age_group = sort(unique(check$age_group)),
@@ -245,18 +249,23 @@ df2 <- data.frame(x1 = tt_booster_doses,
                   x2 = tt_booster_doses,
                   y1 = 0,
                   y2 = 1)
+
+ggplot() +
+  geom_line(data = subset(check2, compartment == "vaccinated_first_dose"), aes(x = t, y = prop, col = compartment)) +
+  facet_wrap(~age_group) +
+  lims(y = c(0, 1), x = c(0, 250)) 
 ggplot() +
   geom_line(data = subset(check2, compartment == "vaccinated_second_dose"), aes(x = t, y = prop, col = compartment)) +
   facet_wrap(~age_group) +
-  lims(y = c(0, 1), x = c(0, 800)) 
+  lims(y = c(0, 1), x = c(0, 250)) 
 ggplot() +
   geom_line(data = subset(check2, compartment == "vaccinated_booster_dose"), aes(x = t, y = prop, col = compartment)) +
   facet_wrap(~age_group) +
-  lims(y = c(0, 1), x = c(0, 500)) 
+  lims(y = c(0, 1), x = c(0, 250)) 
 ggplot() +
   geom_line(data = check2, aes(x = t, y = prop, col = compartment)) +
   facet_wrap(~age_group) +
-  lims(y = c(0, 1), x = c(0, 1000)) 
+  lims(y = c(0, 1), x = c(0, 250)) 
 
 # You need to have received second dose before you can be boosted.
 # Without enough separation between first vaccine and second vaccine, you
@@ -274,7 +283,7 @@ ggplot() +
   lims(x = c(0, 1000)) 
 
 pop_df <- data.frame(age_group = sort(unique(check$age_group)),
-                     population = pop)
+                     population = standard_pop)
 
 
   # geom_segment(data = df, 
