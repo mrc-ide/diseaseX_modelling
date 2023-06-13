@@ -1,5 +1,13 @@
 ## Notes - talk to Azra about how to adjust the IFR.
+# Checks and Changes:
+## Consider changing summary metrics to accommodate not finishing with same R0
+## Be wary of when runtime is shorter than some of the numbers automatically spat out when creating tt_Rt 
 
+generate_standard_pop <- function(country = "Argentina", population_size = 1e6) {
+  raw_pop <- squire::get_population(country = country)$n                   
+  standard_pop <- round(raw_pop * population_size / sum(raw_pop)) 
+  return(standard_pop)
+}
 
 run_sars_x <- function(## Demographic Parameters
                        population_size = 1e6,
@@ -10,35 +18,43 @@ run_sars_x <- function(## Demographic Parameters
                        ICU_bed_capacity = NULL,
                        
                        ## Epidemiological Parameters
-                       Rt = 3,
+                       Rt = 2.5,
                        tt_Rt = 0, 
                        Tg = 6.6,
-                       IFR = 1,
+                       IFR = 0.5,
                        
                        ## Vaccine-Related Parameters
                        vaccine_scenario = "specific_only",       # which scenario to explore
                        bpsv_start = 50,                          # BPSV distribution start
-                       specific_vaccine_start = 150,             # specific vaccine distribution start
+                       specific_vaccine_start = 250,             # specific vaccine distribution start
                        efficacy_infection_bpsv = 0.35,           # vaccine efficacy against infection - BPSV
                        efficacy_disease_bpsv = 0.8,              # vaccine efficacy against disease - BPSV
                        efficacy_infection_spec = 0.55,           # vaccine efficacy against infection - specific vaccine
                        efficacy_disease_spec = 0.9,              # vaccine efficacy against disease - specific vaccine
                        dur_R = 1000 * 365,                       # duration of infection-induced immunity
                        dur_V = rep(1000 * 365, 4),              # duration of vaccine-induced immunity for both vaccines
-                       second_dose_delay = 1,                  # controls how many days after "1st dose" people receive second dose; see here: https://github.com/mrc-ide/squire.page/blob/main/inst/odin/nimue_booster.R#L427-L430
-                       dur_vacc_delay = 1,                     # mean duration from vaccination to protection
+                       second_dose_delay = 20,                  # controls how many days after "1st dose" people receive second dose; see here: https://github.com/mrc-ide/squire.page/blob/main/inst/odin/nimue_booster.R#L427-L430
+                       dur_vacc_delay = 10,                     # mean duration from vaccination to protection
                        coverage = 0.75,                           # proportion of the population vaccinated
-                       vaccination_rate = 0.04,                  # vaccination rate per week as percentage of population
+                       vaccination_rate = 0.01,                  # vaccination rate per week as percentage of population
                        min_age_group_index_priority = 13,        # index of the youngest age group given priority w.r.t vaccines (13 = 60+)
                        min_age_group_index_non_priority = 4,     # index of the youngest age group that *receives* vaccines (4 = 15+)
                        
                        ## Miscellaneous Parameters
                        runtime = 600,
-                       seeding_cases = 5) {
+                       seeding_cases = 5,
+                       output = "summary",
+                       NPI_scenario = "not_specified",
+                       NPI_scenario_int = 0,
+                       ...) {
+  
+  ## Output Input Checking
+  if (!output %in% c("summary", "full")) {
+    stop("parameter output must be either 'summary' or 'full'")
+  }
   
   ## Country-specific population estimate
-  raw_pop <- squire::get_population(country = country)$n                   
-  standard_pop <- round(raw_pop * population_size / sum(raw_pop)) 
+  standard_pop <- generate_standard_pop(country = country, population_size = population_size)
   
   ## Country-specific healthcare capacity
   if (is.null(hosp_bed_capacity)) {
@@ -124,9 +140,12 @@ run_sars_x <- function(## Demographic Parameters
     }
     time_to_coverage_spec_elderly <- ceiling(elderly_pop_to_vaccinate/spec_daily_doses)
     primary_doses <- c(0, bpsv_daily_doses, 0, spec_daily_doses) 
-    tt_primary_doses <- c(0, bpsv_start, ceiling(bpsv_start + time_to_coverage_bpsv), specific_vaccine_start + time_to_coverage_spec_elderly) 
+    tt_primary_doses <- c(0, bpsv_start, ceiling(bpsv_start + time_to_coverage_bpsv + 1), (specific_vaccine_start + time_to_coverage_spec_elderly + 1)) 
     booster_doses <- c(0, spec_daily_doses, 0) 
-    tt_booster_doses <- c(0, specific_vaccine_start, specific_vaccine_start + time_to_coverage_spec_elderly) 
+    tt_booster_doses <- c(0, specific_vaccine_start, specific_vaccine_start + time_to_coverage_spec_elderly + 1) 
+    # note that we have the "+1"s in there because otherwise we don't *quite* get to vaccinating all of the elderly in
+    # the alloted time that Azra was previously calculating. I thought doing ceiling() would be enough and in most cases it is but not all.
+    # This way (i.e. by adding +1 to the times) we do! 
     
     ## Creating matrices of infection and diasease efficacy for each age-group and vaccine received
     ### Infection Efficacy
@@ -146,6 +165,23 @@ run_sars_x <- function(## Demographic Parameters
     vaccine_booster_follow_up_coverage <- c(rep(0, min(priority_age_groups) - 1), rep(1, length(priority_age_groups)))
     vaccine_booster_initial_coverage <- c(rep(0, min(priority_age_groups) - 1), rep(1, length(priority_age_groups)))
     }
+  
+  ## Ensuring things that could be passed in as lists (when running in parallel) are coerced to right format
+  if (is.list(dur_V)) {
+    dur_V <- unlist(dur_V)
+    if(length(dur_V != 4)) {
+      stop("dur_V must be length 4")
+    }
+  }
+  if (is.list(tt_Rt)) {
+    tt_Rt <- unlist(tt_Rt)
+  }
+  if (is.list(Rt)) {
+    Rt <- unlist(Rt)
+  }
+  if(Rt[1] != Rt[length(Rt)]) { 
+    stop("Scenario must start and finish with same R (to reflect reopening)")
+  }
   
   ## Running the Model 
   mod_run <- run_booster(time_period = runtime,
@@ -169,47 +205,107 @@ run_sars_x <- function(## Demographic Parameters
                          booster_doses = booster_doses,                                             
                          tt_booster_doses = tt_booster_doses,                                       
                          vaccine_booster_follow_up_coverage = vaccine_booster_follow_up_coverage,
-                         vaccine_booster_initial_coverage = vaccine_booster_initial_coverage)       
+                         vaccine_booster_initial_coverage = vaccine_booster_initial_coverage)
   
-  return(list(
-         model_output = mod_run,
-         model_arguments = list(population_size = population_size, standard_pop = standard_pop, country = country, hosp_bed_capacity = hosp_bed_capacity, ICU_bed_capacity = ICU_bed_capacity,
-                                Rt = Rt, tt_Rt = tt_Rt, Tg = Tg, IFR = IFR, vaccine_scenario = vaccine_scenario, bpsv_start = bpsv_start, specific_vaccine_start = specific_vaccine_start,             
-                                efficacy_infection_bpsv = efficacy_infection_bpsv, efficacy_disease_bpsv = efficacy_disease_bpsv, efficacy_infection_spec = efficacy_infection_spec,
-                                efficacy_disease_spec = efficacy_disease_spec, dur_R = dur_R, dur_V = dur_V, second_dose_delay = second_dose_delay, dur_vacc_delay = dur_vacc_delay,                     
-                                coverage = coverage, vaccination_rate = vaccination_rate, min_age_group_index_priority = min_age_group_index_priority, min_age_group_index_non_priority = min_age_group_index_non_priority,     
-                                runtime = runtime, seeding_cases = seeding_cases,
-                                tt_primary_doses = tt_primary_doses, tt_booster_doses = tt_booster_doses,
-                                vaccine_booster_follow_up_coverage = vaccine_booster_follow_up_coverage, 
-                                vaccine_booster_initial_coverage = vaccine_booster_initial_coverage)))
+  ## Generating summary metrics for that model run
+  summary_metrics <- calc_summary_metrics(mod_run)
+  
+  if (output == "summary") {
+    return(list(
+      model_arguments = list(population_size = population_size, standard_pop = standard_pop, country = country, hosp_bed_capacity = hosp_bed_capacity, ICU_bed_capacity = ICU_bed_capacity,
+                             Rt = Rt, tt_Rt = tt_Rt, Tg = Tg, IFR = IFR, vaccine_scenario = vaccine_scenario, bpsv_start = bpsv_start, specific_vaccine_start = specific_vaccine_start,             
+                             efficacy_infection_bpsv = efficacy_infection_bpsv, efficacy_disease_bpsv = efficacy_disease_bpsv, efficacy_infection_spec = efficacy_infection_spec,
+                             efficacy_disease_spec = efficacy_disease_spec, dur_R = dur_R, dur_V = dur_V, second_dose_delay = second_dose_delay, dur_vacc_delay = dur_vacc_delay,                     
+                             coverage = coverage, vaccination_rate = vaccination_rate, min_age_group_index_priority = min_age_group_index_priority, min_age_group_index_non_priority = min_age_group_index_non_priority,     
+                             runtime = runtime, seeding_cases = seeding_cases,
+                             tt_primary_doses = tt_primary_doses, tt_booster_doses = tt_booster_doses,
+                             vaccine_booster_follow_up_coverage = vaccine_booster_follow_up_coverage, 
+                             vaccine_booster_initial_coverage = vaccine_booster_initial_coverage),
+      summary_metrics = summary_metrics)) 
+  } else {
+    return(list(
+      model_output = mod_run,
+      model_arguments = list(population_size = population_size, standard_pop = standard_pop, country = country, hosp_bed_capacity = hosp_bed_capacity, ICU_bed_capacity = ICU_bed_capacity,
+                             Rt = Rt, tt_Rt = tt_Rt, Tg = Tg, IFR = IFR, vaccine_scenario = vaccine_scenario, bpsv_start = bpsv_start, specific_vaccine_start = specific_vaccine_start,             
+                             efficacy_infection_bpsv = efficacy_infection_bpsv, efficacy_disease_bpsv = efficacy_disease_bpsv, efficacy_infection_spec = efficacy_infection_spec,
+                             efficacy_disease_spec = efficacy_disease_spec, dur_R = dur_R, dur_V = dur_V, second_dose_delay = second_dose_delay, dur_vacc_delay = dur_vacc_delay,                     
+                             coverage = coverage, vaccination_rate = vaccination_rate, min_age_group_index_priority = min_age_group_index_priority, min_age_group_index_non_priority = min_age_group_index_non_priority,     
+                             runtime = runtime, seeding_cases = seeding_cases,
+                             tt_primary_doses = tt_primary_doses, tt_booster_doses = tt_booster_doses,
+                             vaccine_booster_follow_up_coverage = vaccine_booster_follow_up_coverage, 
+                             vaccine_booster_initial_coverage = vaccine_booster_initial_coverage),
+      summary_metrics = summary_metrics)) 
+  }
 }
 
-y <- run_sars_x(vaccine_scenario = "both_vaccines",
-                IFR = 0.01,
-                specific_vaccine_start = 250,
-                dur_vacc_delay = 1,
-                second_dose_delay = 1)  
-x <- y$model_output
+### need to come back to this and figure out how this should work when:
+#### 1) runtime is < the final tt_Rt value
+#### 2) you don't finish up with R0 at the end
+calc_summary_metrics <- function(model_output) { # summary metrics = total deaths, time under any NPIs, composite NPI function, 
+  
+  ## Calculating Deaths
+  check <- nimue::format(model_output, compartments = "D", summaries = "deaths") %>%
+    filter(t > 1, compartment == "deaths")
+  deaths <- sum(check$value)
+  
+  ## Time Under NPIs
+  if (length(model_output$parameters$R0) == 1) {
+    time_under_NPIs <- 0
+  } else {
+    R0 <- model_output$parameters$R0[1]
+    which_NPI <-  which(model_output$parameters$R0 < R0)
+    NPI_times <- model_output$parameters$tt_R0[c(which_NPI, max(which_NPI) + 1)]
+    time_under_NPIs <- max(NPI_times) - min(NPI_times)
+  }
 
-check <- nimue::format(x, compartments = c("vaccinated_first_dose", "vaccinated_second_dose", "vaccinated_booster_dose"), 
-                       reduce_age = FALSE) %>%
-  filter(t > 1,
-         compartment == "vaccinated_first_dose" | compartment == "vaccinated_second_dose" | compartment == "vaccinated_booster_dose") %>%
-  group_by(replicate, t, age_group) 
+  ## Composite of Stringency and Time
+  if (length(model_output$parameters$R0) == 1) {
+    composite <- 0
+  } else {
+    composite <- 0
+    rel_stringency <- (1 - model_output$parameters$R0 / R0)[which_NPI]
+    for (i in 1:length(rel_stringency)) {
+      composite_measure <- (NPI_times[i+1] - NPI_times[i]) * rel_stringency[i]
+      composite <- composite + composite_measure
+    }
+  } 
+  
+  return(list(deaths = deaths,
+              time_under_NPIs = time_under_NPIs,
+              composite_NPI = composite))
+}
 
-pop_df <- data.frame(age_group = sort(unique(check$age_group)),
-                     population = y$model_arguments$standard_pop)
-
-check2 <- check %>%
-  left_join(pop_df, by = "age_group") %>%
-  mutate(prop = value / population) 
-ggplot() +
-  geom_line(data = check2, aes(x = t, y = prop, col = compartment)) +
-  facet_wrap(~age_group) +
-  lims(y = c(0, 1), x = c(0, 600)) 
-
-
-ggplot() +
-  geom_line(data = check2[check2$age_group == "65-70", ], aes(x = t, y = prop, col = compartment)) +
-  facet_wrap(~age_group) +
-  lims(y = c(0, 1), x = c(0, 600)) 
+# y <- run_sars_x(vaccine_scenario = "both_vaccines",
+#                 IFR = 1,
+#                 seeding_cases = 1,
+#                 Rt = c(2.5, 1.1, 2.5),
+#                 tt_Rt = c(0, 10, 100),
+#                 specific_vaccine_start = 250,
+#                 dur_vacc_delay = 0.5)
+# y$summary_metrics
+# x <- y$model_output
+# calc_summary_metrics(x)
+# # 
+# check <- nimue::format(x, compartments = c("vaccinated_first_dose", "vaccinated_second_dose", "vaccinated_booster_dose"), 
+#                        reduce_age = FALSE) %>%
+#   filter(t > 1,
+#          compartment == "vaccinated_first_dose" | compartment == "vaccinated_second_dose" | compartment == "vaccinated_booster_dose") %>%
+#   group_by(replicate, t, age_group) 
+# 
+# pop_df <- data.frame(age_group = sort(unique(check$age_group)),
+#                      population = y$model_arguments$standard_pop)
+# 
+# check2 <- check %>%
+#   left_join(pop_df, by = "age_group") %>%
+#   mutate(prop = value / population) 
+# ggplot() +
+#   geom_line(data = check2, aes(x = t, y = prop, col = compartment)) +
+#   facet_wrap(~age_group) +
+#   lims(y = c(0, 1), x = c(0, 600)) 
+# 
+# 
+# ggplot() +
+#   geom_line(data = check2[check2$age_group == "65-70", ], aes(x = t, y = prop, col = compartment)) +
+#   facet_wrap(~age_group) +
+#   geom_vline(aes(xintercept = y$model_arguments$tt_primary_doses)) +
+#   lims(y = c(0, 1), x = c(0, 600)) 

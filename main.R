@@ -19,6 +19,7 @@ library(wesanderson)
 library(patchwork)
 library(flextable)
 library(officer)
+library(tictoc)
 
 
 # colours
@@ -39,4 +40,4 @@ lightgreen <- "#bbdf27"
 teal <- "#25848e"
 darkpurple <- "#440154"
   
-setwd(dirname(getActiveDocumentContext()$path)) 
+# setwd(dirname(getActiveDocumentContext()$path)) 
