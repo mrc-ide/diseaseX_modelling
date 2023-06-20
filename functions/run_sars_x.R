@@ -220,7 +220,8 @@ run_sars_x <- function(## Demographic Parameters
                              runtime = runtime, seeding_cases = seeding_cases,
                              tt_primary_doses = tt_primary_doses, tt_booster_doses = tt_booster_doses,
                              vaccine_booster_follow_up_coverage = vaccine_booster_follow_up_coverage, 
-                             vaccine_booster_initial_coverage = vaccine_booster_initial_coverage),
+                             vaccine_booster_initial_coverage = vaccine_booster_initial_coverage,
+                             NPI_scenario = NPI_scenario, NPI_scenario_int = NPI_scenario_int),
       summary_metrics = summary_metrics)) 
   } else {
     return(list(
@@ -233,7 +234,8 @@ run_sars_x <- function(## Demographic Parameters
                              runtime = runtime, seeding_cases = seeding_cases,
                              tt_primary_doses = tt_primary_doses, tt_booster_doses = tt_booster_doses,
                              vaccine_booster_follow_up_coverage = vaccine_booster_follow_up_coverage, 
-                             vaccine_booster_initial_coverage = vaccine_booster_initial_coverage),
+                             vaccine_booster_initial_coverage = vaccine_booster_initial_coverage,
+                             NPI_scenario = NPI_scenario, NPI_scenario_int = NPI_scenario_int),
       summary_metrics = summary_metrics)) 
   }
 }
