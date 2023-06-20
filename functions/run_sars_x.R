@@ -25,8 +25,9 @@ run_sars_x <- function(## Demographic Parameters
                        
                        ## Vaccine-Related Parameters
                        vaccine_scenario = "specific_only",       # which scenario to explore
-                       bpsv_start = 50,                          # BPSV distribution start
-                       specific_vaccine_start = 250,             # specific vaccine distribution start
+                       detection_time = 14,
+                       bpsv_start = 50,                          # BPSV distribution start (days after detection time)
+                       specific_vaccine_start = 250,             # specific vaccine distribution start (days after detection time)
                        efficacy_infection_bpsv = 0.35,           # vaccine efficacy against infection - BPSV
                        efficacy_disease_bpsv = 0.8,              # vaccine efficacy against disease - BPSV
                        efficacy_infection_spec = 0.55,           # vaccine efficacy against infection - specific vaccine
@@ -111,7 +112,7 @@ run_sars_x <- function(## Demographic Parameters
     
     # Set up dosing schedule - no boosters here
     primary_doses <- c(0, daily_doses)
-    tt_primary_doses <- c(0, specific_vaccine_start) 
+    tt_primary_doses <- c(0, detection_time + specific_vaccine_start) 
     booster_doses <- 0
     tt_booster_doses <- 0
     
@@ -140,9 +141,9 @@ run_sars_x <- function(## Demographic Parameters
     }
     time_to_coverage_spec_elderly <- ceiling(elderly_pop_to_vaccinate/spec_daily_doses)
     primary_doses <- c(0, bpsv_daily_doses, 0, spec_daily_doses) 
-    tt_primary_doses <- c(0, bpsv_start, ceiling(bpsv_start + time_to_coverage_bpsv + 1), (specific_vaccine_start + time_to_coverage_spec_elderly + 1)) 
+    tt_primary_doses <- c(0, detection_time + bpsv_start, ceiling(detection_time + bpsv_start + time_to_coverage_bpsv + 1), (detection_time + specific_vaccine_start + time_to_coverage_spec_elderly + 1)) 
     booster_doses <- c(0, spec_daily_doses, 0) 
-    tt_booster_doses <- c(0, specific_vaccine_start, specific_vaccine_start + time_to_coverage_spec_elderly + 1) 
+    tt_booster_doses <- c(0, detection_time + specific_vaccine_start, detection_time + specific_vaccine_start + time_to_coverage_spec_elderly + 1) 
     # note that we have the "+1"s in there because otherwise we don't *quite* get to vaccinating all of the elderly in
     # the alloted time that Azra was previously calculating. I thought doing ceiling() would be enough and in most cases it is but not all.
     # This way (i.e. by adding +1 to the times) we do! 
@@ -183,6 +184,8 @@ run_sars_x <- function(## Demographic Parameters
     stop("Scenario must start and finish with same R (to reflect reopening)")
   }
   
+  print(c(Rt, tt_Rt))
+  
   ## Running the Model 
   mod_run <- run_booster(time_period = runtime,
                          population = standard_pop,                                                 
@@ -217,7 +220,7 @@ run_sars_x <- function(## Demographic Parameters
                              efficacy_infection_bpsv = efficacy_infection_bpsv, efficacy_disease_bpsv = efficacy_disease_bpsv, efficacy_infection_spec = efficacy_infection_spec,
                              efficacy_disease_spec = efficacy_disease_spec, dur_R = dur_R, dur_V = dur_V, second_dose_delay = second_dose_delay, dur_vacc_delay = dur_vacc_delay,                     
                              coverage = coverage, vaccination_rate = vaccination_rate, min_age_group_index_priority = min_age_group_index_priority, min_age_group_index_non_priority = min_age_group_index_non_priority,     
-                             runtime = runtime, seeding_cases = seeding_cases,
+                             runtime = runtime, seeding_cases = seeding_cases, detection_time = detection_time,
                              tt_primary_doses = tt_primary_doses, tt_booster_doses = tt_booster_doses,
                              vaccine_booster_follow_up_coverage = vaccine_booster_follow_up_coverage, 
                              vaccine_booster_initial_coverage = vaccine_booster_initial_coverage,
@@ -231,7 +234,7 @@ run_sars_x <- function(## Demographic Parameters
                              efficacy_infection_bpsv = efficacy_infection_bpsv, efficacy_disease_bpsv = efficacy_disease_bpsv, efficacy_infection_spec = efficacy_infection_spec,
                              efficacy_disease_spec = efficacy_disease_spec, dur_R = dur_R, dur_V = dur_V, second_dose_delay = second_dose_delay, dur_vacc_delay = dur_vacc_delay,                     
                              coverage = coverage, vaccination_rate = vaccination_rate, min_age_group_index_priority = min_age_group_index_priority, min_age_group_index_non_priority = min_age_group_index_non_priority,     
-                             runtime = runtime, seeding_cases = seeding_cases,
+                             runtime = runtime, seeding_cases = seeding_cases, detection_time = detection_time,
                              tt_primary_doses = tt_primary_doses, tt_booster_doses = tt_booster_doses,
                              vaccine_booster_follow_up_coverage = vaccine_booster_follow_up_coverage, 
                              vaccine_booster_initial_coverage = vaccine_booster_initial_coverage,
