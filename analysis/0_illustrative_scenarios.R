@@ -142,7 +142,7 @@ scenarios$index <- 1:nrow(scenarios)
 
 ## Running 
 tic()
-plan(multisession, workers = 6) # multicore does nothing on windows as multicore isn't supported
+plan(multisession, workers = 55) # multicore does nothing on windows as multicore isn't supported
 system.time({out <- future_pmap(scenarios, run_sars_x, .progress = TRUE, .options = furrr_options(seed = 123))})
 toc()
 #271 seconds to run 11664 simulations with 55 cores - effectively 0.023 seconds per iteration 
@@ -150,7 +150,7 @@ toc()
 saveRDS(out, "outputs/bpsv_efficacy_test_sens_raw_outputs.rds")
 
 ### need to add NPI scenario in here
-cl <- makeCluster(5)
+cl <- makeCluster(55)
 clusterEvalQ(cl, {
   library(data.table)
 })
@@ -188,13 +188,6 @@ data <- parLapply(cl, out, function(x) {
 })
 toc()
 stopCluster(cl) 
-
-current_time <- stringr::str_replace(stringr::str_sub(Sys.time(), start = 12, end = 16), ":", "")
-filename_root <- paste0(getwd(), "/outputs/", Sys.Date(), "_", current_time, "_two_locations/")
-scenarios <- scenario_df %>%
-  group_by(pathogen) %>%
-  dplyr::mutate(index = 1:dplyr::n())
-dir.create(filename_root)
 
 combined_data <- rbindlist(data)
 saveRDS(combined_data, "outputs/bpsv_efficacy_sensitivity.rds")
