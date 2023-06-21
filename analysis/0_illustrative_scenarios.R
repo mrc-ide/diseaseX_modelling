@@ -189,8 +189,15 @@ data <- parLapply(cl, out, function(x) {
 toc()
 stopCluster(cl) 
 
+current_time <- stringr::str_replace(stringr::str_sub(Sys.time(), start = 12, end = 16), ":", "")
+filename_root <- paste0(getwd(), "/outputs/", Sys.Date(), "_", current_time, "_two_locations/")
+scenarios <- scenario_df %>%
+  group_by(pathogen) %>%
+  dplyr::mutate(index = 1:dplyr::n())
+dir.create(filename_root)
+
 combined_data <- rbindlist(data)
-saveRDS(combined_data, "outputs/bpsv_efficacy_test_sens_final_outputs.rds")
+saveRDS(combined_data, "outputs/bpsv_efficacy_sensitivity.rds")
 
 two_vax <- combined_data %>%
   filter(vaccine_scenario == "both_vaccines") %>%
