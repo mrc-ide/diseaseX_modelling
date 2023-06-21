@@ -46,8 +46,11 @@ run_sars_x <- function(## Demographic Parameters
                        seeding_cases = 5,
                        output = "summary",
                        NPI_scenario = "not_specified",
-                       NPI_scenario_int = 0,
+                       NPI_int = 0,
+                       index = 0,
                        ...) {
+  
+  set.seed(123)
   
   ## Output Input Checking
   if (!output %in% c("summary", "full")) {
@@ -184,8 +187,6 @@ run_sars_x <- function(## Demographic Parameters
     stop("Scenario must start and finish with same R (to reflect reopening)")
   }
   
-  print(c(Rt, tt_Rt))
-  
   ## Running the Model 
   mod_run <- run_booster(time_period = runtime,
                          population = standard_pop,                                                 
@@ -215,7 +216,7 @@ run_sars_x <- function(## Demographic Parameters
   
   if (output == "summary") {
     return(list(
-      model_arguments = list(population_size = population_size, standard_pop = standard_pop, country = country, hosp_bed_capacity = hosp_bed_capacity, ICU_bed_capacity = ICU_bed_capacity,
+      model_arguments = list(index = index, population_size = population_size, standard_pop = standard_pop, country = country, hosp_bed_capacity = hosp_bed_capacity, ICU_bed_capacity = ICU_bed_capacity,
                              Rt = Rt, tt_Rt = tt_Rt, Tg = Tg, IFR = IFR, vaccine_scenario = vaccine_scenario, bpsv_start = bpsv_start, specific_vaccine_start = specific_vaccine_start,             
                              efficacy_infection_bpsv = efficacy_infection_bpsv, efficacy_disease_bpsv = efficacy_disease_bpsv, efficacy_infection_spec = efficacy_infection_spec,
                              efficacy_disease_spec = efficacy_disease_spec, dur_R = dur_R, dur_V = dur_V, second_dose_delay = second_dose_delay, dur_vacc_delay = dur_vacc_delay,                     
@@ -224,12 +225,12 @@ run_sars_x <- function(## Demographic Parameters
                              tt_primary_doses = tt_primary_doses, tt_booster_doses = tt_booster_doses,
                              vaccine_booster_follow_up_coverage = vaccine_booster_follow_up_coverage, 
                              vaccine_booster_initial_coverage = vaccine_booster_initial_coverage,
-                             NPI_scenario = NPI_scenario, NPI_scenario_int = NPI_scenario_int),
+                             NPI_scenario = NPI_scenario, NPI_int = NPI_int),
       summary_metrics = summary_metrics)) 
   } else {
     return(list(
       model_output = mod_run,
-      model_arguments = list(population_size = population_size, standard_pop = standard_pop, country = country, hosp_bed_capacity = hosp_bed_capacity, ICU_bed_capacity = ICU_bed_capacity,
+      model_arguments = list(index = index, population_size = population_size, standard_pop = standard_pop, country = country, hosp_bed_capacity = hosp_bed_capacity, ICU_bed_capacity = ICU_bed_capacity,
                              Rt = Rt, tt_Rt = tt_Rt, Tg = Tg, IFR = IFR, vaccine_scenario = vaccine_scenario, bpsv_start = bpsv_start, specific_vaccine_start = specific_vaccine_start,             
                              efficacy_infection_bpsv = efficacy_infection_bpsv, efficacy_disease_bpsv = efficacy_disease_bpsv, efficacy_infection_spec = efficacy_infection_spec,
                              efficacy_disease_spec = efficacy_disease_spec, dur_R = dur_R, dur_V = dur_V, second_dose_delay = second_dose_delay, dur_vacc_delay = dur_vacc_delay,                     
@@ -238,7 +239,7 @@ run_sars_x <- function(## Demographic Parameters
                              tt_primary_doses = tt_primary_doses, tt_booster_doses = tt_booster_doses,
                              vaccine_booster_follow_up_coverage = vaccine_booster_follow_up_coverage, 
                              vaccine_booster_initial_coverage = vaccine_booster_initial_coverage,
-                             NPI_scenario = NPI_scenario, NPI_scenario_int = NPI_scenario_int),
+                             NPI_scenario = NPI_scenario, NPI_int = NPI_int),
       summary_metrics = summary_metrics)) 
   }
 }

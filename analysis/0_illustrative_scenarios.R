@@ -69,8 +69,7 @@ baseline_scenarios <- expand_grid(population_size = 1e6,
                                   min_age_group_index_non_priority = min_age_group_index_non_priority,
                                   runtime = runtime,
                                   seeding_cases = 2,
-                                  NPI_int = NPI_int) %>% 
-  filter(vaccine_scenario == "both_vaccines" | (detection_time == detection_time[1] & vaccine_scenario == "specific_only"))
+                                  NPI_int = NPI_int) 
 
 ## Coercing dur_V into correct format
 baseline_scenarios <- baseline_scenarios %>%
@@ -139,13 +138,16 @@ NPIs <- expand_grid(detection_time = detection_time,
 
 scenarios <- baseline_scenarios %>%
   left_join(NPIs, by = c("detection_time", "specific_vaccine_start", "R0", "NPI_int"))
+scenarios$index <- 1:nrow(scenarios)
 
 ## Running 
 tic()
-plan(multisession, workers = 55) # multicore does nothing on windows as multicore isn't supported
+plan(multisession, workers = 6) # multicore does nothing on windows as multicore isn't supported
 system.time({out <- future_pmap(scenarios, run_sars_x, .progress = TRUE, .options = furrr_options(seed = 123))})
 toc()
 #271 seconds to run 11664 simulations with 55 cores - effectively 0.023 seconds per iteration 
+
+saveRDS(out, "outputs/bpsv_efficacy_test_sens_raw_outputs.rds")
 
 ### need to add NPI scenario in here
 cl <- makeCluster(5)
@@ -154,7 +156,8 @@ clusterEvalQ(cl, {
 })
 tic()
 data <- parLapply(cl, out, function(x) {
-  y <- data.frame(x$summary_metrics, 
+  y <- data.frame(index = x$model_arguments$index, 
+                  x$summary_metrics, 
                   country = x$model_arguments$country,
                   population_size = x$model_arguments$population_size,
                   hosp_bed_capacity = x$model_arguments$hosp_bed_capacity,
@@ -164,7 +167,7 @@ data <- parLapply(cl, out, function(x) {
                   IFR = x$model_arguments$IFR,
                   vaccine_scenario = x$model_arguments$vaccine_scenario,
                   detection_time = x$model_arguments$detection_time,
-                  bpsv_start = ifelse(x$model_arguments$vaccine_scenario == "specific_only", NA, x$model_arguments$detection_time),
+                  bpsv_start = ifelse(x$model_arguments$vaccine_scenario == "specific_only", NA, x$model_arguments$bpsv_start),
                   specific_vaccine_start = x$model_arguments$specific_vaccine_start,
                   efficacy_infection_bpsv = x$model_arguments$efficacy_infection_bpsv,
                   efficacy_disease_bpsv = x$model_arguments$efficacy_disease_bpsv,
@@ -181,36 +184,87 @@ data <- parLapply(cl, out, function(x) {
                   runtime = x$model_arguments$runtime,
                   seeding_cases = x$model_arguments$seeding_cases,
                   NPI_scenario = x$model_arguments$NPI_scenario,
-                  NPI_int = x$model_arguments$NPI_int) 
+                  NPI_int = x$model_arguments$NPI_int) # newest runs this'll work fine but for current run should be NPI_scenario_int 
 })
 toc()
 stopCluster(cl) 
 
 combined_data <- rbindlist(data)
-table(combined_data$vaccine_scenario, useNA = "ifany")
+saveRDS(combined_data, "outputs/bpsv_efficacy_test_sens_final_outputs.rds")
 
-scenarios_to_plot <- combined_data
-
-two_vax <- scenarios_to_plot %>%
+two_vax <- combined_data %>%
   filter(vaccine_scenario == "both_vaccines") %>%
   rename(deaths_bpsv = deaths,
          time_under_NPIs_bpsv = time_under_NPIs,
          composite_NPI_bpsv = composite_NPI)
 
-one_vax <- scenarios_to_plot %>%
+one_vax <- combined_data %>%
   filter(vaccine_scenario == "specific_only") %>%
-  select(R0, Tg, IFR, NPI_scenario, specific_vaccine_start, deaths, time_under_NPIs, composite_NPI, efficacy_disease_bpsv) %>% ## IMPORTANT - YOU NEED TO INCLUDE THE VARIABLE YOU'RE DOING THE SENSITIVITY ANALYSIS OVER
+  select(R0, Tg, IFR, NPI_scenario, detection_time, specific_vaccine_start, deaths, time_under_NPIs, composite_NPI, efficacy_disease_bpsv) %>% ## IMPORTANT - YOU NEED TO INCLUDE THE VARIABLE YOU'RE DOING THE SENSITIVITY ANALYSIS OVER
   rename(deaths_spec = deaths,
          time_under_NPIs_spec = time_under_NPIs,
          composite_NPI_spec = composite_NPI)
 
+# create vector of all variables that are varying, so that you don't have to worry about figuring out which ones each time
+# if you miss one out, this can fuck up silently and you'll be comparing the wrong pairs of scenarios
 joined <- two_vax %>%
-  left_join(one_vax, by = c("R0", "Tg", "IFR", "NPI_scenario", "specific_vaccine_start", "efficacy_disease_bpsv")) %>% ## IMPORTANT - YOU NEED TO INCLUDE THE VARIABLE YOU'RE DOING THE SENSITIVITY ANALYSIS OVER
+  left_join(one_vax, by = c("R0", "Tg", "IFR", "NPI_scenario", "detection_time", "specific_vaccine_start", "efficacy_disease_bpsv")) %>% ## IMPORTANT - YOU NEED TO INCLUDE THE VARIABLE YOU'RE DOING THE SENSITIVITY ANALYSIS OVER
   mutate(deaths_saved = deaths_spec - deaths_bpsv)
 
 plot(joined$deaths_bpsv, joined$deaths_spec, xlim = c(0, 17500), ylim = c(0, 17500))
 lines(1:17500, 1:17500)
 plot(joined$efficacy_disease_bpsv, joined$deaths_saved)
+
+check <- joined %>%
+  filter(deaths_saved < 0) %>%
+  filter(efficacy_disease_bpsv == 0.5,
+         detection_time == 28,
+         R0 == 2,
+         Tg == 7,
+         IFR == 1.5, 
+         specific_vaccine_start == 100,
+         NPI_scenario == "LockdownBPSVFinish_minMandateSpecFinish_fullRelease")
+
+check2 <- scenarios %>%
+  filter(efficacy_disease_bpsv == 0.5,
+         detection_time == 28,
+         R0 == 2,
+         Tg == 7,
+         IFR == 1.5, 
+         specific_vaccine_start == 100,
+         NPI_scenario == "LockdownBPSVFinish_minMandateSpecFinish_fullRelease")
+
+
+
+run_sars_x(population_size = check$population_size,
+           country = check$country,
+           hosp_bed_capacity = check$hosp_bed_capacity,
+           ICU_bed_capacity = check$ICU_bed_capacity,
+           Rt = check2$Rt,
+           tt_Rt = check2$tt_Rt,
+           Tg = check$Tg,
+           IFR = check$IFR,
+           vaccine_scenario = "specific_only",
+           detection_time = check$detection_time, 
+           bpsv_start = check$bpsv_start,
+           specific_vaccine_start = check$specific_vaccine_start,
+           efficacy_infection_bpsv = check$efficacy_infection_bpsv,
+           efficacy_disease_bpsv = check$efficacy_disease_bpsv,
+           efficacy_infection_spec = check$efficacy_infection_spec,
+           efficacy_disease_spec = check$efficacy_disease_spec,
+           dur_R = check$dur_R,
+           dur_V = rep(check$dur_V, 4), 
+           second_dose_delay = check$second_dose_delay,
+           dur_vacc_delay = check$dur_vacc_delay,
+           coverage = check$coverage,
+           vaccination_rate = check$vaccination_rate,
+           min_age_group_index_priority = check$min_age_group_index_priority,
+           min_age_group_index_non_priority = check$min_age_group_index_non_priority,
+           runtime = check$runtime,
+           seeding_cases = check$seeding_cases,
+           output = "summary") 
+  
+
 
 test_plot <- joined %>%
   filter(R0 == 2,
@@ -218,7 +272,7 @@ test_plot <- joined %>%
          IFR == 1.5) %>%
   mutate(specific_vaccine_start = factor(specific_vaccine_start),
          bpsv_start = factor(bpsv_start),
-         NPI_scenario_int = factor(NPI_scenario_int))
+         NPI_int = factor(NPI_scenario_int))
 
 ggplot(test_plot, aes(x = efficacy_disease_bpsv, y = deaths_saved, colour = specific_vaccine_start)) +
   geom_path() +
