@@ -192,6 +192,8 @@ stopCluster(cl)
 combined_data <- rbindlist(data)
 saveRDS(combined_data, "outputs/bpsv_efficacy_sensitivity.rds")
 
+combined_data <- readRDS("outputs/bpsv_efficacy_sensitivity.rds")
+
 two_vax <- combined_data %>%
   filter(vaccine_scenario == "both_vaccines") %>%
   rename(deaths_bpsv = deaths,
@@ -215,260 +217,39 @@ plot(joined$deaths_bpsv, joined$deaths_spec, xlim = c(0, 17500), ylim = c(0, 175
 lines(1:17500, 1:17500)
 plot(joined$efficacy_disease_bpsv, joined$deaths_saved)
 
-check <- joined %>%
-  filter(deaths_saved < 0) %>%
-  filter(efficacy_disease_bpsv == 0.5,
-         detection_time == 28,
-         R0 == 2,
-         Tg == 7,
-         IFR == 1.5, 
-         specific_vaccine_start == 100,
-         NPI_scenario == "LockdownBPSVFinish_minMandateSpecFinish_fullRelease")
-
-check2 <- scenarios %>%
-  filter(efficacy_disease_bpsv == 0.5,
-         detection_time == 28,
-         R0 == 2,
-         Tg == 7,
-         IFR == 1.5, 
-         specific_vaccine_start == 100,
-         NPI_scenario == "LockdownBPSVFinish_minMandateSpecFinish_fullRelease")
-
-
-
-run_sars_x(population_size = check$population_size,
-           country = check$country,
-           hosp_bed_capacity = check$hosp_bed_capacity,
-           ICU_bed_capacity = check$ICU_bed_capacity,
-           Rt = check2$Rt,
-           tt_Rt = check2$tt_Rt,
-           Tg = check$Tg,
-           IFR = check$IFR,
-           vaccine_scenario = "specific_only",
-           detection_time = check$detection_time, 
-           bpsv_start = check$bpsv_start,
-           specific_vaccine_start = check$specific_vaccine_start,
-           efficacy_infection_bpsv = check$efficacy_infection_bpsv,
-           efficacy_disease_bpsv = check$efficacy_disease_bpsv,
-           efficacy_infection_spec = check$efficacy_infection_spec,
-           efficacy_disease_spec = check$efficacy_disease_spec,
-           dur_R = check$dur_R,
-           dur_V = rep(check$dur_V, 4), 
-           second_dose_delay = check$second_dose_delay,
-           dur_vacc_delay = check$dur_vacc_delay,
-           coverage = check$coverage,
-           vaccination_rate = check$vaccination_rate,
-           min_age_group_index_priority = check$min_age_group_index_priority,
-           min_age_group_index_non_priority = check$min_age_group_index_non_priority,
-           runtime = check$runtime,
-           seeding_cases = check$seeding_cases,
-           output = "summary") 
-  
-
 
 test_plot <- joined %>%
   filter(R0 == 2,
          Tg == 7,
          IFR == 1.5) %>%
   mutate(specific_vaccine_start = factor(specific_vaccine_start),
-         bpsv_start = factor(bpsv_start),
-         NPI_int = factor(NPI_scenario_int))
+         detection_time = factor(detection_time),
+         NPI_int = factor(NPI_int))
 
 ggplot(test_plot, aes(x = efficacy_disease_bpsv, y = deaths_saved, colour = specific_vaccine_start)) +
   geom_path() +
-  facet_grid(bpsv_start ~ NPI_scenario_int)
-
-check <- test_plot[test_plot$NPI_scenario_int == 9 & 
-                     test_plot$specific_vaccine_start == 100 &
-                     #test_plot$efficacy_disease_bpsv == 0.5 &
-                     test_plot$bpsv_start == 50, ]
-ggplot(check, aes(x = efficacy_disease_bpsv, y = deaths_saved, colour = specific_vaccine_start)) +
-  geom_path() +
-  facet_grid(bpsv_start ~ NPI_scenario_int)
-
-ggplot(check, aes(x = efficacy_disease_bpsv, y = deaths_bpsv, colour = specific_vaccine_start)) +
-  geom_path() 
-ggplot(check, aes(x = efficacy_disease_bpsv, y = deaths_spec, colour = specific_vaccine_start)) +
-  geom_path() 
-
-check2 <- scenarios_to_plot %>%
-  filter(R0 == 2,
-         Tg == 7,
-         IFR == 1.5,
-         NPI_scenario_int == 9,
-         specific_vaccine_start == 100,
-         is.na(bpsv_start),
-         vaccine_scenario == "specific_only")
-
-check_og <- baseline_scenarios %>%
-  filter(Rt == 2,
-         Tg == 7,
-         IFR == 1.5,
-         tt_Rt == 9,
-         specific_vaccine_start == 100,
-         bpsv_start == 30,
-         vaccine_scenario == "specific_only")
-
-index <- which(baseline_scenarios$Rt == 2 & 
-      baseline_scenarios$Tg == 7 &
-      baseline_scenarios$IFR == 1.5 & 
-      baseline_scenarios$tt_Rt == 9 &
-      baseline_scenarios$specific_vaccine_start == 100 &
-      baseline_scenarios$bpsv_start == 30 &
-      baseline_scenarios$vaccine_scenario == "specific_only")
-
-test_run <- scenarios[index, ]
-tic()
-plan(multisession, workers = 5) 
-system.time({out <- future_pmap(test_run, run_sars_x, .progress = TRUE)})
-toc()
-
-data <- lapply(out, function(x) {
-  y <- data.frame(x$summary_metrics,
-                  R0 = x$model_arguments$Rt[1],
-                  Tg = x$model_arguments$Tg,
-                  IFR = x$model_arguments$IFR,
-                  vaccine_scenario = x$model_arguments$vaccine_scenario,
-                  bpsv_start = x$model_arguments$bpsv_start,
-                  specific_vaccine_start = x$model_arguments$specific_vaccine_start,
-                  efficacy_infection_bpsv = x$model_arguments$efficacy_infection_bpsv,
-                  efficacy_disease_bpsv = x$model_arguments$efficacy_disease_bpsv,
-                  efficacy_infection_spec = x$model_arguments$efficacy_infection_spec,
-                  efficacy_disease_spec = x$model_arguments$efficacy_disease_spec,
-                  NPI_scenario_int = x$model_arguments$NPI_scenario_int)
-})
-x <- rbindlist(data)
-
-check3 <- check2 %>%
-  select(deaths, R0, Tg, IFR, bpsv_start, specific_vaccine_start, efficacy_disease_bpsv) %>%
-  mutate(bpsv_start = 30)
-
-z <- x %>%
-  left_join(check3, by = c("R0", "Tg", "IFR", "bpsv_start", "specific_vaccine_start", "efficacy_disease_bpsv")) %>%
-  relocate(deaths.y)
-
-plot(z$deaths.x, z$deaths.y)
-
-check2$deaths[order(check2$deaths)]
-x$deaths[order(x$deaths)]
-
-
-## Checking weirdness:
-index <- which(baseline_scenarios$Rt == 2 & 
-                 baseline_scenarios$Tg == 7 &
-                 baseline_scenarios$IFR == 1.5 & 
-                 baseline_scenarios$tt_Rt == 9 &
-                 baseline_scenarios$specific_vaccine_start == 100 &
-                 baseline_scenarios$bpsv_start == 30 &
-                 baseline_scenarios$vaccine_scenario == "specific_only")
-test_run <- scenarios[index, ]
-tic()
-plan(multisession, workers = 5) 
-system.time({out <- future_pmap(test_run, run_sars_x, .progress = TRUE, .options = furrr_options(seed = 123))})
-toc()
-data <- lapply(out, function(x) {
-  y <- data.frame(x$summary_metrics,
-                  R0 = x$model_arguments$Rt[1],
-                  Tg = x$model_arguments$Tg,
-                  IFR = x$model_arguments$IFR,
-                  vaccine_scenario = x$model_arguments$vaccine_scenario,
-                  bpsv_start = x$model_arguments$bpsv_start,
-                  specific_vaccine_start = x$model_arguments$specific_vaccine_start,
-                  efficacy_infection_bpsv = x$model_arguments$efficacy_infection_bpsv,
-                  efficacy_disease_bpsv = x$model_arguments$efficacy_disease_bpsv,
-                  efficacy_infection_spec = x$model_arguments$efficacy_infection_spec,
-                  efficacy_disease_spec = x$model_arguments$efficacy_disease_spec,
-                  NPI_scenario_int = x$model_arguments$NPI_scenario_int)
-})
-x <- rbindlist(data)
-deaths1 <- x$deaths
-
-[1] 7374.526 7411.961 7371.021 7328.408 7543.190 7578.105 7543.190 7374.526 7583.370 7415.128 7328.408 7583.370
-[1] 7374.526 7411.961 7371.021 7328.408 7543.190 7578.105 7543.190 7374.526 7583.370 7415.128 7328.408 7583.370
-
-index <- which(baseline_scenarios$Rt == 2 & 
-                 baseline_scenarios$Tg == 7 &
-                 baseline_scenarios$IFR == 1.5 & 
-                 baseline_scenarios$tt_Rt == 9 &
-                 baseline_scenarios$specific_vaccine_start == 100 &
-                 baseline_scenarios$bpsv_start == 30 &
-                 baseline_scenarios$vaccine_scenario == "specific_only")
-test_run <- scenarios[index, ]
-# test_run$bpsv_start <- 30
-tic()
-plan(multisession, workers = 5) 
-system.time({out <- future_pmap(test_run, run_sars_x, .progress = TRUE)})
-toc()
-data <- lapply(out, function(x) {
-  y <- data.frame(x$summary_metrics,
-                  R0 = x$model_arguments$Rt[1],
-                  Tg = x$model_arguments$Tg,
-                  IFR = x$model_arguments$IFR,
-                  vaccine_scenario = x$model_arguments$vaccine_scenario,
-                  bpsv_start = x$model_arguments$bpsv_start,
-                  specific_vaccine_start = x$model_arguments$specific_vaccine_start,
-                  efficacy_infection_bpsv = x$model_arguments$efficacy_infection_bpsv,
-                  efficacy_disease_bpsv = x$model_arguments$efficacy_disease_bpsv,
-                  efficacy_infection_spec = x$model_arguments$efficacy_infection_spec,
-                  efficacy_disease_spec = x$model_arguments$efficacy_disease_spec,
-                  NPI_scenario_int = x$model_arguments$NPI_scenario_int)
-})
-x <- rbindlist(data)
-deaths2 <- x$deaths
-
-deaths1
-deaths2
-plot(deaths1, deaths2)
+  facet_grid(detection_time ~ NPI_int)
 
 ## Plotting out the NPI scenarios
-Rt_check <- Rt[3]
-specific_vaccine_start_check <- specific_vaccine_start[1]
-
-Rt_S1 <- c(Rt_check, lockdown_Rt, Rt_check * (1 - minimal_mandate_reduction), Rt_check)
-tt_Rt_S1 <- c(0, detection_time, detection_time + time_to_coverage_bpsv, detection_time + specific_vaccine_start_check + time_to_coverage_spec)
-
-Rt_S2 <- c(Rt_check, lockdown_Rt, Rt_check)
-tt_Rt_S2 <- c(0, detection_time, detection_time + time_to_coverage_bpsv)
-
-Rt_S3 <- c(Rt_check, lockdown_Rt, Rt_check)
-tt_Rt_S3 <- c(0, detection_time, detection_time + specific_vaccine_start_check + time_to_coverage_spec)
-
-Rt_S4 <- c(Rt_check, Rt_check * (1 - minimal_mandate_reduction), Rt_check)
-tt_Rt_S4 <- c(0, detection_time, detection_time + time_to_coverage_bpsv)
-
-Rt_S5 <- c(Rt_check, Rt_check * (1 - minimal_mandate_reduction), Rt_check)
-tt_Rt_S5 <- c(0, detection_time, detection_time + specific_vaccine_start_check + time_to_coverage_spec)
-
-Rt_S6 <- c(Rt_check, lockdown_Rt, Rt_check * (1 - minimal_mandate_reduction), Rt_check) ## unsure about this one as depending on fixed lockdown time, potentially shorter than time_to_coverage
-tt_Rt_S6 <- c(0, detection_time, detection_time + fixed_lockdown_time, detection_time + time_to_coverage_bpsv) 
-
-Rt_S7 <- c(Rt_check, lockdown_Rt, Rt_check * (1 - minimal_mandate_reduction), Rt_check) ## less worried about this one because specific vaccine will take min 100 days
-tt_Rt_S7 <- c(0, detection_time, detection_time + fixed_lockdown_time, detection_time + specific_vaccine_start_check + time_to_coverage_spec) 
-
-Rt_S8 <- c(Rt_check, lockdown_Rt, Rt_check)
-tt_Rt_S8 <- c(0, detection_time, detection_time + fixed_lockdown_time)
-
-Rt_S9 <- Rt_check
-tt_Rt_S9 <- 0
-
-NPI_df <- data.frame(Rt = c(Rt_S1, Rt_S2, Rt_S3, Rt_S4, Rt_S5, Rt_S6, Rt_S7, Rt_S8, c(Rt_S9, Rt_S9)),
-                     tt_Rt = c(tt_Rt_S1, tt_Rt_S2, tt_Rt_S3, tt_Rt_S4, tt_Rt_S5, tt_Rt_S6, tt_Rt_S7, tt_Rt_S8, c(tt_Rt_S9, 10)),
-                     scenario = c(rep("1", length(Rt_S1)), 
-                                  rep("2", length(Rt_S2)),
-                                  rep("3", length(Rt_S3)),
-                                  rep("4", length(Rt_S4)),
-                                  rep("5", length(Rt_S5)),
-                                  rep("6", length(Rt_S6)),
-                                  rep("7", length(Rt_S7)),
-                                  rep("8", length(Rt_S8)),
-                                  rep("9", length(Rt_S9) + 1)))
-NPI_df$scenario <- paste0("Scenario ", NPI_df$scenario)
+temp_R0 <- R0[2]
+temp_detection_time <- detection_time[1]
+temp_specific_vaccine_start <- specific_vaccine_start[1]
+NPI_df <- NPIs %>%
+  filter(R0 == temp_R0,
+         detection_time == temp_detection_time,
+         specific_vaccine_start == temp_specific_vaccine_start) %>%
+  select(NPI_int, NPI_scenario, Rt, tt_Rt) %>%
+  rowwise() %>%
+  mutate(scenario_info = list(tibble(Rt = Rt, tt_Rt = tt_Rt))) %>%
+  select(-Rt, -tt_Rt) %>%
+  unnest(cols = c(scenario_info))
+NPI_df$scenario <- paste0("Scenario ", NPI_df$NPI_int)
 NPI_df <- NPI_df %>%
   group_by(scenario) %>%
   mutate(next_time = lead(tt_Rt),
          next_value = lead(Rt)) %>%
   mutate(next_time = ifelse(is.na(next_time), unique(baseline_scenarios$runtime), next_time),
-         next_value = ifelse(is.na(next_value), Rt_check, next_value))
+         next_value = ifelse(is.na(next_value), temp_R0, next_value))
 overplot_factor <- 1
 example_NPI <- subset(NPI_df, scenario == "Scenario 1")
 example_NPI$next_time[length(example_NPI$next_time)] <- 150
@@ -477,79 +258,40 @@ a <- ggplot(example_NPI) +
   geom_segment(aes(x = next_time, xend = next_time, y = Rt, yend = next_value), size = 2) +
   geom_hline(aes(yintercept = 1)) +
   geom_hline(aes(yintercept = lockdown_Rt), linetype = "dashed") +
-  geom_hline(aes(yintercept = Rt_check * (1 - minimal_mandate_reduction)), linetype = "dashed") +
-  geom_vline(aes(xintercept = detection_time)) +
-  geom_vline(aes(xintercept = detection_time + time_to_coverage_bpsv)) +
-  geom_vline(aes(xintercept = detection_time + specific_vaccine_start_check + time_to_coverage_spec)) +
+  geom_hline(aes(yintercept = temp_R0 * (1 - minimal_mandate_reduction)), linetype = "dashed") +
+  geom_vline(aes(xintercept = temp_detection_time)) +
+  geom_vline(aes(xintercept = temp_detection_time + bpsv_start + time_to_coverage_bpsv)) +
+  geom_vline(aes(xintercept = temp_detection_time + temp_specific_vaccine_start + time_to_coverage_spec)) +
   theme_bw() +
-  geom_segment(aes(x = detection_time, y = 4, xend = detection_time, yend = Rt_check + 0.7), arrow = arrow(length = unit(0.3, "cm"))) +
-  annotate("text", x = detection_time, y = 4.1, label = "Detection") +
-  geom_segment(aes(x = detection_time + time_to_coverage_bpsv, y = 4, xend = detection_time + time_to_coverage_bpsv, yend = Rt_check + 0.7), arrow = arrow(length = unit(0.3, "cm"))) +
-  annotate("text", x = detection_time + time_to_coverage_bpsv, y = 4.2, label = "BPSV Vaccination\nCompleted", hjust = 0) +
-  geom_segment(aes(x = detection_time + specific_vaccine_start_check + time_to_coverage_spec, y = 4, xend = detection_time + specific_vaccine_start_check + time_to_coverage_spec, yend = Rt_check + 0.7), arrow = arrow(length = unit(0.3, "cm"))) +
-  annotate("text", x = detection_time + specific_vaccine_start_check + time_to_coverage_spec, y = 4.2, label = "Spec. Vaccination\nCompleted", hjust = 0.5) +
-  geom_segment(aes(x = -20, y = Rt_check * (1 - minimal_mandate_reduction), xend = -10, yend = Rt_check * (1 - minimal_mandate_reduction)), arrow = arrow(length = unit(0.3, "cm"))) +
-  annotate("text", x = -20, y = Rt_check * (1 - minimal_mandate_reduction), label = "Min.\nMandate", hjust = 1) +
+  geom_segment(aes(x = temp_detection_time, y = temp_R0 + 1, xend = temp_detection_time, yend = temp_R0 + 0.7), arrow = arrow(length = unit(0.3, "cm"))) +
+  annotate("text", x = temp_detection_time, y = temp_R0 + 1.2, label = "Detection") +
+  geom_segment(aes(x = temp_detection_time + bpsv_start + time_to_coverage_bpsv, y = temp_R0 + 1, xend = temp_detection_time + bpsv_start + time_to_coverage_bpsv, yend = temp_R0 + 0.7), arrow = arrow(length = unit(0.3, "cm"))) +
+  annotate("text", x = temp_detection_time + bpsv_start + time_to_coverage_bpsv, y = temp_R0 + 1.2, label = "BPSV Vacc.\nCompleted", hjust = 0.5) +
+  geom_segment(aes(x = temp_detection_time + temp_specific_vaccine_start + time_to_coverage_spec, y = temp_R0 + 1, xend = temp_detection_time + temp_specific_vaccine_start + time_to_coverage_spec, yend = temp_R0 + 0.7), arrow = arrow(length = unit(0.3, "cm"))) +
+  annotate("text", x = temp_detection_time + temp_specific_vaccine_start + time_to_coverage_spec, y = temp_R0 + 1.2, label = "Spec. Vacc.\nCompleted", hjust = 0.5) +
+  geom_segment(aes(x = -20, y = temp_R0 * (1 - minimal_mandate_reduction), xend = -10, yend = temp_R0 * (1 - minimal_mandate_reduction)), arrow = arrow(length = unit(0.3, "cm"))) +
+  annotate("text", x = -20, y = temp_R0 * (1 - minimal_mandate_reduction), label = "Min.\nMandate", hjust = 1) +
   geom_segment(aes(x = -20, y = lockdown_Rt, xend = -10, yend = 0.9), arrow = arrow(length = unit(0.3, "cm"))) +
   annotate("text", x = -20, y = lockdown_Rt, label = "Lockdown", hjust = 1) +
-  geom_segment(aes(x = -20, y = Rt_check, xend = -10, yend = Rt_check), arrow = arrow(length = unit(0.3, "cm"))) +
-  annotate("text", x = -20, y = Rt_check, label = "R0", hjust = 1) +
+  geom_segment(aes(x = -20, y = temp_R0, xend = -10, yend = temp_R0), arrow = arrow(length = unit(0.3, "cm"))) +
+  annotate("text", x = -20, y = temp_R0, label = "R0", hjust = 1) +
   theme(plot.margin = margin(2.5, 1, 2.5, 2.5, "cm")) +
-  coord_cartesian(clip = 'off', xlim = c(0, 150), ylim = c(0.5, Rt_check + 0.5)) +
+  coord_cartesian(clip = 'off', xlim = c(0, 150), ylim = c(0.5, temp_R0 + 0.5)) +
   scale_y_continuous(position = "right") +
   labs(x = "Time (Days)")
 
 b <- ggplot(NPI_df, aes(x = tt_Rt - overplot_factor, colour = scenario)) +
   geom_hline(aes(yintercept = 1), linewidth = 0.2) +
   geom_hline(aes(yintercept = lockdown_Rt), linetype = "dashed", linewidth = 0.2) +
-  geom_hline(aes(yintercept = Rt_check * (1 - minimal_mandate_reduction)), linetype = "dashed", linewidth = 0.2) +
-  geom_vline(aes(xintercept = detection_time), linewidth = 0.2) +
-  geom_vline(aes(xintercept = detection_time + time_to_coverage_bpsv), linewidth = 0.2) +
-  geom_vline(aes(xintercept = detection_time + specific_vaccine_start_check + time_to_coverage_spec), linewidth = 0.2) +
+  geom_hline(aes(yintercept = temp_R0 * (1 - minimal_mandate_reduction)), linetype = "dashed", linewidth = 0.2) +
+  geom_vline(aes(xintercept = temp_detection_time), linewidth = 0.2) +
+  geom_vline(aes(xintercept = temp_detection_time + bpsv_start + time_to_coverage_bpsv), linewidth = 0.2) +
+  geom_vline(aes(xintercept = temp_detection_time + temp_specific_vaccine_start + time_to_coverage_spec), linewidth = 0.2) +
   geom_segment(aes(xend = next_time + overplot_factor, y = Rt, yend = Rt), size = 1) +
   geom_segment(aes(x = next_time, xend = next_time, y = Rt, yend = next_value), size = 1) +
   theme_bw() +
   facet_wrap(~scenario) +
-  coord_cartesian(xlim = c(0, 150), ylim = c(0.5, Rt_check + 0.5)) +
+  coord_cartesian(xlim = c(0, 150), ylim = c(0.5, temp_R0 + 0.5)) +
   theme(legend.position = "none")
 
 cowplot::plot_grid(a, b, rel_widths = c(1, 1.2)) # 11.3 x 5.7 dimensions is good
-
-# tic()
-# scenarios <- baseline_scenarios %>%
-#   rowwise() %>%
-#   mutate(temp = ((detection_time + specific_vaccine_start + time_to_coverage_spec) - (detection_time + time_to_coverage_bpsv))) %>%
-#   mutate(dur_V = list(dur_V_vec)) %>%
-#   mutate(NPI_scenario_int = tt_Rt) %>% 
-#   mutate(NPI_scenario = case_when(tt_Rt == 1 ~ "LockdownBPSVFinish_minMandateSpecFinish_fullRelease",
-#                                   tt_Rt == 2 ~ "LockdownBPSVFinish_fullRelease",
-#                                   tt_Rt == 3 ~ "LockdownSpecFinish_fullRelease",
-#                                   tt_Rt == 4 ~ "minMandateBPSVFinish_fullRelease",
-#                                   tt_Rt == 5 ~ "minMandateSpecFinish_fullRelease",
-#                                   tt_Rt == 6 ~ "LockdownBPSVFinish_gradualReleaseSpecFinish",  
-#                                   tt_Rt == 7 ~ "minMandateBPSVFinish_gradualReleaseSpecFinish",  
-#                                   tt_Rt == 8 ~ "Nothing")) %>%
-#   mutate(Rt = case_when(tt_Rt == 1 ~ list(c(Rt, lockdown_Rt, Rt * (1 - minimal_mandate_reduction), Rt)),
-#                         tt_Rt == 2 ~ list(c(Rt, lockdown_Rt, Rt)),
-#                         tt_Rt == 3 ~ list(c(Rt, lockdown_Rt, Rt)),
-#                         tt_Rt == 4 ~ list(c(Rt, Rt * (1 - minimal_mandate_reduction), Rt)),
-#                         tt_Rt == 5 ~ list(c(Rt, Rt * (1 - minimal_mandate_reduction), Rt)),
-#                         tt_Rt == 6 ~ list(c(Rt, lockdown_Rt, seq(from = lockdown_Rt, to = Rt, length.out = temp), Rt)), 
-#                         tt_Rt == 7 ~ list(c(Rt, lockdown_Rt, seq(from = lockdown_Rt, to = Rt, length.out = temp), Rt)),  
-#                         tt_Rt == 8 ~ list(Rt))) %>%
-#   mutate(tt_Rt = case_when(tt_Rt == 1 ~ list(c(0, detection_time, detection_time + time_to_coverage_bpsv, detection_time + specific_vaccine_start + time_to_coverage_spec)),
-#                            tt_Rt == 2 ~ list(c(0, detection_time, detection_time + time_to_coverage_bpsv)),
-#                            tt_Rt == 3 ~ list(c(0, detection_time, detection_time + specific_vaccine_start + time_to_coverage_spec)),
-#                            tt_Rt == 4 ~ list(c(0, detection_time, detection_time + time_to_coverage_bpsv)),
-#                            tt_Rt == 5 ~ list(c(0, detection_time, detection_time + specific_vaccine_start + time_to_coverage_spec)),
-#                            tt_Rt == 6 ~ list(c(0, detection_time, detection_time + time_to_coverage_bpsv, seq(from = detection_time + time_to_coverage_bpsv, to = detection_time + specific_vaccine_start + time_to_coverage_spec))),
-#                            tt_Rt == 7 ~ list(c(0, detection_time, detection_time + time_to_coverage_bpsv, seq(from = detection_time + time_to_coverage_bpsv, to = detection_time + specific_vaccine_start + time_to_coverage_spec))),  
-#                            tt_Rt == 8 ~ list(0))) # No NPIs
-# toc()
-# 
-# x <- expand_grid(scenarios, efficacy_disease_bpsv = seq(0.3, 0.9, 0.1))
-#   
-# temp_Rt <- Rt[2]
-# 
-# (temp_Rt - lockdown_Rt) / ( - (detection_time + time_to_coverage_bpsv))
-
