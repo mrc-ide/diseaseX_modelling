@@ -3,6 +3,7 @@
 ## 2) Are we fine assuming unlimited healthcare capacity?
 
 # Load required libraries
+library(egg)
 source(here::here("main.R"))
 
 # Load required functions
@@ -228,7 +229,67 @@ test_plot <- joined %>%
 
 ggplot(test_plot, aes(x = efficacy_disease_bpsv, y = deaths_saved, colour = specific_vaccine_start)) +
   geom_path() +
-  facet_grid(detection_time ~ NPI_int)
+  facet_grid(paste0("Detection Time: ", detection_time) ~ paste0("Scenario ", NPI_int))
+
+test_plot2 <- joined %>%
+  mutate(pathogen = ifelse(R0 == 3 & Tg == 7 & IFR == 0.5, "SARS-CoV-2-Like", 
+                           ifelse(R0 == 1.5 & Tg == 14 & IFR == 1.5, "SARS-CoV-1-Like", "not_relevant"))) %>%
+  filter(specific_vaccine_start %in% c(100, 200, 365),
+         pathogen != "not_relevant", 
+         detection_time == 28) %>%
+  group_by(efficacy_disease_bpsv, pathogen, NPI_int) %>%
+  mutate(min_ribbon = min(deaths_saved),
+         max_ribbon = max(deaths_saved))
+
+ggplot() +
+  geom_line(data = test_plot2, aes(x = efficacy_disease_bpsv, y = deaths_saved, 
+                  group = interaction(NPI_int, pathogen, factor(specific_vaccine_start)), 
+                  colour = factor(specific_vaccine_start))) +
+  geom_ribbon(data = test_plot2,
+              aes(x = efficacy_disease_bpsv,
+                  group = interaction(NPI_int, pathogen, factor(specific_vaccine_start)),
+                  ymin = min_ribbon,
+                  ymax = max_ribbon), alpha = 0.2) +
+  facet_grid(pathogen ~ paste0("Scenario ", NPI_int))
+
+ggplot() +
+  geom_line(data = subset(test_plot2, NPI_int == 1 ), 
+            aes(x = efficacy_disease_bpsv, y = deaths_saved, 
+                group = interaction(NPI_int, pathogen, factor(specific_vaccine_start)), 
+                colour = factor(specific_vaccine_start))) # +
+  # geom_ribbon(data = subset(test_plot2, NPI_int == 1),
+  #             aes(x = efficacy_disease_bpsv,
+  #                 group = interaction(NPI_int, pathogen, factor(specific_vaccine_start)),
+  #                 ymin = min_ribbon,
+  #                 ymax = max_ribbon), alpha = 0.2)
+
+temp_plot <- ggplot() +
+  geom_segment(data = subset(test_plot2, pathogen == "SARS-CoV-2-Like" & specific_vaccine_start == 100 & efficacy_disease_bpsv == 0.75),
+               aes(x = composite_NPI_spec, xend = composite_NPI_spec, y = deaths_spec, yend = deaths_bpsv + 75,
+                   group = factor(NPI_int)),
+               arrow = arrow(length = unit(0.02, "npc"), type = "closed")) +
+  geom_point(data = subset(test_plot2, pathogen == "SARS-CoV-2-Like" & specific_vaccine_start == 100), 
+             aes(x = composite_NPI_spec, y = deaths_spec, fill = factor(NPI_int)), shape = 4, colour = "black", size = 2, pch = 21) +
+  geom_point(data = subset(test_plot2, pathogen == "SARS-CoV-2-Like" & specific_vaccine_start == 100 & efficacy_disease_bpsv == 0.75), 
+             aes(x = composite_NPI_spec, y = deaths_bpsv, fill = factor(NPI_int)), colour = "black", size = 4, pch = 21) +
+  theme_bw() +
+  labs(x = "NPI Days (Composite Duration+Stringency", 
+       y = "Disease Deaths") +
+  guides(fill = guide_legend(title = "Scenario"))
+x <- ggplot() +
+  geom_bar(data = subset(test_plot2, pathogen == "SARS-CoV-2-Like" & specific_vaccine_start == 100 & efficacy_disease_bpsv == 0.75), 
+           aes(x = factor(NPI_int), y = deaths_saved, fill = factor(NPI_int)), stat = "identity") +
+  labs(x = "", y = "Deaths Averted") +
+  theme_bw() +
+  theme(legend.position = "none",
+        axis.title.x = element_blank(),
+        plot.background = element_rect(colour = "black"))
+y <- temp_plot + 
+  annotation_custom(
+    ggplotGrob(x), 
+    xmin = 50, xmax = 90, ymin = 3700, ymax = 5000)
+cowplot::plot_grid(b, y)
+
 
 ## Plotting out the NPI scenarios
 temp_R0 <- R0[2]
@@ -292,6 +353,7 @@ b <- ggplot(NPI_df, aes(x = tt_Rt - overplot_factor, colour = scenario)) +
   theme_bw() +
   facet_wrap(~scenario) +
   coord_cartesian(xlim = c(0, 150), ylim = c(0.5, temp_R0 + 0.5)) +
-  theme(legend.position = "none")
+  theme(legend.position = "none",
+        strip.background =element_rect(fill="#F5F5F5"))
 
 cowplot::plot_grid(a, b, rel_widths = c(1, 1.2)) # 11.3 x 5.7 dimensions is good
