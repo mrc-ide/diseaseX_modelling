@@ -20,6 +20,7 @@ library(patchwork)
 library(flextable)
 library(officer)
 library(tictoc)
+library(egg)
 
 
 # colours

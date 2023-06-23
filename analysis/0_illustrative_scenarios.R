@@ -3,155 +3,65 @@
 ## 2) Are we fine assuming unlimited healthcare capacity?
 
 # Load required libraries
-library(egg)
 source(here::here("main.R"))
 
 # Load required functions
 source(here::here("functions/run_sars_x.R"))
 
-### Defining Central Scenarios
+# Generate parameter combinations for model running (note Rt and tt_Rt has a placeholder)
+baseline_scenarios <- create_scenarios(#### Demographic Parameters
+                                       population_size = 1e6,
+                                       country = "Argentina",
+                                        
+                                       #### Healthcare Parameters
+                                       hosp_bed_capacity = 100000000,                                          
+                                       ICU_bed_capacity = 100000000, 
+                                       
+                                       #### Epidemiological Parameters
+                                       R0 = c(1.5, 2, 3),
+                                       Tg = 7,
+                                       IFR = c(0.5, 1.5),
+                                       number_NPI_scenarios = 9,
+                                       
+                                       ## Vaccine-Related Parameters
+                                       detection_time = c(14, 28),                    # detection time
+                                       bpsv_start = 14,                               # BPSV distribution start (time after detection time)
+                                       specific_vaccine_start = c(100, 200, 365),     # specific vaccine distribution start (time after detection time)
+                                       efficacy_infection_bpsv = 0.35,                # vaccine efficacy against infection - BPSV
+                                       efficacy_disease_bpsv = 0.8,                   # vaccine efficacy against disease - BPSV
+                                       efficacy_infection_spec = 0.55,                # vaccine efficacy against infection - specific vaccine
+                                       efficacy_disease_spec = 0.9,                   # vaccine efficacy against disease - specific vaccine
+                                       dur_R = 365000,                                # duration of infection-induced immunity
+                                       dur_V = 365000,                                # duration of vaccine-induced immunity for both vaccines
+                                       second_dose_delay = 7,                         # controls how many days after "1st dose" people receive second dose; see here: https://github.com/mrc-ide/squire.page/blob/main/inst/odin/nimue_booster.R#L427-L430
+                                       dur_vacc_delay = 7,                            # mean duration from vaccination to protection
+                                       coverage = 0.8,                                # proportion of the population vaccinated
+                                       vaccination_rate = 0.035,                      # vaccination rate per week as percentage of population
+                                       min_age_group_index_priority = 13,             # index of the youngest age group given priority w.r.t vaccines (13 = 60+)
+                                       min_age_group_index_non_priority = 4)          # index of the youngest age group that *receives* vaccines (4 = 15+)
 
-#### Demographic Parameters
-target_pop <- 1e6
-country <- "Argentina"
+## Generating NPI scenarios (i.e. Rt and tt_Rt for model parameter combinations)
+NPIs <- default_NPI_scenarios(lockdown_Rt = 0.9, minimal_mandate_reduction = 0.25, scenarios = baseline_scenarios)
 
-#### Healthcare Parameters
-hosp_bed_capacity <- 100000000                                         
-ICU_bed_capacity <- 100000000    
-
-#### Epidemiological an NPI Parameters
-R0 <- c(1.5, 2, 3)
-NPI_int <- 1:8 # 8 different NPI scenarios
-Tg <- c(7, 14)
-IFR <- c(0.5, 1.5)
-
-## Vaccine-Related Parameters
-vaccine_scenario <- c("specific_only", "both_vaccines") # which scenario to explore
-detection_time <- c(14, 28)                    # detection time
-bpsv_start <- 14                               # BPSV distribution start (time after detection time)
-specific_vaccine_start <- c(100, 200, 365)     # specific vaccine distribution start (time after detection time)
-efficacy_infection_bpsv <- 0.35                # vaccine efficacy against infection - BPSV
-efficacy_disease_bpsv <- 0.8                   # vaccine efficacy against disease - BPSV
-efficacy_infection_spec <- 0.55                # vaccine efficacy against infection - specific vaccine
-efficacy_disease_spec <- 0.9                   # vaccine efficacy against disease - specific vaccine
-dur_R <- 1000 * 365                            # duration of infection-induced immunity
-dur_V_vec <- rep(1000 * 365, 4)                # duration of vaccine-induced immunity for both vaccines
-second_dose_delay <- 7                         # controls how many days after "1st dose" people receive second dose; see here: https://github.com/mrc-ide/squire.page/blob/main/inst/odin/nimue_booster.R#L427-L430
-dur_vacc_delay <- 7                            # mean duration from vaccination to protection
-coverage <- 0.8                                # proportion of the population vaccinated
-vaccination_rate <- 0.035                       # vaccination rate per week as percentage of population
-min_age_group_index_priority <- 13             # index of the youngest age group given priority w.r.t vaccines (13 = 60+)
-min_age_group_index_non_priority <- 4          # index of the youngest age group that *receives* vaccines (4 = 15+)
-
-# Expand_grid creates bpsv_start * specific_only scenarios, but they're all the same as no BPSV, so keep only first set
-runtime <- 2 * 365
-baseline_scenarios <- expand_grid(population_size = 1e6,
-                                  country = "Argentina",
-                                  hosp_bed_capacity = hosp_bed_capacity,                                         
-                                  ICU_bed_capacity = ICU_bed_capacity,
-                                  R0 = R0, 
-                                  Tg = Tg,
-                                  IFR = IFR,
-                                  vaccine_scenario = vaccine_scenario,
-                                  detection_time = detection_time, 
-                                  bpsv_start = bpsv_start,
-                                  specific_vaccine_start = specific_vaccine_start,
-                                  efficacy_infection_bpsv = efficacy_infection_bpsv,
-                                  efficacy_disease_bpsv = seq(0.4, 0.9, 0.05), #efficacy_disease_bpsv, 
-                                  efficacy_infection_spec = efficacy_infection_spec, 
-                                  efficacy_disease_spec = efficacy_disease_spec,
-                                  dur_R = dur_R, 
-                                  dur_V = 1, # placeholder to be filled in below
-                                  second_dose_delay = second_dose_delay, 
-                                  dur_vacc_delay = dur_vacc_delay,
-                                  coverage = coverage,
-                                  vaccination_rate = vaccination_rate, 
-                                  min_age_group_index_priority = min_age_group_index_priority,
-                                  min_age_group_index_non_priority = min_age_group_index_non_priority,
-                                  runtime = runtime,
-                                  seeding_cases = 2,
-                                  NPI_int = NPI_int) 
-
-## Coercing dur_V into correct format
-baseline_scenarios <- baseline_scenarios %>%
-  mutate(dur_V = list(dur_V_vec))
-
-## Generating NPI scenarios
-### 1 = NPIs reducing Rt < 1 until BPSV campaign is done, followed by minimum mandate until specific campaign is done, then full release
-### 2 = NPIs reducing Rt < 1 until BPSV campaign is done, followed by full release
-### 3 = NPIs reducing Rt < 1 until spec vaccine campaign is done, followed by full release
-### 4 = NPIs minimal mandate until BPSV campaign is done, followed by full release
-### 5 = NPIs minimal mandate until spec vaccine campaign is done, followed by full release
-### 6 = NPIs reducing Rt < 1 until BPSV campaign is done, followed by gradual release until spec vacc campaign done
-### 7 = NPIs minimal mandate until BPSV campaign is done, followed by gradual release until spec vacc campaign done
-### 8 = No NPIs
-#### NOTE - REMEMBER THAT SPECIFIC VACCINE DEVELOPMENT MUST BE *AFTER* THE BPSV CAMPAIGN IS DONE
-#### NOTE - MIGHT NEED TO TWEAK THESE SOMEWHAT DEPENDING ON WHETHER EMERGENCE OR SECONDARY COUNTRY
-minimal_mandate_reduction <- 0.25
-lockdown_Rt <- 0.9
-lower_vaccination_coverage_target <- 0.5 
-standard_pop <- generate_standard_pop(country = unique(baseline_scenarios$country), population_size = unique(baseline_scenarios$population_size))
-daily_doses <- unique(baseline_scenarios$vaccination_rate) * unique(baseline_scenarios$population_size) / 7    # rate of vaccination with primary series
-priority_age_groups <- unique(baseline_scenarios$min_age_group_index_priority):17            
-elderly_pop_to_vaccinate <- sum(standard_pop[priority_age_groups]) * coverage # 60+s receive primary (BNPCV) and booster (diseaseX-specific); under 60s receive just primary (diseaseX-specific)
-time_to_coverage_bpsv <- ceiling(elderly_pop_to_vaccinate/daily_doses) + 1
-time_to_coverage_spec <- time_to_coverage_bpsv ## assumed same rate for now
-
-### can't focus today but the left_join approach is the way forward. 
-## Importantly however, I need to adjust everything (or at the very least check) vis a vis detection_time
-## and the contexts in which I 1) want it to vary; and 2) which quantities need to have it included in there.
-## Basically need to figure out when I want to be adding it (e.g. to bpsv_start and spec_vaccine_start???? unclear currently)
-### UPDATE - THINK I'VE GOT THESE RIGHT.
-### ALSO, POSSIBLE THE TT_RT FOR GRADUAL LIFTING IS OUT BY ONE DAY - CHECK THIS!!
-NPIs <- expand_grid(detection_time = detection_time,
-                    specific_vaccine_start = specific_vaccine_start,
-                    time_to_coverage_bpsv = time_to_coverage_bpsv,
-                    time_to_coverage_spec = time_to_coverage_spec,
-                    R0 = R0,
-                    NPI_int = NPI_int) %>%
-  rowwise() %>%
-  mutate(temp = ((detection_time + specific_vaccine_start + time_to_coverage_spec) - (detection_time + bpsv_start + time_to_coverage_bpsv))) %>%
-  mutate(NPI_scenario = case_when(NPI_int == 1 ~ "LockdownBPSVFinish_minMandateSpecFinish_fullRelease",
-                                  NPI_int == 2 ~ "LockdownBPSVFinish_fullRelease",
-                                  NPI_int == 3 ~ "LockdownSpecFinish_fullRelease",
-                                  NPI_int == 4 ~ "minMandateBPSVFinish_fullRelease",
-                                  NPI_int == 5 ~ "minMandateSpecFinish_fullRelease",
-                                  NPI_int == 6 ~ "LockdownBPSVFinish_gradualReleaseSpecFinish",  
-                                  NPI_int == 7 ~ "minMandateBPSVFinish_gradualReleaseSpecFinish",  
-                                  NPI_int == 8 ~ "Nothing")) %>%
-  mutate(Rt = case_when(NPI_int == 1 ~ list(c(R0, lockdown_Rt, R0 * (1 - minimal_mandate_reduction), R0)),
-                        NPI_int == 2 ~ list(c(R0, lockdown_Rt, R0)),
-                        NPI_int == 3 ~ list(c(R0, lockdown_Rt, R0)),
-                        NPI_int == 4 ~ list(c(R0, R0 * (1 - minimal_mandate_reduction), R0)),
-                        NPI_int == 5 ~ list(c(R0, R0 * (1 - minimal_mandate_reduction), R0)),
-                        NPI_int == 6 ~ list(c(R0, lockdown_Rt, seq(from = lockdown_Rt, to = R0, length.out = temp), R0)), 
-                        NPI_int == 7 ~ list(c(R0, R0 * (1 - minimal_mandate_reduction), seq(from = R0 * (1 - minimal_mandate_reduction), to = R0, length.out = temp), R0)),  
-                        NPI_int == 8 ~ list(R0))) %>%
-  mutate(tt_Rt = case_when(NPI_int == 1 ~ list(c(0, detection_time, detection_time + bpsv_start + time_to_coverage_bpsv, detection_time + specific_vaccine_start + time_to_coverage_spec)),
-                           NPI_int == 2 ~ list(c(0, detection_time, detection_time + bpsv_start + time_to_coverage_bpsv)),
-                           NPI_int == 3 ~ list(c(0, detection_time, detection_time + specific_vaccine_start + time_to_coverage_spec)),
-                           NPI_int == 4 ~ list(c(0, detection_time, detection_time + bpsv_start + time_to_coverage_bpsv)),
-                           NPI_int == 5 ~ list(c(0, detection_time, detection_time + specific_vaccine_start + time_to_coverage_spec)),
-                           NPI_int == 6 ~ list(c(0, detection_time, detection_time + bpsv_start + time_to_coverage_bpsv, seq(from = detection_time + bpsv_start + time_to_coverage_bpsv, to = detection_time + specific_vaccine_start + time_to_coverage_spec - 1))),
-                           NPI_int == 7 ~ list(c(0, detection_time, detection_time + bpsv_start + time_to_coverage_bpsv, seq(from = detection_time + bpsv_start + time_to_coverage_bpsv, to = detection_time + specific_vaccine_start + time_to_coverage_spec - 1))),  
-                           NPI_int == 8 ~ list(0))) %>%
-  select(-time_to_coverage_bpsv, -time_to_coverage_spec, -temp)
-
+# Identifying varying NPI-relevant parameters and linking NPI scenarios df and parameters dfs together by these variables
+all_varying <- names(which(apply(baseline_scenarios, 2, function(x) {
+  length(unique(x))
+}) > 1))
+NPI_relevant_varying <- all_varying[all_varying %in% c("R0", "detection_time", "bpsv_start", "specific_vaccine_start", 
+                                                       "coverage", "vaccination_rate", "min_age_group_index_priority", "NPI_int")]
 scenarios <- baseline_scenarios %>%
-  left_join(NPIs, by = c("detection_time", "specific_vaccine_start", "R0", "NPI_int"))
+  left_join(NPIs, by = NPI_relevant_varying)
 scenarios$index <- 1:nrow(scenarios)
 
 ## Running 
 tic()
-plan(multisession, workers = 55) # multicore does nothing on windows as multicore isn't supported
+plan(multisession, workers = 6) # multicore does nothing on windows as multicore isn't supported
 system.time({out <- future_pmap(scenarios, run_sars_x, .progress = TRUE, .options = furrr_options(seed = 123))})
 toc()
-#271 seconds to run 11664 simulations with 55 cores - effectively 0.023 seconds per iteration 
-
-saveRDS(out, "outputs/bpsv_efficacy_test_sens_raw_outputs.rds")
+saveRDS(out, "outputs/test_raw_outputs.rds")
 
 ### need to add NPI scenario in here
-cl <- makeCluster(55)
+cl <- makeCluster(6)
 clusterEvalQ(cl, {
   library(data.table)
 })
@@ -218,7 +128,9 @@ plot(joined$deaths_bpsv, joined$deaths_spec, xlim = c(0, 17500), ylim = c(0, 175
 lines(1:17500, 1:17500)
 plot(joined$efficacy_disease_bpsv, joined$deaths_saved)
 
-
+##### create some holder variables here for specific_vaccine_start, R0 etc that will
+##### enable you to filter both the results plots and the NPI scenario plots by the same 
+##### things and ensure what you present in the nice figure is underpinned by the same set of runs
 test_plot <- joined %>%
   filter(R0 == 2,
          Tg == 7,
@@ -236,7 +148,7 @@ test_plot2 <- joined %>%
                            ifelse(R0 == 1.5 & Tg == 14 & IFR == 1.5, "SARS-CoV-1-Like", "not_relevant"))) %>%
   filter(specific_vaccine_start %in% c(100, 200, 365),
          pathogen != "not_relevant", 
-         detection_time == 28) %>%
+         detection_time == 14) %>%
   group_by(efficacy_disease_bpsv, pathogen, NPI_int) %>%
   mutate(min_ribbon = min(deaths_saved),
          max_ribbon = max(deaths_saved))
@@ -264,20 +176,20 @@ ggplot() +
   #                 ymax = max_ribbon), alpha = 0.2)
 
 temp_plot <- ggplot() +
-  geom_segment(data = subset(test_plot2, pathogen == "SARS-CoV-2-Like" & specific_vaccine_start == 100 & efficacy_disease_bpsv == 0.75),
+  geom_segment(data = subset(test_plot2, pathogen == "SARS-CoV-2-Like" & specific_vaccine_start == 100),
                aes(x = composite_NPI_spec, xend = composite_NPI_spec, y = deaths_spec, yend = deaths_bpsv + 75,
                    group = factor(NPI_int)),
                arrow = arrow(length = unit(0.02, "npc"), type = "closed")) +
   geom_point(data = subset(test_plot2, pathogen == "SARS-CoV-2-Like" & specific_vaccine_start == 100), 
              aes(x = composite_NPI_spec, y = deaths_spec, fill = factor(NPI_int)), shape = 4, colour = "black", size = 2, pch = 21) +
-  geom_point(data = subset(test_plot2, pathogen == "SARS-CoV-2-Like" & specific_vaccine_start == 100 & efficacy_disease_bpsv == 0.75), 
+  geom_point(data = subset(test_plot2, pathogen == "SARS-CoV-2-Like" & specific_vaccine_start == 100), 
              aes(x = composite_NPI_spec, y = deaths_bpsv, fill = factor(NPI_int)), colour = "black", size = 4, pch = 21) +
   theme_bw() +
   labs(x = "NPI Days (Composite Duration+Stringency", 
        y = "Disease Deaths") +
   guides(fill = guide_legend(title = "Scenario"))
 x <- ggplot() +
-  geom_bar(data = subset(test_plot2, pathogen == "SARS-CoV-2-Like" & specific_vaccine_start == 100 & efficacy_disease_bpsv == 0.75), 
+  geom_bar(data = subset(test_plot2, pathogen == "SARS-CoV-2-Like" & specific_vaccine_start == 200), 
            aes(x = factor(NPI_int), y = deaths_saved, fill = factor(NPI_int)), stat = "identity") +
   labs(x = "", y = "Deaths Averted") +
   theme_bw() +
@@ -289,7 +201,6 @@ y <- temp_plot +
     ggplotGrob(x), 
     xmin = 50, xmax = 90, ymin = 3700, ymax = 5000)
 cowplot::plot_grid(b, y)
-
 
 ## Plotting out the NPI scenarios
 temp_R0 <- R0[2]
