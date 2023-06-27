@@ -1,14 +1,118 @@
-## Notes - talk to Azra about how to adjust the IFR.
-# Checks and Changes:
-## Consider changing summary metrics to accommodate not finishing with same R0
-## Be wary of when runtime is shorter than some of the numbers automatically spat out when creating tt_Rt 
-
-
 ## Generate standardised population size from raw demography
 generate_standard_pop <- function(country = "Argentina", population_size = 1e6) {
   raw_pop <- squire::get_population(country = country)$n                   
   standard_pop <- round(raw_pop * population_size / sum(raw_pop)) 
   return(standard_pop)
+}
+
+## Generate generation time 
+scale_generation_time <- function(target_Tg) {
+  current_Tg <- squire.page:::durs_booster$dur_IMild + squire.page:::durs_booster$dur_ICase
+  Tg_ratio <- target_Tg / current_Tg
+  TgVary_dur_IMild <- Tg_ratio * squire.page:::durs_booster$dur_IMild
+  TgVary_dur_ICase <- Tg_ratio * squire.page:::durs_booster$dur_ICase
+  return(list(dur_IMild = TgVary_dur_IMild, dur_ICase = TgVary_dur_ICase))
+}
+
+## Scale IFR (needs checking/changing)
+scale_IFR <- function(country, population_size, target_IFR) {
+  
+  ## Get mixing matrix for country and use to calculate weighting for infections/deaths
+  standard_pop <- generate_standard_pop(country = country, population_size = population_size)
+  mm <- squire::get_mixing_matrix(country = country)    
+  contact_rates <- apply(mm, 1, sum)
+  contact_rates <- c(contact_rates, "80+" = unname(contact_rates[16]))
+  pop_contact_weighting <- standard_pop * contact_rates
+  
+  ## Calculate approx IFR based on demography 
+  non_severe_deaths <- nimue:::probs$prob_hosp * (1 - nimue:::probs$prob_severe) * nimue:::probs$prob_non_severe_death_treatment
+  severe_deaths <- nimue:::probs$prob_hosp * nimue:::probs$prob_severe * nimue:::probs$prob_severe_death_treatment
+  raw_IFR <- 100 * sum(((non_severe_deaths + severe_deaths) * pop_contact_weighting/sum(pop_contact_weighting))) 
+  IFR_scaling_factor <- target_IFR / raw_IFR
+  prob_hosp <- IFR_scaling_factor * nimue:::probs$prob_hosp
+  return(prob_hosp)
+}
+
+## Generate vaccination milestone timings based on parameter combinations
+vaccine_milestone_timings <- function(country, 
+                                      population_size, 
+                                      detection_time, 
+                                      bpsv_start, 
+                                      specific_vaccine_start,
+                                      vaccination_rate,
+                                      coverage,
+                                      min_age_group_index_priority) {
+  
+  # Calculating time to coverage from parameter inputs
+  standard_pop <- generate_standard_pop(country = country, population_size = population_size)
+  daily_doses <- vaccination_rate * population_size / 7    # rate of vaccination with primary series
+  priority_age_groups <- min_age_group_index_priority:17            
+  elderly_pop_to_vaccinate <- sum(standard_pop[priority_age_groups]) * coverage # 60+s receive primary (BNPCV) and booster (diseaseX-specific); under 60s receive just primary (diseaseX-specific)
+  time_to_coverage_bpsv <- ceiling(elderly_pop_to_vaccinate/daily_doses) + 1
+  time_to_coverage_spec <- time_to_coverage_bpsv
+  
+  # Returning dataframe of parameters and key vaccination milestone timings
+  temp <- data.frame(country = country,
+                     population_size = population_size,
+                     detection_time = detection_time,
+                     bpsv_start = bpsv_start,
+                     specific_vaccine_start = specific_vaccine_start,
+                     vaccination_rate = vaccination_rate, 
+                     coverage = coverage,
+                     min_age_group_index_priority = min_age_group_index_priority,
+                     time_to_coverage_bpsv = time_to_coverage_bpsv,
+                     time_to_coverage_spec = time_to_coverage_spec)
+  return(temp)
+}
+
+
+## Generates Rt and tt_Rt vectors for - note, this could be replaced with just making a full vector where every timepont has
+##                          an associated Rt (instead of just delineating periods as we do currently when dealing with instantaneous changes)
+generate_Rt_scenario <- function(Rt, tt_Rt, change_type) {
+  
+  ## Checking for appropriate Rt change types
+  if (any(!(change_type %in% c("gradual", "instant")))) {
+    stop("runtime variable can only take the values 'gradual' or 'instant'")
+  }
+  
+  ## Checking whether Rt actually changes or not 
+  if (length(Rt) == 1) {
+    Rt <- Rt
+    tt_Rt <- 0
+    return(list(Rt = Rt, tt_Rt = 0))
+  }
+  
+  ## Checking lengths of different model inputs 
+  if (length(change_type) != (length(Rt) - 1)) {
+    stop("length of change_type must be 1 less than length of Rt vector")
+  }
+  if (length(change_type) != (length(tt_Rt) - 1)) {
+    stop("length of change_type must be 1 less than length of tt_Rt vector")
+  }
+  if (length(Rt) != length(tt_Rt)) {
+    stop("length of Rt vector must be same length as tt_Rt vector")
+  }
+  
+  ## Generating Rt and tt_Rt vectors
+  temp_Rt <- Rt[1]
+  temp_tt_Rt <- tt_Rt[1]
+  Rt_counter <- 1
+  tt_Rt_counter <- 1
+  for (i in 1:length(change_type)) {
+    if (change_type[i] == "instant") {
+      Rt_counter <- Rt_counter + 1
+      tt_Rt_counter <- tt_Rt_counter + 1
+      temp_Rt <- c(temp_Rt, Rt[Rt_counter])
+      temp_tt_Rt <- c(temp_tt_Rt, tt_Rt[tt_Rt_counter])
+    } else {
+      length_output <- length(tt_Rt[tt_Rt_counter]:tt_Rt[tt_Rt_counter + 1])
+      temp_Rt <- c(temp_Rt, seq(from = Rt[Rt_counter], to = Rt[Rt_counter + 1], length.out = length_output)[-1])
+      temp_tt_Rt <- c(temp_tt_Rt, (tt_Rt[tt_Rt_counter] + 1):(tt_Rt[tt_Rt_counter + 1]))
+      Rt_counter <- Rt_counter + 1
+      tt_Rt_counter <- tt_Rt_counter + 1  
+    }
+  }
+  return(list(Rt = temp_Rt, tt_Rt = temp_tt_Rt))
 }
 
 ## Generate default NPI scenarios based on model arguments (vaccination rate, detection time, vaccination start times etc)
@@ -23,49 +127,32 @@ generate_standard_pop <- function(country = "Argentina", population_size = 1e6) 
 ### 9 = No NPIs
 default_NPI_scenarios <- function(lockdown_Rt = 0.9,
                                   minimal_mandate_reduction = 0.25,
-                                  scenarios) {
+                                  scenarios) { 
   
-  # Unpacking Model Arguments
-  country <- unique(scenarios$country)
-  population_size <- unique(scenarios$population_size)
-  detection_time <- unique(scenarios$detection_time)
-  bpsv_start <- unique(scenarios$bpsv_start)
-  specific_vaccine_start <- unique(scenarios$specific_vaccine_start)
-  vaccination_rate <- unique(scenarios$vaccination_rate)
-  
-  # Creating Inputs from Model Arguments
-  standard_pop <- generate_standard_pop(country = country, population_size = unique(population_size))
-  daily_doses <- unique(scenarios$vaccination_rate) * unique(scenarios$population_size) / 7    # rate of vaccination with primary series
-  priority_age_groups <- unique(scenarios$min_age_group_index_priority):17            
-  elderly_pop_to_vaccinate <- sum(standard_pop[priority_age_groups]) * coverage # 60+s receive primary (BNPCV) and booster (diseaseX-specific); under 60s receive just primary (diseaseX-specific)
-  time_to_coverage_bpsv <- ceiling(elderly_pop_to_vaccinate/daily_doses) + 1
-  time_to_coverage_spec <- time_to_coverage_bpsv
-  
+  # Unpack the unique parameter combinations in the scenarios dataframe and calculate vaccination milestone timings
+  timings <- expand_grid(country =  unique(scenarios$country),
+                         population_size = unique(scenarios$population_size), 
+                         detection_time = unique(scenarios$detection_time),
+                         bpsv_start = unique(scenarios$bpsv_start), 
+                         specific_vaccine_start = unique(scenarios$specific_vaccine_start),
+                         vaccination_rate = unique(scenarios$vaccination_rate),
+                         coverage = unique(scenarios$coverage),
+                         min_age_group_index_priority = unique(scenarios$min_age_group_index_priority))
+  vacc_timings <- pmap(timings, vaccine_milestone_timings)
+  vacc_timings <- rbindlist(vacc_timings)
+
   # Checking specific vaccinate starts after bpsv vaccination is completed
-  time_diff <- (bpsv_start + time_to_coverage_bpsv) - specific_vaccine_start
+  time_diff <- (vacc_timings$bpsv_start + vacc_timings$time_to_coverage_bpsv) - vacc_timings$specific_vaccine_start
   if (sum(time_diff >= 0) > 0) {
     stop("Specific Vaccine start time happens before coverage with BPSV vaccine is finished. Change this.")
-  }
+  }  
   
   # Generating NPI Scenarios
-  NPIs <- expand_grid(detection_time = detection_time,
-                      bpsv_start = bpsv_start, 
-                      specific_vaccine_start = specific_vaccine_start,
-                      time_to_coverage_bpsv = time_to_coverage_bpsv,
-                      time_to_coverage_spec = time_to_coverage_spec,
-                      R0 = R0,
-                      NPI_int = NPI_int) %>%
+  NPIs <- expand_grid(vacc_timings, 
+                      R0 = unique(scenarios$R0),
+                      NPI_int = 1:9) %>%
     rowwise() %>%
-    mutate(temp = ((detection_time + specific_vaccine_start + time_to_coverage_spec) - (detection_time + bpsv_start + time_to_coverage_bpsv))) %>%
-    mutate(NPI_scenario = case_when(NPI_int == 1 ~ "LockdownBPSVFinish_minMandateSpecFinish_fullRelease",
-                                    NPI_int == 2 ~ "LockdownBPSVFinish_fullRelease",
-                                    NPI_int == 3 ~ "LockdownSpecFinish_fullRelease",
-                                    NPI_int == 4 ~ "minMandateBPSVFinish_fullRelease",
-                                    NPI_int == 5 ~ "minMandateSpecFinish_fullRelease",
-                                    NPI_int == 6 ~ "LockdownBPSVFinish_gradualReleaseSpecFinish",  
-                                    NPI_int == 7 ~ "minMandateBPSVFinish_gradualReleaseSpecFinish", 
-                                    NPI_int == 8 ~ "LockdownBPSVFinish_minMandategradualReleaseSpecFinish",  
-                                    NPI_int == 9 ~ "Nothing")) %>%
+    mutate(temp = ((specific_vaccine_start + time_to_coverage_spec) - (bpsv_start + time_to_coverage_bpsv))) %>%
     mutate(Rt = case_when(NPI_int == 1 ~ list(c(R0, lockdown_Rt, R0 * (1 - minimal_mandate_reduction), R0)),
                           NPI_int == 2 ~ list(c(R0, lockdown_Rt, R0)),
                           NPI_int == 3 ~ list(c(R0, lockdown_Rt, R0)),
@@ -84,20 +171,21 @@ default_NPI_scenarios <- function(lockdown_Rt = 0.9,
                              NPI_int == 7 ~ list(c(0, detection_time, detection_time + bpsv_start + time_to_coverage_bpsv, seq(from = detection_time + bpsv_start + time_to_coverage_bpsv, to = detection_time + specific_vaccine_start + time_to_coverage_spec - 1))),  
                              NPI_int == 8 ~ list(c(0, detection_time, detection_time + bpsv_start + time_to_coverage_bpsv, seq(from = detection_time + bpsv_start + time_to_coverage_bpsv, to = detection_time + specific_vaccine_start + time_to_coverage_spec - 1))),
                              NPI_int == 9 ~ list(0))) %>%
-    select(-time_to_coverage_bpsv, -time_to_coverage_spec, -temp)
-  
+    ### check with the lines above whether it's appropriate to have the "-1" at the end for NPIs 6, 7, 8
+    select(-temp)
+
   return(NPIs)
-  
 }
+
 
 # Generate combinations of scenarios
 create_scenarios <- function(population_size = 1e6,
                              country = "Argentina",
                              hosp_bed_capacity = 1e6,                                         
                              ICU_bed_capacity = 1e6,
-                             R0 = 3, 
+                             R0 = c(1.5, 2, 3), 
                              Tg = 7,
-                             IFR = 1,
+                             IFR = c(0.5, 1.5),
                              vaccine_scenario = c("specific_only", "both_vaccines"),
                              detection_time = 14, 
                              bpsv_start = 14,
@@ -115,13 +203,10 @@ create_scenarios <- function(population_size = 1e6,
                              min_age_group_index_priority = 13,
                              min_age_group_index_non_priority = 4,
                              runtime = 730,
-                             seeding_cases = 2,
-                             number_NPI_scenarios = NULL) {
+                             seeding_cases = 2) {
   
   dur_V_temp <- dur_V
-  if(is.null(number_NPI_scenarios)) {
-    stop("Number_NPIs hasn't been set. Specify the number of NPI scenarios per parameter combination you eventually want to run")
-  }
+
   baseline_scenarios <- expand_grid(population_size = population_size,
                                     country = country,
                                     hosp_bed_capacity = hosp_bed_capacity,                                         
@@ -146,14 +231,14 @@ create_scenarios <- function(population_size = 1e6,
                                     min_age_group_index_priority = min_age_group_index_priority,
                                     min_age_group_index_non_priority = min_age_group_index_non_priority,
                                     runtime = runtime,
-                                    seeding_cases = seeding_cases,
-                                    NPI_int = 1:number_NPI_scenarios) 
+                                    seeding_cases = seeding_cases) 
   baseline_scenarios <- baseline_scenarios %>%
     mutate(dur_V = list(rep(dur_V_temp, 4)))
   return(baseline_scenarios)
   
 }
 
+## Running the model and summarising outputs
 run_sars_x <- function(## Demographic Parameters
                        population_size = 1e6,
                        country = "Argentina",
@@ -190,22 +275,16 @@ run_sars_x <- function(## Demographic Parameters
                        runtime = 600,
                        seeding_cases = 5,
                        output = "summary",
-                       NPI_scenario = "not_specified",
                        NPI_int = 0,
                        index = 0,
                        ...) {
   
   set.seed(123)
   
-  ## Output Input Checking
+  ## Input Checking
   if (!output %in% c("summary", "full")) {
     stop("parameter output must be either 'summary' or 'full'")
   }
-  
-  ## Country-specific population estimate
-  standard_pop <- generate_standard_pop(country = country, population_size = population_size)
-  
-  ## Country-specific healthcare capacity
   if (is.null(hosp_bed_capacity)) {
     hosp_bed_capacity <- population_size
   }
@@ -213,24 +292,16 @@ run_sars_x <- function(## Demographic Parameters
     ICU_bed_capacity <- population_size
   }
   
-  ## Country-specific mixing matrix 
-  mm <- squire::get_mixing_matrix(country = country)    
+  ## Country-specific population estimate
+  standard_pop <- generate_standard_pop(country = country, population_size = population_size)
   
   ## Adapting Generation Time
-  current_Tg <- squire.page:::durs_booster$dur_IMild + squire.page:::durs_booster$dur_ICase
-  Tg_ratio <- Tg / current_Tg
-  TgVary_dur_IMild <- Tg_ratio * squire.page:::durs_booster$dur_IMild
-  TgVary_dur_ICase <- Tg_ratio * squire.page:::durs_booster$dur_ICase
-  
-  ## Adjusting IFR (NEEDS CHANGING AND CHECKING)
-  contact_rates <- apply(mm, 1, sum)
-  contact_rates <- c(contact_rates, "80+" = unname(contact_rates[16]))
-  pop_contact_weighting <- standard_pop * contact_rates
-  non_severe_deaths <- nimue:::probs$prob_hosp * (1 - nimue:::probs$prob_severe) * nimue:::probs$prob_non_severe_death_treatment
-  severe_deaths <- nimue:::probs$prob_hosp * nimue:::probs$prob_severe * nimue:::probs$prob_severe_death_treatment
-  raw_IFR <- 100 * sum(((non_severe_deaths + severe_deaths) * pop_contact_weighting/sum(pop_contact_weighting))) 
-  IFR_scaling_factor <- IFR / raw_IFR
-  prob_hosp <- IFR_scaling_factor * nimue:::probs$prob_hosp
+  Tg <- scale_generation_time(target_Tg = Tg)
+  TgVary_dur_IMild <- Tg$dur_IMild
+  TgVary_dur_ICase <- Tg$dur_ICase
+    
+  ## Adjusting IFR
+  prob_hosp <- scale_IFR(country = country, population_size = population_size, target_IFR = IFR)
   if (sum(prob_hosp > 1) > 0) {
     stop("IFR Scaling Factor too high - results in prob_hosp > 1 for at least one age-group")
   }
@@ -333,6 +404,7 @@ run_sars_x <- function(## Demographic Parameters
   }
   
   ## Running the Model 
+  mm <- squire::get_mixing_matrix(country = country)    
   mod_run <- run_booster(time_period = runtime,
                          population = standard_pop,                                                 
                          contact_matrix_set = mm,                                                   
@@ -340,7 +412,9 @@ run_sars_x <- function(## Demographic Parameters
                          tt_R0 = tt_Rt, 
                          hosp_bed_capacity = hosp_bed_capacity,                                     
                          ICU_bed_capacity = ICU_bed_capacity,                                       
-                         prob_hosp = prob_hosp,                                                     
+                         prob_hosp = prob_hosp,
+                         dur_IMild = TgVary_dur_IMild,
+                         dur_ICase = TgVary_dur_ICase,
                          dur_R = dur_R,                                                        
                          seeding_cases = seeding_cases,
                          vaccine_coverage_mat = vaccine_coverage_mat,                               
@@ -370,7 +444,7 @@ run_sars_x <- function(## Demographic Parameters
                              tt_primary_doses = tt_primary_doses, tt_booster_doses = tt_booster_doses,
                              vaccine_booster_follow_up_coverage = vaccine_booster_follow_up_coverage, 
                              vaccine_booster_initial_coverage = vaccine_booster_initial_coverage,
-                             NPI_scenario = NPI_scenario, NPI_int = NPI_int),
+                             NPI_int = NPI_int),
       summary_metrics = summary_metrics)) 
   } else {
     return(list(
@@ -384,7 +458,7 @@ run_sars_x <- function(## Demographic Parameters
                              tt_primary_doses = tt_primary_doses, tt_booster_doses = tt_booster_doses,
                              vaccine_booster_follow_up_coverage = vaccine_booster_follow_up_coverage, 
                              vaccine_booster_initial_coverage = vaccine_booster_initial_coverage,
-                             NPI_scenario = NPI_scenario, NPI_int = NPI_int),
+                             NPI_int = NPI_int),
       summary_metrics = summary_metrics)) 
   }
 }
@@ -392,6 +466,8 @@ run_sars_x <- function(## Demographic Parameters
 ### need to come back to this and figure out how this should work when:
 #### 1) runtime is < the final tt_Rt value
 #### 2) you don't finish up with R0 at the end
+## Consider changing summary metrics to accommodate not finishing with same R0
+## Be wary of when runtime is shorter than some of the numbers automatically spat out when creating tt_Rt 
 calc_summary_metrics <- function(model_output) { # summary metrics = total deaths, time under any NPIs, composite NPI function, 
   
   ## Calculating Deaths
@@ -426,37 +502,92 @@ calc_summary_metrics <- function(model_output) { # summary metrics = total death
               composite_NPI = composite))
 }
 
-# y <- run_sars_x(vaccine_scenario = "both_vaccines",
-#                 IFR = 1,
-#                 seeding_cases = 1,
-#                 Rt = c(2.5, 1.1, 2.5),
-#                 tt_Rt = c(0, 10, 100),
-#                 specific_vaccine_start = 250,
-#                 dur_vacc_delay = 0.5)
-# y$summary_metrics
-# x <- y$model_output
-# calc_summary_metrics(x)
-# # 
-# check <- nimue::format(x, compartments = c("vaccinated_first_dose", "vaccinated_second_dose", "vaccinated_booster_dose"), 
-#                        reduce_age = FALSE) %>%
-#   filter(t > 1,
-#          compartment == "vaccinated_first_dose" | compartment == "vaccinated_second_dose" | compartment == "vaccinated_booster_dose") %>%
-#   group_by(replicate, t, age_group) 
-# 
-# pop_df <- data.frame(age_group = sort(unique(check$age_group)),
-#                      population = y$model_arguments$standard_pop)
-# 
-# check2 <- check %>%
-#   left_join(pop_df, by = "age_group") %>%
-#   mutate(prop = value / population) 
-# ggplot() +
-#   geom_line(data = check2, aes(x = t, y = prop, col = compartment)) +
-#   facet_wrap(~age_group) +
-#   lims(y = c(0, 1), x = c(0, 600)) 
-# 
-# 
-# ggplot() +
-#   geom_line(data = check2[check2$age_group == "65-70", ], aes(x = t, y = prop, col = compartment)) +
-#   facet_wrap(~age_group) +
-#   geom_vline(aes(xintercept = y$model_arguments$tt_primary_doses)) +
-#   lims(y = c(0, 1), x = c(0, 600)) 
+
+# generate_Rt_scenario(Rt = c(2), tt_Rt = c(0), change_type = c("instant"))
+# generate_Rt_scenario(Rt = c(2, 1), tt_Rt = c(0, 10), change_type = c("gradual"))
+# generate_Rt_scenario(Rt = c(2, 1), tt_Rt = c(0, 10), change_type = c("instant"))
+# generate_Rt_scenario(Rt = c(2, 1, 1.5), tt_Rt = c(0, 10, 20), change_type = c("gradual", "instant"))
+# generate_Rt_scenario(Rt = c(2, 1, 1.5), tt_Rt = c(0, 10, 20), change_type = c("instant", "gradual"))
+# generate_Rt_scenario(Rt = c(2, 1, 1.5, 1.2), tt_Rt = c(0, 10, 20, 25), change_type = c("instant", "gradual", "instant"))
+# generate_Rt_scenario(Rt = c(2, 1, 1.5, 1.2), tt_Rt = c(0, 10, 20, 25), change_type = c("gradual", "instant", "gradual"))
+# generate_Rt_scenario(Rt = c(2, 1, 1.5, 1.2), tt_Rt = c(0, 10, 20, 25), change_type = c("gradual", "gradual", "instant"))
+# generate_Rt_scenario(Rt = c(2, 1, 1.5, 1.2), tt_Rt = c(0, 10, 20, 25), change_type = c("instant", "instant", "gradual"))
+# default_NPI_scenarios <- function(lockdown_Rt = 0.9,
+#                                   minimal_mandate_reduction = 0.25,
+#                                   scenarios) {
+#   
+#   # Unpacking Model Arguments
+#   country <- unique(scenarios$country)
+#   population_size <- unique(scenarios$population_size)
+#   detection_time <- unique(scenarios$detection_time)
+#   bpsv_start <- unique(scenarios$bpsv_start)
+#   specific_vaccine_start <- unique(scenarios$specific_vaccine_start)
+#   vaccination_rate <- unique(scenarios$vaccination_rate)
+#   coverage <- unique(scenarios$coverage)
+#   R0 <- unique(scenarios$R0)
+#   min_age_group_index_priority <- unique(scenarios$min_age_group_index_priority)
+#   
+#   # Creating Inputs from Model Arguments
+#   ## change $ refs in variables that have been unpacked
+#   ## Note that this'll probably break if min_age_group_index_priority is varied - come back to change this
+#   standard_pop <- generate_standard_pop(country = country, population_size = unique(population_size))
+#   daily_doses <- unique(scenarios$vaccination_rate) * unique(scenarios$population_size) / 7    # rate of vaccination with primary series
+#   priority_age_groups <- unique(scenarios$min_age_group_index_priority):17            
+#   elderly_pop_to_vaccinate <- sum(standard_pop[priority_age_groups]) * coverage # 60+s receive primary (BNPCV) and booster (diseaseX-specific); under 60s receive just primary (diseaseX-specific)
+#   time_to_coverage_bpsv <- ceiling(elderly_pop_to_vaccinate/daily_doses) + 1
+#   time_to_coverage_spec <- time_to_coverage_bpsv
+#   
+#   # Checking specific vaccinate starts after bpsv vaccination is completed
+#   time_diff <- (bpsv_start + time_to_coverage_bpsv) - specific_vaccine_start
+#   if (sum(time_diff >= 0) > 0) {
+#     stop("Specific Vaccine start time happens before coverage with BPSV vaccine is finished. Change this.")
+#   }
+#   
+#   # Generating NPI Scenarios
+#   NPIs <- expand_grid(country = country,
+#                       population_size = population_size, 
+#                       coverage = coverage, 
+#                       vaccination_rate = vaccination_rate,
+#                       min_age_group_index_priority = min_age_group_index_priority,
+#                       detection_time = detection_time,
+#                       bpsv_start = bpsv_start, 
+#                       specific_vaccine_start = specific_vaccine_start,
+#                       time_to_coverage_bpsv = time_to_coverage_bpsv,
+#                       time_to_coverage_spec = time_to_coverage_spec,
+#                       R0 = R0,
+#                       NPI_int = 1:9) %>%
+#     rowwise() %>%
+#     mutate(temp = ((detection_time + specific_vaccine_start + time_to_coverage_spec) - (detection_time + bpsv_start + time_to_coverage_bpsv))) %>%
+#     mutate(NPI_scenario = case_when(NPI_int == 1 ~ "LockdownBPSVFinish_minMandateSpecFinish_fullRelease",
+#                                     NPI_int == 2 ~ "LockdownBPSVFinish_fullRelease",
+#                                     NPI_int == 3 ~ "LockdownSpecFinish_fullRelease",
+#                                     NPI_int == 4 ~ "minMandateBPSVFinish_fullRelease",
+#                                     NPI_int == 5 ~ "minMandateSpecFinish_fullRelease",
+#                                     NPI_int == 6 ~ "LockdownBPSVFinish_gradualReleaseSpecFinish",  
+#                                     NPI_int == 7 ~ "minMandateBPSVFinish_gradualReleaseSpecFinish", 
+#                                     NPI_int == 8 ~ "LockdownBPSVFinish_minMandategradualReleaseSpecFinish",  
+#                                     NPI_int == 9 ~ "Nothing")) %>%
+#     mutate(Rt = case_when(NPI_int == 1 ~ list(c(R0, lockdown_Rt, R0 * (1 - minimal_mandate_reduction), R0)),
+#                           NPI_int == 2 ~ list(c(R0, lockdown_Rt, R0)),
+#                           NPI_int == 3 ~ list(c(R0, lockdown_Rt, R0)),
+#                           NPI_int == 4 ~ list(c(R0, R0 * (1 - minimal_mandate_reduction), R0)),
+#                           NPI_int == 5 ~ list(c(R0, R0 * (1 - minimal_mandate_reduction), R0)),
+#                           NPI_int == 6 ~ list(c(R0, lockdown_Rt, seq(from = lockdown_Rt, to = R0, length.out = temp), R0)), 
+#                           NPI_int == 7 ~ list(c(R0, R0 * (1 - minimal_mandate_reduction), seq(from = R0 * (1 - minimal_mandate_reduction), to = R0, length.out = temp), R0)),  
+#                           NPI_int == 8 ~ list(c(R0, lockdown_Rt, seq(from = R0 * (1 - minimal_mandate_reduction), to = R0, length.out = temp), R0)), 
+#                           NPI_int == 9 ~ list(R0))) %>%
+#     mutate(tt_Rt = case_when(NPI_int == 1 ~ list(c(0, detection_time, detection_time + bpsv_start + time_to_coverage_bpsv, detection_time + specific_vaccine_start + time_to_coverage_spec)),
+#                              NPI_int == 2 ~ list(c(0, detection_time, detection_time + bpsv_start + time_to_coverage_bpsv)),
+#                              NPI_int == 3 ~ list(c(0, detection_time, detection_time + specific_vaccine_start + time_to_coverage_spec)),
+#                              NPI_int == 4 ~ list(c(0, detection_time, detection_time + bpsv_start + time_to_coverage_bpsv)),
+#                              NPI_int == 5 ~ list(c(0, detection_time, detection_time + specific_vaccine_start + time_to_coverage_spec)),
+#                              NPI_int == 6 ~ list(c(0, detection_time, detection_time + bpsv_start + time_to_coverage_bpsv, seq(from = detection_time + bpsv_start + time_to_coverage_bpsv, to = detection_time + specific_vaccine_start + time_to_coverage_spec - 1))),
+#                              NPI_int == 7 ~ list(c(0, detection_time, detection_time + bpsv_start + time_to_coverage_bpsv, seq(from = detection_time + bpsv_start + time_to_coverage_bpsv, to = detection_time + specific_vaccine_start + time_to_coverage_spec - 1))),  
+#                              NPI_int == 8 ~ list(c(0, detection_time, detection_time + bpsv_start + time_to_coverage_bpsv, seq(from = detection_time + bpsv_start + time_to_coverage_bpsv, to = detection_time + specific_vaccine_start + time_to_coverage_spec - 1))),
+#                              NPI_int == 9 ~ list(0))) %>%
+#     select(-temp)
+#   
+#   return(NPIs)
+#   
+# }
+

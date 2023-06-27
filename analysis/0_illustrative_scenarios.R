@@ -9,26 +9,13 @@ source(here::here("main.R"))
 source(here::here("functions/run_sars_x.R"))
 
 # Generate parameter combinations for model running (note Rt and tt_Rt has a placeholder)
-baseline_scenarios <- create_scenarios(#### Demographic Parameters
-                                       population_size = 1e6,
-                                       country = "Argentina",
-                                        
-                                       #### Healthcare Parameters
-                                       hosp_bed_capacity = 100000000,                                          
-                                       ICU_bed_capacity = 100000000, 
-                                       
-                                       #### Epidemiological Parameters
-                                       R0 = c(1.5, 2, 3),
-                                       Tg = 7,
-                                       IFR = c(0.5, 1.5),
-                                       number_NPI_scenarios = 9,
-                                       
-                                       ## Vaccine-Related Parameters
+baseline_scenarios <- create_scenarios(R0 = c(1.5, 3),                                # Basic reproduction number
+                                       IFR = c(0.5, 1.5),                             # IFR
                                        detection_time = c(14, 28),                    # detection time
                                        bpsv_start = 14,                               # BPSV distribution start (time after detection time)
-                                       specific_vaccine_start = c(100, 200, 365),     # specific vaccine distribution start (time after detection time)
+                                       specific_vaccine_start = c(100, 200),          # specific vaccine distribution start (time after detection time)
                                        efficacy_infection_bpsv = 0.35,                # vaccine efficacy against infection - BPSV
-                                       efficacy_disease_bpsv = 0.8,                   # vaccine efficacy against disease - BPSV
+                                       efficacy_disease_bpsv = seq(0.4, 0.9, 0.02),   # vaccine efficacy against disease - BPSV
                                        efficacy_infection_spec = 0.55,                # vaccine efficacy against infection - specific vaccine
                                        efficacy_disease_spec = 0.9,                   # vaccine efficacy against disease - specific vaccine
                                        dur_R = 365000,                                # duration of infection-induced immunity
@@ -40,17 +27,12 @@ baseline_scenarios <- create_scenarios(#### Demographic Parameters
                                        min_age_group_index_priority = 13,             # index of the youngest age group given priority w.r.t vaccines (13 = 60+)
                                        min_age_group_index_non_priority = 4)          # index of the youngest age group that *receives* vaccines (4 = 15+)
 
-## Generating NPI scenarios (i.e. Rt and tt_Rt for model parameter combinations)
+## Generating defuault NPI scenarios (i.e. Rt and tt_Rt for model parameter combinations) and joining to parameter combos
 NPIs <- default_NPI_scenarios(lockdown_Rt = 0.9, minimal_mandate_reduction = 0.25, scenarios = baseline_scenarios)
-
-# Identifying varying NPI-relevant parameters and linking NPI scenarios df and parameters dfs together by these variables
-all_varying <- names(which(apply(baseline_scenarios, 2, function(x) {
-  length(unique(x))
-}) > 1))
-NPI_relevant_varying <- all_varying[all_varying %in% c("R0", "detection_time", "bpsv_start", "specific_vaccine_start", 
-                                                       "coverage", "vaccination_rate", "min_age_group_index_priority", "NPI_int")]
 scenarios <- baseline_scenarios %>%
-  left_join(NPIs, by = NPI_relevant_varying)
+  full_join(NPIs, by = c("R0", "country", "population_size", "detection_time", "bpsv_start",
+                         "specific_vaccine_start", "vaccination_rate", "coverage", "min_age_group_index_priority"),
+            multiple = "all")
 scenarios$index <- 1:nrow(scenarios)
 
 ## Running 
@@ -60,11 +42,15 @@ system.time({out <- future_pmap(scenarios, run_sars_x, .progress = TRUE, .option
 toc()
 saveRDS(out, "outputs/test_raw_outputs.rds")
 
+## on laptop with 6 cores, running 7500 scenarios took ___ seconds (___ hours or ____ iterations per second)
+
 ### need to add NPI scenario in here
 cl <- makeCluster(6)
 clusterEvalQ(cl, {
   library(data.table)
 })
+
+
 tic()
 data <- parLapply(cl, out, function(x) {
   y <- data.frame(index = x$model_arguments$index, 
@@ -94,7 +80,8 @@ data <- parLapply(cl, out, function(x) {
                   min_age_group_index_non_priority = x$model_arguments$min_age_group_index_non_priority,
                   runtime = x$model_arguments$runtime,
                   seeding_cases = x$model_arguments$seeding_cases,
-                  NPI_scenario = x$model_arguments$NPI_scenario,
+                  # time_to_coverage_bpsv = x$model_arguments$time_to_coverage_bpsv,
+                  # time_to_coverage_spec = x$model_arguments$time_to_coverage_spec,
                   NPI_int = x$model_arguments$NPI_int) # newest runs this'll work fine but for current run should be NPI_scenario_int 
 })
 toc()
