@@ -43,12 +43,12 @@ bpsv_scenarios <- bpsv_scenarios %>%
 ## Running the model and summarising the output
 fresh_run <- TRUE
 if (fresh_run) {
-  plan(multisession, workers = 4) # multicore does nothing on windows as multicore isn't supported
-  system.time({out <- future_pmap(scenarios, run_sars_x, .progress = TRUE, .options = furrr_options(seed = 123))})
-  model_outputs <- format_multirun_output(output_list = out, parallel = TRUE, cores = 2)
-  saveRDS(model_outputs, "outputs/illustrative_runs.rds")
+  plan(multisession, workers = 60) # multicore does nothing on windows as multicore isn't supported
+  system.time({out <- future_pmap(bpsv_scenarios, run_sars_x, .progress = TRUE, .options = furrr_options(seed = 123))})
+  model_outputs <- format_multirun_output(output_list = out, parallel = TRUE, cores = 10)
+  saveRDS(model_outputs, "outputs/univariate_bpsv_efficacy.rds")
 } else {
-  model_outputs <- readRDS("outputs/illustrative_runs.rds")
+  model_outputs <- readRDS("outputs/univariate_bpsv_efficacy.rds")
 }
 
 ## Plotting the NPI Scenarios

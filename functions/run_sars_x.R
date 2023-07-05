@@ -558,13 +558,13 @@ format_multirun_output <- function(output_list, parallel = FALSE, cores = NA) {
   
   spec_vax <- combined_data %>%
     filter(vaccine_scenario == "specific_only") %>%
-    select(var, deaths, time_under_NPIs, composite_NPI) %>% 
+    select(all_of(var), deaths, time_under_NPIs, composite_NPI) %>% 
     rename(deaths_spec = deaths,
            time_under_NPIs_spec = time_under_NPIs,  ## think we can get rid of this as this isn't specific to both vs vaccine specific scenario
            composite_NPI_spec = composite_NPI)      ## think we can get rid of this as this isn't specific to both vs vaccine specific scenario
   
   joined <- both_vax %>%
-    left_join(spec_vax, by = var) %>% 
+    left_join(spec_vax, by = all_of(var)) %>% 
     mutate(bpsv_deaths_averted = deaths_spec - deaths_bpsv)
   
   return(joined)
