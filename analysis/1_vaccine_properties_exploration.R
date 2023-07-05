@@ -24,28 +24,70 @@ raw_bpsv_scenarios <- create_scenarios(R0 = c(2.25, 2.5, 2.75),                 
                                        min_age_group_index_priority = 13,             # index of the youngest age group given priority w.r.t vaccines (13 = 60+)
                                        min_age_group_index_non_priority = 4)          # index of the youngest age group that *receives* vaccines (4 = 15+)
 
+raw_delay_scenarios <- create_scenarios(R0 = c(2.25, 2.5, 2.75),                       # Basic reproduction number
+                                        IFR = c(0.75, 1, 1.25),                        # IFR
+                                        Tg = 7,                                        # Tg
+                                        detection_time = 14,                           # detection time
+                                        bpsv_start = 14,                               # BPSV distribution start (time after detection time)
+                                        specific_vaccine_start = 100,                  # specific vaccine distribution start (time after detection time)
+                                        efficacy_infection_bpsv = 0.35,                # vaccine efficacy against infection - BPSV
+                                        efficacy_disease_bpsv = 0.75,                  # vaccine efficacy against disease - BPSV
+                                        efficacy_infection_spec = 0.55,                # vaccine efficacy against infection - specific vaccine
+                                        efficacy_disease_spec = 0.9,                   # vaccine efficacy against disease - specific vaccine
+                                        dur_R = 365000,                                # duration of infection-induced immunity
+                                        dur_V = 365000,                                # duration of vaccine-induced immunity for both vaccines
+                                        second_dose_delay = 7,                         # controls how many days after "1st dose" people receive second dose; see here: https://github.com/mrc-ide/squire.page/blob/main/inst/odin/nimue_booster.R#L427-L430
+                                        dur_vacc_delay = 1:14,                         # mean duration from vaccination to protection
+                                        coverage = 0.8,                                # proportion of the population vaccinated
+                                        vaccination_rate = 0.035,                      # vaccination rate per week as percentage of population
+                                        min_age_group_index_priority = 13,             # index of the youngest age group given priority w.r.t vaccines (13 = 60+)
+                                        min_age_group_index_non_priority = 4)          # index of the youngest age group that *receives* vaccines (4 = 15+)
+
+raw_delay_bpsv_scenarios <- create_scenarios(R0 = c(2.25, 2.5, 2.75),                       # Basic reproduction number
+                                             IFR = c(0.75, 1, 1.25),                        # IFR
+                                             Tg = 7,                                        # Tg
+                                             detection_time = 14,                           # detection time
+                                             bpsv_start = 14,                               # BPSV distribution start (time after detection time)
+                                             specific_vaccine_start = 100,                  # specific vaccine distribution start (time after detection time)
+                                             efficacy_infection_bpsv = 0.35,                # vaccine efficacy against infection - BPSV
+                                             efficacy_disease_bpsv = seq(0.05, 1, 0.05),    # vaccine efficacy against disease - BPSV
+                                             efficacy_infection_spec = 0.55,                # vaccine efficacy against infection - specific vaccine
+                                             efficacy_disease_spec = 0.9,                   # vaccine efficacy against disease - specific vaccine
+                                             dur_R = 365000,                                # duration of infection-induced immunity
+                                             dur_V = 365000,                                # duration of vaccine-induced immunity for both vaccines
+                                             second_dose_delay = 7,                         # controls how many days after "1st dose" people receive second dose; see here: https://github.com/mrc-ide/squire.page/blob/main/inst/odin/nimue_booster.R#L427-L430
+                                             dur_vacc_delay = 1:14,                         # mean duration from vaccination to protection
+                                             coverage = 0.8,                                # proportion of the population vaccinated
+                                             vaccination_rate = 0.035,                      # vaccination rate per week as percentage of population
+                                             min_age_group_index_priority = 13,             # index of the youngest age group given priority w.r.t vaccines (13 = 60+)
+                                             min_age_group_index_non_priority = 4)          # index of the youngest age group that *receives* vaccines (4 = 15+)
+ 
+
 ## Generating defuault NPI scenarios (i.e. Rt and tt_Rt for model parameter combinations) and joining to parameter combos
 lockdown_Rt <- 0.9
 minimal_mandate_reduction <- 0.25
-NPIs <- default_NPI_scenarios(lockdown_Rt = lockdown_Rt, minimal_mandate_reduction = minimal_mandate_reduction, NPI_scenarios = c(2, 4, 6), scenarios = raw_bpsv_scenarios)
-bpsv_scenarios <- raw_bpsv_scenarios %>%
-  full_join(NPIs, by = c("R0", "country", "population_size", "detection_time", "bpsv_start",    # joining by all columns which influence NPI scenarios
-                         "specific_vaccine_start", "vaccination_rate", "coverage", "min_age_group_index_priority"),
-            multiple = "all")
 
-## Creating index for output
-vars_for_index <- c(variable_columns(bpsv_scenarios), "NPI_int")
-bpsv_scenarios <- bpsv_scenarios %>%
-  group_by(vaccine_scenario) %>%
-  arrange_at(vars_for_index) %>%
-  mutate(scenario_index = 1:n())
+NPIs_bpsv_eff <- default_NPI_scenarios(lockdown_Rt = lockdown_Rt, minimal_mandate_reduction = minimal_mandate_reduction, NPI_scenarios = c(2, 4, 6), scenarios = raw_bpsv_scenarios)
+bpsv_scenarios <- raw_bpsv_scenarios %>%
+  full_join(NPIs, by = c("R0", "country", "population_size", "detection_time", "bpsv_start",    # joining by all columns which influence NPI scenario timing
+                         "specific_vaccine_start", "vaccination_rate", "coverage", "min_age_group_index_priority"), multiple = "all")
+
+NPIs_delay <- default_NPI_scenarios(lockdown_Rt = lockdown_Rt, minimal_mandate_reduction = minimal_mandate_reduction, NPI_scenarios = c(2, 4, 6), scenarios = raw_delay_scenarios)
+delay_scenarios <- raw_delay_scenarios %>%
+  full_join(NPIs, by = c("R0", "country", "population_size", "detection_time", "bpsv_start",    # joining by all columns which influence NPI scenario timing
+                         "specific_vaccine_start", "vaccination_rate", "coverage", "min_age_group_index_priority"), multiple = "all")
+
+NPIs_bpsv_eff_delay <- default_NPI_scenarios(lockdown_Rt = lockdown_Rt, minimal_mandate_reduction = minimal_mandate_reduction, NPI_scenarios = c(2, 4, 6), scenarios = raw_delay_bpsv_scenarios)
+delay_bpsv_scenarios <- raw_delay_bpsv_scenarios %>%
+  full_join(NPIs, by = c("R0", "country", "population_size", "detection_time", "bpsv_start",    # joining by all columns which influence NPI scenario timing
+                         "specific_vaccine_start", "vaccination_rate", "coverage", "min_age_group_index_priority"), multiple = "all")
 
 ## Running the model and summarising the output
 fresh_run <- FALSE
 if (fresh_run) {
-  plan(multisession, workers = 50) # multicore does nothing on windows as multicore isn't supported
+  plan(multisession, workers = 5) # multicore does nothing on windows as multicore isn't supported
   system.time({out <- future_pmap(bpsv_scenarios, run_sars_x, .progress = TRUE, .options = furrr_options(seed = 123))})
-  model_outputs <- format_multirun_output(output_list = out, parallel = TRUE, cores = 50)
+  model_outputs <- format_multirun_output(output_list = out, parallel = TRUE, cores = 5)
   saveRDS(model_outputs, "outputs/univariate_bpsv_efficacy.rds")
 } else {
   model_outputs <- readRDS("outputs/univariate_bpsv_efficacy.rds")
@@ -60,20 +102,17 @@ bpsv_plotting <- model_outputs %>%
   summarise(min_deaths_averted = min(bpsv_deaths_averted),
             max_deaths_averted = max(bpsv_deaths_averted),
             central_deaths_averted = bpsv_deaths_averted[R0 == 2.5 & IFR == 1])
-colnames(bpsv_plotting)
-
 ggplot(bpsv_plotting) +
-  geom_line(aes(x = efficacy_disease_bpsv, y = central_deaths_averted, col = factor(NPI_int)), size = 1) +
-  geom_ribbon(aes(x = efficacy_disease_bpsv, ymin = min_deaths_averted, ymax = max_deaths_averted,
+  geom_line(aes(x = 100 * efficacy_disease_bpsv, y = central_deaths_averted, col = factor(NPI_int)), size = 1) +
+  geom_ribbon(aes(x = 100 * efficacy_disease_bpsv, ymin = min_deaths_averted, ymax = max_deaths_averted,
                   fill = factor(NPI_int)), alpha = 0.1) +
-  geom_line(aes(x = efficacy_disease_bpsv, y = min_deaths_averted, col = factor(NPI_int)), size = 0.1) +
-  geom_line(aes(x = efficacy_disease_bpsv, y = max_deaths_averted, col = factor(NPI_int)), size = 0.1) + 
+  geom_line(aes(x = 100 * efficacy_disease_bpsv, y = min_deaths_averted, col = factor(NPI_int)), size = 0.1) +
+  geom_line(aes(x = 100 * efficacy_disease_bpsv, y = max_deaths_averted, col = factor(NPI_int)), size = 0.1) + 
   scale_colour_manual(values = NPI_colours) +
-  scale_fill_manual(values = NPI_colours)
-
-ggplot(subset(model_outputs, IFR == 1 & NPI_int == 2), aes(x = efficacy_disease_bpsv, y = bpsv_deaths_averted,
-                          col = R0)) +
-  geom_point()
+  scale_fill_manual(values = NPI_colours) +
+  scale_x_continuous(breaks = c(0, 25, 50, 70, 100), labels = paste0(c(0, 25, 50, 70, 100), "%")) +
+  theme_bw() +
+  labs(x = "BPSV Disease Efficacy", y = "Deaths Averted By BPSV")
 
 
 
@@ -154,33 +193,3 @@ overall_deaths_plot <- absolute_deaths_plot +
     ggplotGrob(deaths_averted_plot), 
     xmin = inset_xmin, xmax = inset_xmax, ymin = inset_ymin, ymax = inset_ymax)
 cowplot::plot_grid(NPI_plot, overall_deaths_plot)
-
-
-# example_NPI <- subset(NPI_df, scenario == "Scenario 1")
-# example_NPI$next_time[length(example_NPI$next_time)] <- 150
-# a <- ggplot(example_NPI) +
-#   geom_segment(aes(x = tt_Rt - overplot_factor, xend = next_time + overplot_factor, y = Rt, yend = Rt), size = 2) +
-#   geom_segment(aes(x = next_time, xend = next_time, y = Rt, yend = next_value), size = 2) +
-#   geom_hline(aes(yintercept = 1)) +
-#   geom_hline(aes(yintercept = lockdown_Rt), linetype = "dashed") +
-#   geom_hline(aes(yintercept = temp_R0 * (1 - minimal_mandate_reduction)), linetype = "dashed") +
-#   geom_vline(aes(xintercept = temp_detection_time)) +
-#   geom_vline(aes(xintercept = temp_detection_time + bpsv_start + time_to_coverage_bpsv)) +
-#   geom_vline(aes(xintercept = temp_detection_time + temp_specific_vaccine_start + time_to_coverage_spec)) +
-#   theme_bw() +
-#   geom_segment(aes(x = temp_detection_time, y = temp_R0 + 1, xend = temp_detection_time, yend = temp_R0 + 0.7), arrow = arrow(length = unit(0.3, "cm"))) +
-#   annotate("text", x = temp_detection_time, y = temp_R0 + 1.2, label = "Detection") +
-#   geom_segment(aes(x = temp_detection_time + bpsv_start + time_to_coverage_bpsv, y = temp_R0 + 1, xend = temp_detection_time + bpsv_start + time_to_coverage_bpsv, yend = temp_R0 + 0.7), arrow = arrow(length = unit(0.3, "cm"))) +
-#   annotate("text", x = temp_detection_time + bpsv_start + time_to_coverage_bpsv, y = temp_R0 + 1.2, label = "BPSV Vacc.\nCompleted", hjust = 0.5) +
-#   geom_segment(aes(x = temp_detection_time + temp_specific_vaccine_start + time_to_coverage_spec, y = temp_R0 + 1, xend = temp_detection_time + temp_specific_vaccine_start + time_to_coverage_spec, yend = temp_R0 + 0.7), arrow = arrow(length = unit(0.3, "cm"))) +
-#   annotate("text", x = temp_detection_time + temp_specific_vaccine_start + time_to_coverage_spec, y = temp_R0 + 1.2, label = "Spec. Vacc.\nCompleted", hjust = 0.5) +
-#   geom_segment(aes(x = -20, y = temp_R0 * (1 - minimal_mandate_reduction), xend = -10, yend = temp_R0 * (1 - minimal_mandate_reduction)), arrow = arrow(length = unit(0.3, "cm"))) +
-#   annotate("text", x = -20, y = temp_R0 * (1 - minimal_mandate_reduction), label = "Min.\nMandate", hjust = 1) +
-#   geom_segment(aes(x = -20, y = lockdown_Rt, xend = -10, yend = 0.9), arrow = arrow(length = unit(0.3, "cm"))) +
-#   annotate("text", x = -20, y = lockdown_Rt, label = "Lockdown", hjust = 1) +
-#   geom_segment(aes(x = -20, y = temp_R0, xend = -10, yend = temp_R0), arrow = arrow(length = unit(0.3, "cm"))) +
-#   annotate("text", x = -20, y = temp_R0, label = "R0", hjust = 1) +
-#   theme(plot.margin = margin(2.5, 1, 2.5, 2.5, "cm")) +
-#   coord_cartesian(clip = 'off', xlim = c(0, 150), ylim = c(0.5, temp_R0 + 0.5)) +
-#   scale_y_continuous(position = "right") +
-#   labs(x = "Time (Days)")
