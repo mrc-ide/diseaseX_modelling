@@ -244,6 +244,12 @@ create_scenarios <- function(population_size = 1e6,
                                     seeding_cases = seeding_cases) 
   baseline_scenarios <- baseline_scenarios %>%
     mutate(dur_V = list(rep(dur_V_temp, 4)))
+  
+  varying <- variable_columns(baseline_scenarios) 
+  
+  baseline_scenarios <- baseline_scenarios %>%
+    mutate(varied = list(varying))
+  
   return(baseline_scenarios)
   
 }

@@ -82,15 +82,17 @@ delay_bpsv_scenarios <- raw_delay_bpsv_scenarios %>%
   full_join(NPIs, by = c("R0", "country", "population_size", "detection_time", "bpsv_start",    # joining by all columns which influence NPI scenario timing
                          "specific_vaccine_start", "vaccination_rate", "coverage", "min_age_group_index_priority"), multiple = "all")
 
+all_scenarios <- rbind(bpsv_scenarios, delay_scenarios, delay_bpsv_scenarios)
+
 ## Running the model and summarising the output
 fresh_run <- FALSE
 if (fresh_run) {
-  plan(multisession, workers = 5) # multicore does nothing on windows as multicore isn't supported
-  system.time({out <- future_pmap(bpsv_scenarios, run_sars_x, .progress = TRUE, .options = furrr_options(seed = 123))})
-  model_outputs <- format_multirun_output(output_list = out, parallel = TRUE, cores = 5)
-  saveRDS(model_outputs, "outputs/univariate_bpsv_efficacy.rds")
+  plan(multisession, workers = 60) # multicore does nothing on windows as multicore isn't supported
+  system.time({out <- future_pmap(all_scenarios, run_sars_x, .progress = TRUE, .options = furrr_options(seed = 123))})
+  model_outputs <- format_multirun_output(output_list = out, parallel = TRUE, cores = 60)
+  saveRDS(model_outputs, "outputs/vaccine_properties_exploration_scenarios.rds")
 } else {
-  model_outputs <- readRDS("outputs/univariate_bpsv_efficacy.rds")
+  model_outputs <- readRDS("outputs/vaccine_properties_exploration_scenarios.rds")
 }
 
 ## Plotting the output
