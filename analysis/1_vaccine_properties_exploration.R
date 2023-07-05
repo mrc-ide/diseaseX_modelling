@@ -43,9 +43,9 @@ bpsv_scenarios <- bpsv_scenarios %>%
 ## Running the model and summarising the output
 fresh_run <- FALSE
 if (fresh_run) {
-  plan(multisession, workers = 5) # multicore does nothing on windows as multicore isn't supported
+  plan(multisession, workers = 60) # multicore does nothing on windows as multicore isn't supported
   system.time({out <- future_pmap(bpsv_scenarios, run_sars_x, .progress = TRUE, .options = furrr_options(seed = 123))})
-  model_outputs <- format_multirun_output(output_list = out, parallel = TRUE, cores = 5)
+  model_outputs <- format_multirun_output(output_list = out, parallel = TRUE, cores = 50)
   saveRDS(model_outputs, "outputs/univariate_bpsv_efficacy.rds")
 } else {
   model_outputs <- readRDS("outputs/univariate_bpsv_efficacy.rds")
