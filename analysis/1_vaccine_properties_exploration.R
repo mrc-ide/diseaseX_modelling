@@ -5,12 +5,12 @@ source(here::here("main.R"))
 source(here::here("functions/run_sars_x.R"))
 
 # Generate parameter combinations for model running (note Rt and tt_Rt has a placeholder)
-raw_bpsv_scenarios <- create_scenarios(R0 = c(1.5, 2, 2.5),                           # Basic reproduction number
+raw_bpsv_scenarios <- create_scenarios(R0 = c(2, 2.5, 3),                           # Basic reproduction number
                                        IFR = c(0.75, 1, 1.25),                        # IFR
-                                       Tg = 5,                                        # Tg
+                                       Tg = 7,                                        # Tg
                                        detection_time = 14,                           # detection time
                                        bpsv_start = 14,                               # BPSV distribution start (time after detection time)
-                                       specific_vaccine_start = 200,                  # specific vaccine distribution start (time after detection time)
+                                       specific_vaccine_start = 100,                  # specific vaccine distribution start (time after detection time)
                                        efficacy_infection_bpsv = 0.35,                # vaccine efficacy against infection - BPSV
                                        efficacy_disease_bpsv = seq(0.01, 1, 0.02),    # vaccine efficacy against disease - BPSV
                                        efficacy_infection_spec = 0.55,                # vaccine efficacy against infection - specific vaccine
@@ -43,9 +43,9 @@ bpsv_scenarios <- bpsv_scenarios %>%
 ## Running the model and summarising the output
 fresh_run <- FALSE
 if (fresh_run) {
-  plan(multisession, workers = 60) # multicore does nothing on windows as multicore isn't supported
+  plan(multisession, workers = 5) # multicore does nothing on windows as multicore isn't supported
   system.time({out <- future_pmap(bpsv_scenarios, run_sars_x, .progress = TRUE, .options = furrr_options(seed = 123))})
-  model_outputs <- format_multirun_output(output_list = out, parallel = TRUE, cores = 50)
+  model_outputs <- format_multirun_output(output_list = out, parallel = TRUE, cores = 5)
   saveRDS(model_outputs, "outputs/univariate_bpsv_efficacy.rds")
 } else {
   model_outputs <- readRDS("outputs/univariate_bpsv_efficacy.rds")
@@ -60,7 +60,6 @@ NPI_colours <- colour_func[c(2, 4, 6)]
 
 colnames(model_outputs)
 bpsv_plotting <- model_outputs %>%
-  filter(Tg == 7) %>%
   group_by(efficacy_disease_bpsv, NPI_int) %>%
   summarise(min_deaths_averted = min(bpsv_deaths_averted),
             max_deaths_averted = max(bpsv_deaths_averted),
@@ -70,9 +69,17 @@ colnames(bpsv_plotting)
 ggplot(bpsv_plotting) +
   geom_line(aes(x = efficacy_disease_bpsv, y = central_deaths_averted, col = factor(NPI_int))) +
   geom_ribbon(aes(x = efficacy_disease_bpsv, ymin = min_deaths_averted, ymax = max_deaths_averted,
-                  fill = factor(NPI_int)), alpha = 0.25) +
+                  fill = factor(NPI_int)), alpha = 0.05) +
   scale_colour_manual(values = NPI_colours) +
   scale_fill_manual(values = NPI_colours)
+
+ggplot(subset(model_outputs, NPI_int %in% c(2, 4))) +
+  geom_line(aes(x = efficacy_disease_bpsv, y = bpsv_deaths_averted, 
+                col = interaction(factor(R0), factor(IFR), factor(NPI_int)))) #+
+  # scale_colour_manual(values = NPI_colours) +
+  # scale_fill_manual(values = NPI_colours)
+
+x <- subset(model_outputs, NPI_int %in% c(2, 4))
 
 
 
