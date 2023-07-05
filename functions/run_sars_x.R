@@ -293,6 +293,7 @@ run_sars_x <- function(## Demographic Parameters
                        output = "summary",
                        NPI_int = 0,
                        scenario_index = 0,
+                       varied = "",
                        ...) {
   
   set.seed(123)
@@ -512,7 +513,8 @@ format_multirun_output <- function(output_list, parallel = FALSE, cores = NA) {
                       min_age_group_index_non_priority = x$model_arguments$min_age_group_index_non_priority,
                       runtime = x$model_arguments$runtime,
                       seeding_cases = x$model_arguments$seeding_cases,
-                      NPI_int = x$model_arguments$NPI_int)})
+                      NPI_int = x$model_arguments$NPI_int,
+                      varied = x$model_arguments$varied)})
     combined_data <- rbindlist(data)
     
   } else {
@@ -548,7 +550,8 @@ format_multirun_output <- function(output_list, parallel = FALSE, cores = NA) {
                       min_age_group_index_non_priority = x$model_arguments$min_age_group_index_non_priority,
                       runtime = x$model_arguments$runtime,
                       seeding_cases = x$model_arguments$seeding_cases,
-                      NPI_int = x$model_arguments$NPI_int)})
+                      NPI_int = x$model_arguments$NPI_int,
+                      varied = x$model_arguments$varied)})
     stopCluster(cl) 
     combined_data <- rbindlist(data)
   }
