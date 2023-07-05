@@ -1,3 +1,13 @@
+## Identify number of columns with >1 unique values in a dataframe
+variable_columns <- function(df) {
+  result <- sapply(df, FUN = function(x) {
+    length(unique(na.omit(x))) > 1
+  })
+  columns <- names(which(result))
+  columns <- columns[!(columns %in% c("index", "vaccine_scenario", "deaths", "time_under_NPIs", "composite_NPI"))]
+  return(columns)
+}
+
 ## Generate standardised population size from raw demography
 generate_standard_pop <- function(country = "Argentina", population_size = 1e6) {
   raw_pop <- squire::get_population(country = country)$n                   
@@ -127,6 +137,7 @@ generate_Rt_scenario <- function(Rt, tt_Rt, change_type) {
 ### 9 = No NPIs
 default_NPI_scenarios <- function(lockdown_Rt = 0.9,
                                   minimal_mandate_reduction = 0.25,
+                                  NPI_scenarios = 1:9,
                                   scenarios) { 
   
   # Unpack the unique parameter combinations in the scenarios dataframe and calculate vaccination milestone timings
@@ -150,7 +161,7 @@ default_NPI_scenarios <- function(lockdown_Rt = 0.9,
   # Generating NPI Scenarios
   NPIs <- expand_grid(vacc_timings, 
                       R0 = unique(scenarios$R0),
-                      NPI_int = 1:9) %>%
+                      NPI_int = NPI_scenarios) %>%
     rowwise() %>%
     mutate(temp = ((specific_vaccine_start + time_to_coverage_spec) - (bpsv_start + time_to_coverage_bpsv))) %>%
     mutate(Rt = case_when(NPI_int == 1 ~ list(c(R0, lockdown_Rt, R0 * (1 - minimal_mandate_reduction), R0)),
@@ -206,7 +217,6 @@ create_scenarios <- function(population_size = 1e6,
                              seeding_cases = 2) {
   
   dur_V_temp <- dur_V
-
   baseline_scenarios <- expand_grid(population_size = population_size,
                                     country = country,
                                     hosp_bed_capacity = hosp_bed_capacity,                                         
@@ -276,7 +286,7 @@ run_sars_x <- function(## Demographic Parameters
                        seeding_cases = 5,
                        output = "summary",
                        NPI_int = 0,
-                       index = 0,
+                       scenario_index = 0,
                        ...) {
   
   set.seed(123)
@@ -296,9 +306,9 @@ run_sars_x <- function(## Demographic Parameters
   standard_pop <- generate_standard_pop(country = country, population_size = population_size)
   
   ## Adapting Generation Time
-  Tg <- scale_generation_time(target_Tg = Tg)
-  TgVary_dur_IMild <- Tg$dur_IMild
-  TgVary_dur_ICase <- Tg$dur_ICase
+  TgVary <- scale_generation_time(target_Tg = Tg)
+  TgVary_dur_IMild <- TgVary$dur_IMild
+  TgVary_dur_ICase <- TgVary$dur_ICase
     
   ## Adjusting IFR
   prob_hosp <- scale_IFR(country = country, population_size = population_size, target_IFR = IFR)
@@ -435,7 +445,7 @@ run_sars_x <- function(## Demographic Parameters
   
   if (output == "summary") {
     return(list(
-      model_arguments = list(index = index, population_size = population_size, standard_pop = standard_pop, country = country, hosp_bed_capacity = hosp_bed_capacity, ICU_bed_capacity = ICU_bed_capacity,
+      model_arguments = list(scenario_index = scenario_index, population_size = population_size, standard_pop = standard_pop, country = country, hosp_bed_capacity = hosp_bed_capacity, ICU_bed_capacity = ICU_bed_capacity,
                              Rt = Rt, tt_Rt = tt_Rt, Tg = Tg, IFR = IFR, vaccine_scenario = vaccine_scenario, bpsv_start = bpsv_start, specific_vaccine_start = specific_vaccine_start,             
                              efficacy_infection_bpsv = efficacy_infection_bpsv, efficacy_disease_bpsv = efficacy_disease_bpsv, efficacy_infection_spec = efficacy_infection_spec,
                              efficacy_disease_spec = efficacy_disease_spec, dur_R = dur_R, dur_V = dur_V, second_dose_delay = second_dose_delay, dur_vacc_delay = dur_vacc_delay,                     
@@ -449,7 +459,7 @@ run_sars_x <- function(## Demographic Parameters
   } else {
     return(list(
       model_output = mod_run,
-      model_arguments = list(index = index, population_size = population_size, standard_pop = standard_pop, country = country, hosp_bed_capacity = hosp_bed_capacity, ICU_bed_capacity = ICU_bed_capacity,
+      model_arguments = list(scenario_index = scenario_index, population_size = population_size, standard_pop = standard_pop, country = country, hosp_bed_capacity = hosp_bed_capacity, ICU_bed_capacity = ICU_bed_capacity,
                              Rt = Rt, tt_Rt = tt_Rt, Tg = Tg, IFR = IFR, vaccine_scenario = vaccine_scenario, bpsv_start = bpsv_start, specific_vaccine_start = specific_vaccine_start,             
                              efficacy_infection_bpsv = efficacy_infection_bpsv, efficacy_disease_bpsv = efficacy_disease_bpsv, efficacy_infection_spec = efficacy_infection_spec,
                              efficacy_disease_spec = efficacy_disease_spec, dur_R = dur_R, dur_V = dur_V, second_dose_delay = second_dose_delay, dur_vacc_delay = dur_vacc_delay,                     
@@ -461,6 +471,103 @@ run_sars_x <- function(## Demographic Parameters
                              NPI_int = NPI_int),
       summary_metrics = summary_metrics)) 
   }
+}
+
+# Summarise and format multiple model simulations with different parameter combinations
+format_multirun_output <- function(output_list, parallel = FALSE, cores = NA) {
+  
+  ## Creating overall dataframe of model outputs
+  if (parallel) {
+    data <- lapply(output_list, function(x) {
+      y <- data.frame(scenario_index = x$model_arguments$scenario_index, 
+                      x$summary_metrics, 
+                      country = x$model_arguments$country,
+                      population_size = x$model_arguments$population_size,
+                      hosp_bed_capacity = x$model_arguments$hosp_bed_capacity,
+                      ICU_bed_capacity = x$model_arguments$ICU_bed_capacity,
+                      R0 = x$model_arguments$Rt[1],
+                      Tg = x$model_arguments$Tg,
+                      IFR = x$model_arguments$IFR,
+                      vaccine_scenario = x$model_arguments$vaccine_scenario,
+                      detection_time = x$model_arguments$detection_time,
+                      bpsv_start = ifelse(x$model_arguments$vaccine_scenario == "specific_only", NA, x$model_arguments$bpsv_start),
+                      specific_vaccine_start = x$model_arguments$specific_vaccine_start,
+                      efficacy_infection_bpsv = x$model_arguments$efficacy_infection_bpsv,
+                      efficacy_disease_bpsv = x$model_arguments$efficacy_disease_bpsv,
+                      efficacy_infection_spec = x$model_arguments$efficacy_infection_spec,
+                      efficacy_disease_spec = x$model_arguments$efficacy_disease_spec,
+                      dur_R = x$model_arguments$dur_R,
+                      dur_V = x$model_arguments$dur_V[1],
+                      second_dose_delay = x$model_arguments$second_dose_delay,
+                      dur_vacc_delay = x$model_arguments$dur_vacc_delay,
+                      coverage = x$model_arguments$coverage,
+                      vaccination_rate = x$model_arguments$vaccination_rate,
+                      min_age_group_index_priority = x$model_arguments$min_age_group_index_priority,
+                      min_age_group_index_non_priority = x$model_arguments$min_age_group_index_non_priority,
+                      runtime = x$model_arguments$runtime,
+                      seeding_cases = x$model_arguments$seeding_cases,
+                      NPI_int = x$model_arguments$NPI_int)})
+    combined_data <- rbindlist(data)
+    
+  } else {
+    cl <- makeCluster(cores)
+    clusterEvalQ(cl, {
+      library(data.table)
+    })
+    data <- parLapply(cl, output_list, function(x) {
+      y <- data.frame(scenario_index = x$model_arguments$scenario_index, 
+                      x$summary_metrics, 
+                      country = x$model_arguments$country,
+                      population_size = x$model_arguments$population_size,
+                      hosp_bed_capacity = x$model_arguments$hosp_bed_capacity,
+                      ICU_bed_capacity = x$model_arguments$ICU_bed_capacity,
+                      R0 = x$model_arguments$Rt[1],
+                      Tg = x$model_arguments$Tg,
+                      IFR = x$model_arguments$IFR,
+                      vaccine_scenario = x$model_arguments$vaccine_scenario,
+                      detection_time = x$model_arguments$detection_time,
+                      bpsv_start = ifelse(x$model_arguments$vaccine_scenario == "specific_only", NA, x$model_arguments$bpsv_start),
+                      specific_vaccine_start = x$model_arguments$specific_vaccine_start,
+                      efficacy_infection_bpsv = x$model_arguments$efficacy_infection_bpsv,
+                      efficacy_disease_bpsv = x$model_arguments$efficacy_disease_bpsv,
+                      efficacy_infection_spec = x$model_arguments$efficacy_infection_spec,
+                      efficacy_disease_spec = x$model_arguments$efficacy_disease_spec,
+                      dur_R = x$model_arguments$dur_R,
+                      dur_V = x$model_arguments$dur_V[1],
+                      second_dose_delay = x$model_arguments$second_dose_delay,
+                      dur_vacc_delay = x$model_arguments$dur_vacc_delay,
+                      coverage = x$model_arguments$coverage,
+                      vaccination_rate = x$model_arguments$vaccination_rate,
+                      min_age_group_index_priority = x$model_arguments$min_age_group_index_priority,
+                      min_age_group_index_non_priority = x$model_arguments$min_age_group_index_non_priority,
+                      runtime = x$model_arguments$runtime,
+                      seeding_cases = x$model_arguments$seeding_cases,
+                      NPI_int = x$model_arguments$NPI_int)})
+    stopCluster(cl) 
+    combined_data <- rbindlist(data)
+  }
+  
+  ## Separating out specific only and BPSV/specific scenarios and then left-joining
+  var <- variable_columns(combined_data)
+  
+  both_vax <- combined_data %>%
+    filter(vaccine_scenario == "both_vaccines") %>%
+    rename(deaths_bpsv = deaths,
+           time_under_NPIs_bpsv = time_under_NPIs, ## think we can get rid of this as this isn't specific to both vs vaccine specific scenario
+           composite_NPI_bpsv = composite_NPI)     ## think we can get rid of this as this isn't specific to both vs vaccine specific scenario
+  
+  spec_vax <- combined_data %>%
+    filter(vaccine_scenario == "specific_only") %>%
+    select(var, deaths, time_under_NPIs, composite_NPI) %>% 
+    rename(deaths_spec = deaths,
+           time_under_NPIs_spec = time_under_NPIs,  ## think we can get rid of this as this isn't specific to both vs vaccine specific scenario
+           composite_NPI_spec = composite_NPI)      ## think we can get rid of this as this isn't specific to both vs vaccine specific scenario
+  
+  joined <- both_vax %>%
+    left_join(spec_vax, by = var) %>% 
+    mutate(bpsv_deaths_averted = deaths_spec - deaths_bpsv)
+  
+  return(joined)
 }
 
 ### need to come back to this and figure out how this should work when:
