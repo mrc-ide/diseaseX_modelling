@@ -69,27 +69,34 @@ minimal_mandate_reduction <- 0.25
 
 NPIs_bpsv_eff <- default_NPI_scenarios(lockdown_Rt = lockdown_Rt, minimal_mandate_reduction = minimal_mandate_reduction, NPI_scenarios = c(2, 4, 6), scenarios = raw_bpsv_scenarios)
 bpsv_scenarios <- raw_bpsv_scenarios %>%
-  full_join(NPIs, by = c("R0", "country", "population_size", "detection_time", "bpsv_start",    # joining by all columns which influence NPI scenario timing
-                         "specific_vaccine_start", "vaccination_rate", "coverage", "min_age_group_index_priority"), multiple = "all")
+  full_join(NPIs_bpsv_eff, by = c("R0", "country", "population_size", "detection_time", "bpsv_start",    # joining by all columns which influence NPI scenario timing
+                                  "specific_vaccine_start", "vaccination_rate", "coverage", "min_age_group_index_priority"), multiple = "all")
 
 NPIs_delay <- default_NPI_scenarios(lockdown_Rt = lockdown_Rt, minimal_mandate_reduction = minimal_mandate_reduction, NPI_scenarios = c(2, 4, 6), scenarios = raw_delay_scenarios)
 delay_scenarios <- raw_delay_scenarios %>%
-  full_join(NPIs, by = c("R0", "country", "population_size", "detection_time", "bpsv_start",    # joining by all columns which influence NPI scenario timing
-                         "specific_vaccine_start", "vaccination_rate", "coverage", "min_age_group_index_priority"), multiple = "all")
+  full_join(NPIs_delay, by = c("R0", "country", "population_size", "detection_time", "bpsv_start",    # joining by all columns which influence NPI scenario timing
+                               "specific_vaccine_start", "vaccination_rate", "coverage", "min_age_group_index_priority"), multiple = "all")
 
 NPIs_bpsv_eff_delay <- default_NPI_scenarios(lockdown_Rt = lockdown_Rt, minimal_mandate_reduction = minimal_mandate_reduction, NPI_scenarios = c(2, 4, 6), scenarios = raw_delay_bpsv_scenarios)
 delay_bpsv_scenarios <- raw_delay_bpsv_scenarios %>%
-  full_join(NPIs, by = c("R0", "country", "population_size", "detection_time", "bpsv_start",    # joining by all columns which influence NPI scenario timing
-                         "specific_vaccine_start", "vaccination_rate", "coverage", "min_age_group_index_priority"), multiple = "all")
+  full_join(NPIs_bpsv_eff_delay, by = c("R0", "country", "population_size", "detection_time", "bpsv_start",    # joining by all columns which influence NPI scenario timing
+                                        "specific_vaccine_start", "vaccination_rate", "coverage", "min_age_group_index_priority"), multiple = "all")
 
 all_scenarios <- rbind(bpsv_scenarios, delay_scenarios, delay_bpsv_scenarios)
+
+## Creating index for output (important as it orders dataframe so that pairs of identical scenarios save for BPSV Y/N are next to each other)
+vars_for_index <- c(variable_columns(all_scenarios), "NPI_int")
+all_scenarios <- all_scenarios %>%
+  group_by(vaccine_scenario) %>%
+  arrange_at(vars_for_index) %>%
+  mutate(scenario_index = 1:n())
 
 ## Running the model and summarising the output
 fresh_run <- FALSE
 if (fresh_run) {
   plan(multisession, workers = 60) # multicore does nothing on windows as multicore isn't supported
   system.time({out <- future_pmap(all_scenarios, run_sars_x, .progress = TRUE, .options = furrr_options(seed = 123))})
-  model_outputs <- format_multirun_output(output_list = out, parallel = TRUE, cores = 60)
+  model_outputs <- format_multirun_output(output_list = out, parallel = TRUE, cores = 50)
   saveRDS(model_outputs, "outputs/vaccine_properties_exploration_scenarios.rds")
 } else {
   model_outputs <- readRDS("outputs/vaccine_properties_exploration_scenarios.rds")
