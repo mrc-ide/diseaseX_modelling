@@ -1,7 +1,7 @@
 ## Identify number of columns with >1 unique values in a dataframe
 variable_columns <- function(df) {
   result <- sapply(df, FUN = function(x) {
-    length(unique(na.omit(x))) > 1
+    length(unique(x)) > 1
   })
   columns <- names(which(result))
   columns <- columns[!(columns %in% c("index", "vaccine_scenario", "deaths", "time_under_NPIs", "composite_NPI"))]
@@ -734,8 +734,6 @@ format_multirun_output <- function(output_list, parallel = FALSE, cores = NA) {
   }
   
   ## Separating out specific only and BPSV/specific scenarios and then left-joining
-  var <- variable_columns(combined_data)
-  
   both_vax <- combined_data %>%
     filter(vaccine_scenario == "both_vaccines") %>%
     rename(deaths_bpsv = deaths,
@@ -744,13 +742,13 @@ format_multirun_output <- function(output_list, parallel = FALSE, cores = NA) {
   
   spec_vax <- combined_data %>%
     filter(vaccine_scenario == "specific_only") %>%
-    select(all_of(var), deaths, time_under_NPIs, composite_NPI) %>% 
+    select(scenario_index, deaths, time_under_NPIs, composite_NPI) %>% 
     rename(deaths_spec = deaths,
            time_under_NPIs_spec = time_under_NPIs,  ## think we can get rid of this as this isn't specific to both vs vaccine specific scenario
            composite_NPI_spec = composite_NPI)      ## think we can get rid of this as this isn't specific to both vs vaccine specific scenario
   
   joined <- both_vax %>%
-    left_join(spec_vax, by = all_of(var)) %>% 
+    left_join(spec_vax, by = "scenario_index") %>% 
     mutate(bpsv_deaths_averted = deaths_spec - deaths_bpsv)
   
   return(joined)

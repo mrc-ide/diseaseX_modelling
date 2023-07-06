@@ -3,6 +3,8 @@
 ### CHECK - SEEDING CASES???
 ### CHECK - WEIRD SECOND DOSES COVERAGE BEING LOWER THAN PRIMARY FOR ELDERLY IN BOTH VACCINES MODEL
 ###         AND REQUIRING AN EXTRA DAY OR TWO TO GET IN THE RIGHT BALLPARK
+###         ---> this still needs addressing, alongside why the bpsv scenario produces more deaths
+###              than specific_only scenario when compared apples to apples
 
 # Load required libraries
 source(here::here("main.R"))
@@ -20,7 +22,7 @@ raw_bpsv_scenarios <- create_scenarios(R0 = c(2.25, 2.5, 2.75),                 
                                        specific_vaccine_start = 100,                  # specific vaccine distribution start (time after detection time)
                                        specific_protection_delay = 7,                 # delay between receipt of specific dose and protection
                                        efficacy_infection_bpsv = 0.35,                # vaccine efficacy against infection - BPSV
-                                       efficacy_disease_bpsv = seq(0.01, 1, 0.02),    # vaccine efficacy against disease - BPSV
+                                       efficacy_disease_bpsv = seq(0.05, 1, 0.05),    # vaccine efficacy against disease - BPSV
                                        efficacy_infection_spec = 0.55,                # vaccine efficacy against infection - specific vaccine
                                        efficacy_disease_spec = 0.9,                   # vaccine efficacy against disease - specific vaccine
                                        dur_R = 365000,                                # duration of infection-induced immunity
@@ -35,7 +37,7 @@ raw_delay_scenarios <- create_scenarios(R0 = c(2.25, 2.5, 2.75),                
                                         Tg = 7,                                        # Tg
                                         detection_time = 14,                           # detection time
                                         bpsv_start = 14,                               # BPSV distribution start (time after detection time)
-                                        bpsv_protection_delay = 1:14,                  # delay between receipt of BPSV dose and protection
+                                        bpsv_protection_delay = seq(10,60,10),                  # delay between receipt of BPSV dose and protection
                                         specific_vaccine_start = 100,                  # specific vaccine distribution start (time after detection time)
                                         specific_protection_delay = 7,                 # delay between receipt of specific dose and protection
                                         efficacy_infection_bpsv = 0.35,                # vaccine efficacy against infection - BPSV
@@ -88,7 +90,8 @@ delay_bpsv_scenarios <- raw_delay_bpsv_scenarios %>%
   full_join(NPIs_bpsv_eff_delay, by = c("R0", "country", "population_size", "detection_time", "bpsv_start",    # joining by all columns which influence NPI scenario timing
                                         "specific_vaccine_start", "vaccination_rate", "coverage", "min_age_group_index_priority"), multiple = "all")
 
-all_scenarios <- rbind(bpsv_scenarios, delay_scenarios, delay_bpsv_scenarios)
+#all_scenarios <- rbind(bpsv_scenarios, delay_scenarios) #, delay_bpsv_scenarios)
+all_scenarios <- delay_scenarios #, delay_bpsv_scenarios)
 
 ## Creating index for output (important as it orders dataframe so that pairs of identical scenarios save for BPSV Y/N are next to each other)
 vars_for_index <- c(variable_columns(all_scenarios), "NPI_int")
@@ -117,12 +120,12 @@ specific_only <- run_sars_x(population_size = test_spec$population_size,
                             detection_time = test_spec$detection_time,
                             bpsv_start = test_spec$bpsv_start,
                             bpsv_protection_delay = test_spec$bpsv_protection_delay,
-                            specific_vaccine_start = test_spec$specific_vaccine_start,
+                            specific_vaccine_start = 100, #test_spec$specific_vaccine_start,
                             specific_protection_delay = test_spec$specific_protection_delay,
-                            efficacy_infection_bpsv = test_spec$efficacy_infection_bpsv,
-                            efficacy_disease_bpsv = test_spec$efficacy_disease_bpsv,
-                            efficacy_infection_spec = test_spec$efficacy_infection_spec,
-                            efficacy_disease_spec = test_spec$efficacy_disease_spec,
+                            efficacy_infection_bpsv = 0, #test_spec$efficacy_infection_bpsv,
+                            efficacy_disease_bpsv = 0, #test_spec$efficacy_disease_bpsv,
+                            efficacy_infection_spec = 0.75, #test_spec$efficacy_infection_spec,
+                            efficacy_disease_spec = 0.75, #test_spec$efficacy_disease_spec,
                             dur_R = test_spec$dur_R,
                             dur_V = test_spec$dur_V,
                             coverage = test_spec$coverage,
@@ -135,6 +138,8 @@ specific_only <- run_sars_x(population_size = test_spec$population_size,
                             NPI_int = 0,
                             scenario_index = 0,
                             varied = "")
+specific_only$summary_metrics$deaths
+
 
 both_vaccines <- run_sars_x(population_size = test_both$population_size,
                             country = test_both$country,
@@ -145,15 +150,15 @@ both_vaccines <- run_sars_x(population_size = test_both$population_size,
                             Tg = test_both$Tg,
                             IFR = test_both$IFR,
                             vaccine_scenario = test_both$vaccine_scenario,
-                            detection_time = 7, test_both$detection_time,
+                            detection_time = test_both$detection_time,
                             bpsv_start = test_both$bpsv_start,
                             bpsv_protection_delay = test_both$bpsv_protection_delay,
-                            specific_vaccine_start = test_both$specific_vaccine_start,
+                            specific_vaccine_start = 100, #test_both$specific_vaccine_start,
                             specific_protection_delay = test_both$specific_protection_delay,
-                            efficacy_infection_bpsv = 0.01, #test_both$efficacy_infection_bpsv,
-                            efficacy_disease_bpsv = 0.01, #test_both$efficacy_disease_bpsv,
-                            efficacy_infection_spec = test_both$efficacy_infection_spec,
-                            efficacy_disease_spec = test_both$efficacy_disease_spec,
+                            efficacy_infection_bpsv = 0, #test_both$efficacy_infection_bpsv,
+                            efficacy_disease_bpsv = 0, #test_both$efficacy_disease_bpsv,
+                            efficacy_infection_spec = 0.75, #test_both$efficacy_infection_spec,
+                            efficacy_disease_spec = 0.75, #test_both$efficacy_disease_spec,
                             dur_R = test_both$dur_R,
                             dur_V = test_both$dur_V,
                             coverage = test_both$coverage,
@@ -166,16 +171,16 @@ both_vaccines <- run_sars_x(population_size = test_both$population_size,
                             NPI_int = 0,
                             scenario_index = 0,
                             varied = "")
+both_vaccines$summary_metrics$deaths ## something v weird going on - when specific_vaccine_start goes from 100 -> 250, deaths goes down
+                                     ## despite efficacy_infection_spec and disease_spec being 0
+                                     ## need to have efficacy_infection_bpsv and efficacy_disease_bpsv > 0 to observe it
+                                     ## okay what's happening here is that people are getting bumped from bpsv -> spec and 
+                                     ## if I set it up so that bpsv > spec, it gives them less protection - FINE!
+## BUT - when I have bpsv set to zero efficacy, and identical spec efficacies - more deaths
+## in bpsv scenario than specific - something is going wrong here, and I need to figure out what.
 
-# plot(specific_only$model_arguments$primary_doses, type = "l")
-# lines(specific_only$model_arguments$second_doses, col = "red")
-# lines(specific_only$model_arguments$booster_doses, col = "blue")
-# 
-# plot(both_vaccines$model_arguments$primary_doses, type = "l")
-# lines(both_vaccines$model_arguments$second_doses, col = "red")
-# lines(both_vaccines$model_arguments$booster_doses, col = "blue")
-
-specific_only$summary_metrics$deaths / both_vaccines$summary_metrics$deaths ## this is still not perfect, but it's within a tolerable range (~1% difference - think that's due to combo of ODE solver and something else going on I'm currently missing)
+specific_only$summary_metrics$deaths
+both_vaccines$summary_metrics$deaths # ~1% difference when vaccines are efficacious (>0) - something going on that I'm currently missing)
 
 sum(both_vaccines$model_arguments$primary_doses)
 sum(both_vaccines$model_arguments$second_doses)
@@ -202,29 +207,37 @@ ggplot(data = subset(check, age_group %in% c("50-55", "80+"))) +
   geom_line(aes(x = t, y = value, col = compartment)) +
   facet_wrap(~age_group)
 
+# plot(specific_only$model_arguments$primary_doses, type = "l")
+# lines(specific_only$model_arguments$second_doses, col = "red")
+# lines(specific_only$model_arguments$booster_doses, col = "blue")
+# 
+# plot(both_vaccines$model_arguments$primary_doses, type = "l")
+# lines(both_vaccines$model_arguments$second_doses, col = "red")
+# lines(both_vaccines$model_arguments$booster_doses, col = "blue")
+
 # specific_only$model_output$output
 # 
-# check <- nimue::format(specific_only$model_output, compartments = c("vaccinated_first_dose", "vaccinated_second_dose", "vaccinated_booster_dose"),
-#                        reduce_age = FALSE) %>%
-#   filter(t > 1,
-#          compartment == "vaccinated_first_dose" | compartment == "vaccinated_second_dose" | compartment == "vaccinated_booster_dose") %>%
-#   group_by(replicate, t)
-# pop_df <- data.frame(age_group = sort(unique(check$age_group)), population = specific_only$model_output$parameters$population)
-# check <- check %>%
-#   left_join(pop_df, by = "age_group") %>%
-#   mutate(prop = value / population)
-# ggplot() +
-#   geom_line(data = check, aes(x = t, y = prop, col = compartment)) +
-#   facet_wrap(~age_group)
+check <- nimue::format(specific_only$model_output, compartments = c("vaccinated_first_dose", "vaccinated_second_dose", "vaccinated_booster_dose"),
+                       reduce_age = FALSE) %>%
+  filter(t > 1,
+         compartment == "vaccinated_first_dose" | compartment == "vaccinated_second_dose" | compartment == "vaccinated_booster_dose") %>%
+  group_by(replicate, t)
+pop_df <- data.frame(age_group = sort(unique(check$age_group)), population = specific_only$model_output$parameters$population)
+check <- check %>%
+  left_join(pop_df, by = "age_group") %>%
+  mutate(prop = value / population)
+ggplot() +
+  geom_line(data = check, aes(x = t, y = prop, col = compartment)) +
+  facet_wrap(~age_group)
 
 
 
 ## Running the model and summarising the output
 fresh_run <- FALSE
 if (fresh_run) {
-  plan(multisession, workers = 3) # multicore does nothing on windows as multicore isn't supported
-  system.time({out <- future_pmap(all_scenarios[1:20, ], run_sars_x, .progress = TRUE, .options = furrr_options(seed = 123))})
-  model_outputs <- format_multirun_output(output_list = out, parallel = TRUE, cores = 3)
+  plan(multisession, workers = 5) # multicore does nothing on windows as multicore isn't supported
+  system.time({out <- future_pmap(all_scenarios, run_sars_x, .progress = TRUE, .options = furrr_options(seed = 123))})
+  model_outputs <- format_multirun_output(output_list = out, parallel = TRUE, cores = 5)
   saveRDS(model_outputs, "outputs/vaccine_properties_exploration_scenarios.rds")
 } else {
   model_outputs <- readRDS("outputs/vaccine_properties_exploration_scenarios.rds")
@@ -259,17 +272,17 @@ disease_efficacy_plot <- ggplot(disease_efficacy_plotting) +
 
 ## Delay plot
 delay_plotting <- model_outputs %>%
-  filter(map_lgl(varied, ~ setequal(., c("R0", "IFR", "dur_vacc_delay")))) %>%
-  group_by(dur_vacc_delay, NPI_int) %>%
+  filter(map_lgl(varied, ~ setequal(., c("R0", "IFR", "bpsv_protection_delay")))) %>%
+  group_by(bpsv_protection_delay, NPI_int) %>%
   summarise(min_deaths_averted = min(bpsv_deaths_averted),
             max_deaths_averted = max(bpsv_deaths_averted),
             central_deaths_averted = bpsv_deaths_averted[R0 == 2.5 & IFR == 1])
 delay_plot <- ggplot(delay_plotting) +
-  geom_line(aes(x = dur_vacc_delay, y = central_deaths_averted, col = factor(NPI_int)), size = 1) +
-  geom_ribbon(aes(x = dur_vacc_delay, ymin = min_deaths_averted, ymax = max_deaths_averted,
+  geom_line(aes(x = bpsv_protection_delay, y = central_deaths_averted, col = factor(NPI_int)), size = 1) +
+  geom_ribbon(aes(x = bpsv_protection_delay, ymin = min_deaths_averted, ymax = max_deaths_averted,
                   fill = factor(NPI_int)), alpha = 0.1) +
-  geom_line(aes(x = dur_vacc_delay, y = min_deaths_averted, col = factor(NPI_int)), size = 0.1) +
-  geom_line(aes(x = dur_vacc_delay, y = max_deaths_averted, col = factor(NPI_int)), size = 0.1) + 
+  geom_line(aes(x = bpsv_protection_delay, y = min_deaths_averted, col = factor(NPI_int)), size = 0.1) +
+  geom_line(aes(x = bpsv_protection_delay, y = max_deaths_averted, col = factor(NPI_int)), size = 0.1) + 
   scale_colour_manual(values = NPI_colours) +
   scale_fill_manual(values = NPI_colours) +
   theme_bw() +
