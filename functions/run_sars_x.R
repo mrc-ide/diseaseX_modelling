@@ -122,7 +122,8 @@ create_vaccination_dose_series <- function(country,
     primary_doses <- 
       c(rep(0, detection_time),
         rep(0, specific_vaccine_start),
-        rep(daily_doses, runtime - detection_time - specific_vaccine_start))
+        rep(0, specific_protection_delay),        
+        rep(daily_doses, runtime - detection_time - specific_vaccine_start - specific_protection_delay))
 
     ## Second Doses
     ## We model full protection as arising the moment you've had the first dose, so second dose is 
@@ -139,9 +140,9 @@ create_vaccination_dose_series <- function(country,
     standard_pop <- generate_standard_pop(country = country, population_size = population_size)
     daily_doses <- vaccination_rate * population_size / 7    # rate of vaccination with primary series
     priority_age_groups <- min_age_group_index_priority:17            
-    elderly_pop_to_vaccinate <- sum(standard_pop[priority_age_groups]) * coverage # 60+s receive primary (BNPCV) and booster (diseaseX-specific); under 60s receive just primary (diseaseX-specific)
+    elderly_pop_to_vaccinate <- ceiling(sum(standard_pop[priority_age_groups]) * coverage) # 60+s receive primary (BNPCV) and booster (diseaseX-specific); under 60s receive just primary (diseaseX-specific)
     time_to_coverage_bpsv <- ceiling(elderly_pop_to_vaccinate/daily_doses)
-    time_to_coverage_spec <- time_to_coverage_bpsv + 1
+    time_to_coverage_spec <- time_to_coverage_bpsv
     
     ## Checking there's no overlap in vaccination campaigns
     ## I think technically we want to avoid BPSV elderly and spec everyone else campaigns (as they're the same series in the model)
@@ -177,11 +178,17 @@ create_vaccination_dose_series <- function(country,
     # second_doses[(detection_time+bpsv_start+bpsv_protection_delay+1):
     #                (detection_time+bpsv_start+bpsv_protection_delay+time_to_coverage_bpsv+1+1)] <- daily_doses
     
-    ## extra second doses to get up to coverage - why are we not getting there?
-    # second_doses[(detection_time+bpsv_start+bpsv_protection_delay+time_to_coverage_bpsv+1+1)] <- daily_doses
-    # second_doses[(detection_time+bpsv_start+bpsv_protection_delay+time_to_coverage_bpsv+1+2)] <- daily_doses
-    # second_doses[(detection_time+bpsv_start+bpsv_protection_delay+time_to_coverage_bpsv+1+3)] <- daily_doses
-    # second_doses[(detection_time+bpsv_start+bpsv_protection_delay+time_to_coverage_bpsv+1+4)] <- daily_doses
+    ## extra second doses to get second coverage up to coverage target - why are we not getting there?
+    ## unclear to me why, but as long as we're only vaccinating elderly with primary doses
+    ## during the initial phase, they're the only folks eligible for second doses during that
+    ## initial campaign and so it doesn't make much difference. Just need to watch out
+    ## for when detection_time+bpsv_start+bpsv_protection_delay+time_to_coverage_bpsv+1+4 is very
+    ## close to the detection_time + specific_vaccine_start + spec_protection_delay time 
+    second_doses[(detection_time+bpsv_start+bpsv_protection_delay+time_to_coverage_bpsv+1+1)] <- daily_doses
+    second_doses[(detection_time+bpsv_start+bpsv_protection_delay+time_to_coverage_bpsv+1+2)] <- daily_doses
+    second_doses[(detection_time+bpsv_start+bpsv_protection_delay+time_to_coverage_bpsv+1+3)] <- daily_doses
+    second_doses[(detection_time+bpsv_start+bpsv_protection_delay+time_to_coverage_bpsv+1+4)] <- daily_doses
+    second_doses[(detection_time+bpsv_start+bpsv_protection_delay+time_to_coverage_bpsv+1+5)] <- daily_doses
     # 
     
     ## Booster Doses (only for elderly, this is the disease specific vaccine)
@@ -317,10 +324,10 @@ default_NPI_scenarios <- function(lockdown_Rt = 0.9,
 
 
 # Generate combinations of scenarios
-create_scenarios <- function(population_size = 1e6,
+create_scenarios <- function(population_size = 1e9,
                              country = "Argentina",
-                             hosp_bed_capacity = 1e6,                                         
-                             ICU_bed_capacity = 1e6,
+                             hosp_bed_capacity = 1e9,                                         
+                             ICU_bed_capacity = 1e9,
                              R0 = c(1.5, 2, 3), 
                              Tg = 7,
                              IFR = c(0.5, 1.5),
@@ -335,7 +342,8 @@ create_scenarios <- function(population_size = 1e6,
                              efficacy_infection_spec = 0.55, 
                              efficacy_disease_spec = 0.9,
                              dur_R = 365000, 
-                             dur_V = 365000, 
+                             dur_bpsv = 365000, 
+                             dur_spec = 365000,
                              coverage = 0.8,
                              vaccination_rate = 0.035, 
                              min_age_group_index_priority = 13,
@@ -343,7 +351,6 @@ create_scenarios <- function(population_size = 1e6,
                              runtime = 730,
                              seeding_cases = 2) {
   
-  dur_V_temp <- dur_V
   baseline_scenarios <- expand_grid(population_size = population_size,
                                     country = country,
                                     hosp_bed_capacity = hosp_bed_capacity,                                         
@@ -362,16 +369,15 @@ create_scenarios <- function(population_size = 1e6,
                                     efficacy_infection_spec = efficacy_infection_spec, 
                                     efficacy_disease_spec = efficacy_disease_spec,
                                     dur_R = dur_R, 
-                                    dur_V = 1, 
+                                    dur_bpsv = dur_bpsv / 2,  # two waning compartments, so halve the duration to double the rate and keep the total time spent with immunity = dur_bpsv on average
+                                    dur_spec = dur_spec / 2,  # two waning compartments, so halve the duration to double the rate and keep the total time spent with immunity = dur_spec on average
                                     coverage = coverage,
                                     vaccination_rate = vaccination_rate, 
                                     min_age_group_index_priority = min_age_group_index_priority,
                                     min_age_group_index_non_priority = min_age_group_index_non_priority,
                                     runtime = runtime,
                                     seeding_cases = seeding_cases) 
-  baseline_scenarios <- baseline_scenarios %>%
-    mutate(dur_V = list(rep(dur_V_temp, 4)))
-  
+
   varying <- variable_columns(baseline_scenarios) 
   
   baseline_scenarios <- baseline_scenarios %>%
@@ -440,8 +446,9 @@ run_sars_x <- function(## Demographic Parameters
                        efficacy_infection_spec = 0.55,           # vaccine efficacy against infection - specific vaccine
                        efficacy_disease_spec = 0.9,              # vaccine efficacy against disease - specific vaccine
                        dur_R = 1000 * 365,                       # duration of infection-induced immunity
-                       dur_V = rep(1000 * 365, 4),              # duration of vaccine-induced immunity for both vaccines
-                       coverage = 0.75,                           # proportion of the population vaccinated
+                       dur_bpsv = 1000 * 365,                    # duration of vaccine-induced immunity for BPSV vaccine
+                       dur_spec = 1000 * 365,                   # duration of vaccine-induced immunity for disease-specific vaccines
+                       coverage = 0.75,                          # proportion of the population vaccinated
                        vaccination_rate = 0.01,                  # vaccination rate per week as percentage of population
                        min_age_group_index_priority = 13,        # index of the youngest age group given priority w.r.t vaccines (13 = 60+)
                        min_age_group_index_non_priority = 4,     # index of the youngest age group that *receives* vaccines (4 = 15+)
@@ -505,6 +512,13 @@ run_sars_x <- function(## Demographic Parameters
     ve_d_spec <- c(efficacy_disease_spec, efficacy_disease_spec, efficacy_disease_spec, 0, 0, 0, 0) ## note that booster protection set to 0 as we're assuming virus-spec gives robust protection - no waning, so no booster required
     vaccine_efficacy_disease <- matrix(c(rep(ve_d_spec, 17)), ncol = 17)
     
+    ### Vaccine protection waning
+    dur_V <- matrix(data = c(rep(dur_spec, 17),   ## duration of primary series protection (specific vaccine in this scenario)
+                             rep(dur_spec, 17),   ## duration of primary series protection (specific vaccine in this scenario)
+                             rep(dur_spec, 17),   ## duration of booster protection (not used here)
+                             rep(dur_spec, 17)),  ## duration of booster protection (not used here)
+                    nrow = 4, ncol = 17, byrow = TRUE)
+    
     # Set up dosing schedule - no boosters here
     vaccine_doses <- create_vaccination_dose_series(country = country, 
                                                     population_size = population_size, 
@@ -556,7 +570,7 @@ run_sars_x <- function(## Demographic Parameters
     # the alloted time that Azra was previously calculating. I thought doing ceiling() would be enough and in most cases it is but not all.
     # This way (i.e. by adding +1 to the times) we do! 
     
-    ## Creating matrices of infection and diasease efficacy for each age-group and vaccine received
+    ## Creating matrices of infection and disease efficacy for each age-group and vaccine received
     ### Infection Efficacy
     ve_bpsv <- list(infection = efficacy_infection_bpsv, disease = efficacy_disease_bpsv)
     ve_spec <- list(infection = efficacy_infection_spec, disease = efficacy_disease_spec)
@@ -570,18 +584,20 @@ run_sars_x <- function(## Demographic Parameters
     vaccine_efficacy_disease <- matrix(c( rep(ve_d_non_elderly, 17 - length(priority_age_groups)), 
                                           rep(ve_d_elderly, length(priority_age_groups)) ), ncol = 17)
     
+    
+    ### Vaccine protection waning
+    dur_V <- matrix(data = c(c(rep(dur_spec, min(priority_age_groups) - 1), rep(dur_bpsv, length(priority_age_groups))),    ## duration of primary series protection (bpsv for elderly, specific vaccine for everyone else in this scenario)
+                             c(rep(dur_spec, min(priority_age_groups) - 1), rep(dur_bpsv, length(priority_age_groups))),    ## duration of primary series protection (bpsv for elderly, specific vaccine for everyone else in this scenario)
+                             c(rep(dur_spec, min(priority_age_groups) - 1), rep(dur_spec, length(priority_age_groups))),           ## duration of booster protection (specific for elderly, not used for everyone else)
+                             c(rep(dur_spec, min(priority_age_groups) - 1), rep(dur_spec, length(priority_age_groups)))),         ## duration of booster protection (specific for elderly, not used for everyone else)
+                    nrow = 4, ncol = 17, byrow = TRUE)
+    
     ## Eligibility for Boosters (Elderly Only)
-    vaccine_booster_follow_up_coverage <- c(rep(0, min(priority_age_groups) - 1), rep(1, length(priority_age_groups)))
-    vaccine_booster_initial_coverage <- c(rep(0, min(priority_age_groups) - 1), rep(1, length(priority_age_groups)))
-    }
+    vaccine_booster_follow_up_coverage <- c(rep(0, min(priority_age_groups) - 1), rep(0, length(priority_age_groups))) # no booster follow ons
+    vaccine_booster_initial_coverage <- c(rep(0, min(priority_age_groups) - 1), rep(1, length(priority_age_groups))) ## note that we set coverage to be 100% as it's already bounded by whatever coverage the 1st/2nd dose coverage got to
+  }
   
   ## Ensuring things that could be passed in as lists (when running in parallel) are coerced to right format
-  if (is.list(dur_V)) {
-    dur_V <- unlist(dur_V)
-    if(length(dur_V) != 4) {
-      stop("dur_V must be length 4")
-    }
-  }
   if (is.list(tt_Rt)) {
     tt_Rt <- unlist(tt_Rt)
   }
@@ -627,7 +643,7 @@ run_sars_x <- function(## Demographic Parameters
       model_arguments = list(scenario_index = scenario_index, population_size = population_size, standard_pop = standard_pop, country = country, hosp_bed_capacity = hosp_bed_capacity, ICU_bed_capacity = ICU_bed_capacity,
                              Rt = Rt, tt_Rt = tt_Rt, Tg = Tg, IFR = IFR, vaccine_scenario = vaccine_scenario, bpsv_start = bpsv_start, specific_vaccine_start = specific_vaccine_start,             
                              efficacy_infection_bpsv = efficacy_infection_bpsv, efficacy_disease_bpsv = efficacy_disease_bpsv, efficacy_infection_spec = efficacy_infection_spec,
-                             efficacy_disease_spec = efficacy_disease_spec, dur_R = dur_R, dur_V = dur_V, bpsv_protection_delay = bpsv_protection_delay, specific_protection_delay = specific_protection_delay,                     
+                             efficacy_disease_spec = efficacy_disease_spec, dur_R = dur_R, dur_bpsv = dur_bpsv, dur_spec = dur_spec, bpsv_protection_delay = bpsv_protection_delay, specific_protection_delay = specific_protection_delay,                     
                              coverage = coverage, vaccination_rate = vaccination_rate, min_age_group_index_priority = min_age_group_index_priority, min_age_group_index_non_priority = min_age_group_index_non_priority,     
                              runtime = runtime, seeding_cases = seeding_cases, detection_time = detection_time,
                              primary_doses = primary_doses, second_doses = second_doses, booster_doses = booster_doses,
@@ -641,7 +657,7 @@ run_sars_x <- function(## Demographic Parameters
       model_arguments = list(scenario_index = scenario_index, population_size = population_size, standard_pop = standard_pop, country = country, hosp_bed_capacity = hosp_bed_capacity, ICU_bed_capacity = ICU_bed_capacity,
                              Rt = Rt, tt_Rt = tt_Rt, Tg = Tg, IFR = IFR, vaccine_scenario = vaccine_scenario, bpsv_start = bpsv_start, specific_vaccine_start = specific_vaccine_start,             
                              efficacy_infection_bpsv = efficacy_infection_bpsv, efficacy_disease_bpsv = efficacy_disease_bpsv, efficacy_infection_spec = efficacy_infection_spec,
-                             efficacy_disease_spec = efficacy_disease_spec, dur_R = dur_R, dur_V = dur_V, bpsv_protection_delay = bpsv_protection_delay, specific_protection_delay = specific_protection_delay,               
+                             efficacy_disease_spec = efficacy_disease_spec, dur_R = dur_R, dur_bpsv = dur_bpsv, dur_spec = dur_spec, bpsv_protection_delay = bpsv_protection_delay, specific_protection_delay = specific_protection_delay,               
                              coverage = coverage, vaccination_rate = vaccination_rate, min_age_group_index_priority = min_age_group_index_priority, min_age_group_index_non_priority = min_age_group_index_non_priority,     
                              runtime = runtime, seeding_cases = seeding_cases, detection_time = detection_time,
                              primary_doses = primary_doses, second_doses = second_doses, booster_doses = booster_doses,
@@ -680,7 +696,8 @@ format_multirun_output <- function(output_list, parallel = FALSE, cores = NA) {
                   efficacy_infection_spec = x$model_arguments$efficacy_infection_spec,
                   efficacy_disease_spec = x$model_arguments$efficacy_disease_spec,
                   dur_R = x$model_arguments$dur_R,
-                  dur_V = x$model_arguments$dur_V[1],
+                  dur_bpsv = x$model_arguments$dur_bpsv,
+                  dur_spec = x$model_arguments$dur_spec,
                   coverage = x$model_arguments$coverage,
                   vaccination_rate = x$model_arguments$vaccination_rate,
                   min_age_group_index_priority = x$model_arguments$min_age_group_index_priority,
@@ -720,7 +737,8 @@ format_multirun_output <- function(output_list, parallel = FALSE, cores = NA) {
                   efficacy_infection_spec = x$model_arguments$efficacy_infection_spec,
                   efficacy_disease_spec = x$model_arguments$efficacy_disease_spec,
                   dur_R = x$model_arguments$dur_R,
-                  dur_V = x$model_arguments$dur_V[1],
+                  dur_bpsv = x$model_arguments$dur_bpsv,
+                  dur_spec = x$model_arguments$dur_spec,
                   coverage = x$model_arguments$coverage,
                   vaccination_rate = x$model_arguments$vaccination_rate,
                   min_age_group_index_priority = x$model_arguments$min_age_group_index_priority,
