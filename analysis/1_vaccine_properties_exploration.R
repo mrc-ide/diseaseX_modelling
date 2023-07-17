@@ -31,7 +31,7 @@ minimal_mandate_reduction <- 0.25    # Fold-reduction in R0 achieved under minim
 # Generate parameter combinations for model running
 
 ### BPSV Efficacy Against Disease
-raw_bpsv_efficacy_scenarios <- create_scenarios(R0 = c(1.5, 2.5, 3.5),                         # Basic reproduction number
+raw_bpsv_efficacy_scenarios <- create_scenarios(R0 = c(2, 2.5, 3.5),                           # Basic reproduction number
                                                 IFR = c(0.5, 1, 1.5),                          # IFR
                                                 population_size = 10^10,
                                                 Tg = 5.5,                                      # Tg
@@ -53,13 +53,13 @@ raw_bpsv_efficacy_scenarios <- create_scenarios(R0 = c(1.5, 2.5, 3.5),          
                                                 min_age_group_index_non_priority = 4)          # index of the youngest age group that *receives* vaccines (4 = 15+)
 raw_bpsv_efficacy_scenarios$main_varied <- "disease_efficacy"
 NPIs_bpsv_eff <- default_NPI_scenarios(lockdown_Rt = lockdown_Rt, minimal_mandate_reduction = minimal_mandate_reduction, 
-                                       NPI_scenarios = c(2, 4, 6), scenarios = raw_bpsv_efficacy_scenarios)
+                                       NPI_scenarios = 1:9, scenarios = raw_bpsv_efficacy_scenarios)
 bpsv_eff_scenarios <- raw_bpsv_efficacy_scenarios %>%
   full_join(NPIs_bpsv_eff, by = c("R0", "country", "population_size", "detection_time", "bpsv_start",    # joining by all columns which influence NPI scenario timing
                                   "specific_vaccine_start", "vaccination_rate", "coverage", "min_age_group_index_priority"), multiple = "all")
 
 ### BPSV Delay Between Vaccination Receipt & Protection
-raw_bpsv_delay_scenarios <- create_scenarios(R0 = c(1.5, 2.5, 3.5),                         # Basic reproduction number
+raw_bpsv_delay_scenarios <- create_scenarios(R0 = c(2, 2.5, 3.5),                           # Basic reproduction number
                                              IFR = c(0.5, 1, 1.5),                          # IFR
                                              population_size = 10^10,
                                              Tg = 5.5,                                      # Tg
@@ -81,13 +81,13 @@ raw_bpsv_delay_scenarios <- create_scenarios(R0 = c(1.5, 2.5, 3.5),             
                                              min_age_group_index_non_priority = 4)          # index of the youngest age group that *receives* vaccines (4 = 15+)
 raw_bpsv_delay_scenarios$main_varied <- "protection_delay"
 NPIs_bpsv_delay <- default_NPI_scenarios(lockdown_Rt = lockdown_Rt, minimal_mandate_reduction = minimal_mandate_reduction, 
-                                         NPI_scenarios = c(2, 4, 6), scenarios = raw_bpsv_delay_scenarios)
+                                         NPI_scenarios = 1:9, scenarios = raw_bpsv_delay_scenarios)
 bpsv_delay_scenarios <- raw_bpsv_delay_scenarios %>%
   full_join(NPIs_bpsv_delay, by = c("R0", "country", "population_size", "detection_time", "bpsv_start",    # joining by all columns which influence NPI scenario timing
                                     "specific_vaccine_start", "vaccination_rate", "coverage", "min_age_group_index_priority"), multiple = "all")
 
 ### BPSV Duration of Immunity
-raw_dur_bpsv_scenarios <- create_scenarios(R0 = c(1.5, 2.5, 3.5),                         # Basic reproduction number
+raw_dur_bpsv_scenarios <- create_scenarios(R0 = c(2, 2.5, 3.5),                           # Basic reproduction number
                                            IFR = c(0.5, 1, 1.5),                          # IFR
                                            population_size = 10^10,
                                            Tg = 5.5,                                      # Tg
@@ -109,7 +109,7 @@ raw_dur_bpsv_scenarios <- create_scenarios(R0 = c(1.5, 2.5, 3.5),               
                                            min_age_group_index_non_priority = 4)          # index of the youngest age group that *receives* vaccines (4 = 15+)
 raw_dur_bpsv_scenarios$main_varied <- "immunity_duration"
 NPIs_bpsv_dur <- default_NPI_scenarios(lockdown_Rt = lockdown_Rt, minimal_mandate_reduction = minimal_mandate_reduction, 
-                                        NPI_scenarios = c(2, 4, 6), scenarios = raw_dur_bpsv_scenarios)
+                                        NPI_scenarios = 1:9, scenarios = raw_dur_bpsv_scenarios)
 bpsv_dur_scenarios <- raw_dur_bpsv_scenarios %>%
   full_join(NPIs_bpsv_dur, by = c("R0", "country", "population_size", "detection_time", "bpsv_start",    # joining by all columns which influence NPI scenario timing
                                   "specific_vaccine_start", "vaccination_rate", "coverage", "min_age_group_index_priority"), multiple = "all")
@@ -136,14 +136,14 @@ if (fresh_run) {
 }
 
 ## Plotting the output
-colour_func <- scales::hue_pal()(9)
-NPI_colours <- colour_func[c(2, 4, 6)]
+colour_func <- scales::hue_pal()(max(model_outputs$NPI_int))
+NPI_colours <- colour_func[unique(model_outputs$NPI_int)]
 population_size <- unique(model_outputs$population_size)
 runtime <- unique(model_outputs$runtime)
+NPI_to_include <- c(2, 4, 5, 7, 8)
 
 NPI_df <- NPIs_bpsv_eff %>%
-  filter(R0 == 2.5) %>%
-  filter(specific_vaccine_start == 200) %>%
+  filter(R0 == 2.5, specific_vaccine_start == 200, NPI_int %in% NPI_to_include) %>%
   select(R0, detection_time, bpsv_start, specific_vaccine_start, time_to_coverage_bpsv, time_to_coverage_spec, NPI_int, Rt, tt_Rt) %>%
   rowwise() %>%
   mutate(scenario_info = list(tibble(Rt = Rt, tt_Rt = tt_Rt))) %>%
@@ -168,7 +168,7 @@ NPI_plot <- ggplot(NPI_df, aes(x = tt_Rt - overplot_factor, colour = scenario)) 
   geom_segment(aes(x = next_time, xend = next_time, y = Rt, yend = next_value), size = 1) +
   theme_bw() +
   scale_colour_manual(values = NPI_colours) +
-  facet_wrap(scenario~., ncol = 1) +
+  facet_wrap(scenario~., ncol = 3) +
   labs(x = "Time Since Spillover (Days)") +
   coord_cartesian(xlim = c(0, unique(NPI_df$detection_time) + unique(NPI_df$specific_vaccine_start) + unique(NPI_df$time_to_coverage_spec) + 10),
                   ylim = c(0.5, unique(NPI_df$R0) + 0.5)) +
@@ -177,16 +177,61 @@ NPI_plot <- ggplot(NPI_df, aes(x = tt_Rt - overplot_factor, colour = scenario)) 
 
 ## Efficacy plot
 disease_efficacy_plotting <- model_outputs %>%
-  filter(IFR == 1) %>%
+  filter(IFR == 1, NPI_int %in% NPI_to_include) %>%
   filter(map_lgl(varied, ~ setequal(., c("R0", "IFR", "specific_vaccine_start", "efficacy_disease_bpsv")))) %>%
   group_by(R0, specific_vaccine_start, efficacy_disease_bpsv, NPI_int) %>%
-  filter(NPI_int != 9) %>%
+  # filter(NPI_int != 9) %>%
   summarise(min_deaths_averted = min(bpsv_deaths_averted) * 1000 / population_size,
             max_deaths_averted = max(bpsv_deaths_averted) * 1000 / population_size,
             central_deaths_averted = bpsv_deaths_averted * 1000 / population_size,
             perc_deaths_averted = 100 * bpsv_deaths_averted / deaths_spec,
             total_deaths_spec = deaths_spec * 1000 / population_size,
-            total_deaths_bpsv = deaths_bpsv * 1000 / population_size)
+            total_deaths_bpsv = deaths_bpsv * 1000 / population_size,
+            time_under_NPIs_bpsv = time_under_NPIs_bpsv,
+            composite_NPI_bpsv = composite_NPI_bpsv)
+
+ggplot(subset(disease_efficacy_plotting, specific_vaccine_start != 100)) +
+  # geom_point(aes(x = 100 * efficacy_disease_bpsv, y = central_deaths_averted, fill = 100 * efficacy_disease_bpsv), 
+  #            size = 3, pch = 21) +
+  geom_jitter(aes(x = 100 * efficacy_disease_bpsv, y = central_deaths_averted, fill = NPI_int), 
+              size = 3, pch = 21, width = 5) +
+  theme_bw() +
+  scale_x_continuous(breaks = c(0, 25, 50, 70, 100), labels = paste0(c(0, 25, 50, 75, 100), "%")) +
+  scale_fill_viridis_c(name = "Vaccine Efficacy", option = "magma") +
+  labs(x = "BPSV Disease Efficacy", y = "Deaths Averted By BPSV Per 1000") +
+  guides(colour = guide_legend("NPI\nScenario")) +
+  theme(legend.position = "bottom")
+
+ggplot(subset(disease_efficacy_plotting, NPI_int == 1 & R0 == 2.5)) +
+  # geom_point(aes(x = 100 * efficacy_disease_bpsv, y = central_deaths_averted, fill = 100 * efficacy_disease_bpsv), 
+  #            size = 3, pch = 21) +
+  geom_jitter(aes(x = 100 * efficacy_disease_bpsv, y = central_deaths_averted, fill = specific_vaccine_start), 
+              size = 3, pch = 21, width = 5) +
+  theme_bw() +
+  scale_x_continuous(breaks = c(0, 25, 50, 70, 100), labels = paste0(c(0, 25, 50, 75, 100), "%")) +
+  scale_fill_viridis_c(name = "Vaccine Efficacy", option = "magma") +
+  labs(x = "BPSV Disease Efficacy", y = "Deaths Averted By BPSV Per 1000") +
+  guides(colour = guide_legend("NPI\nScenario")) +
+  theme(legend.position = "bottom")
+
+
+# ggplot(disease_efficacy_plotting) +
+#   geom_point(aes(x = composite_NPI_bpsv, y = central_deaths_averted, col = 100 * efficacy_disease_bpsv), size = 1) +
+#   theme_bw() +
+#   labs(x = "BPSV Disease Efficacy", y = "Deaths Averted By BPSV Per 1000") +
+#   guides(colour = guide_legend("NPI\nScenario")) +
+#   theme(legend.position = "none")
+
+# ggplot(disease_efficacy_plotting) +
+#   geom_point(aes(x = composite_NPI_bpsv, y = central_deaths_averted, col = factor(NPI_int)), size = 1) +
+#   facet_grid(R0 ~ specific_vaccine_start, scales = "free_y") +
+#   scale_colour_manual(values = NPI_colours) +
+#   scale_fill_manual(values = NPI_colours) +
+#   scale_x_continuous(breaks = c(0, 25, 50, 70, 100), labels = paste0(c(0, 25, 50, 75, 100), "%")) +
+#   theme_bw() +
+#   labs(x = "BPSV Disease Efficacy", y = "Deaths Averted By BPSV Per 1000") +
+#   guides(colour = guide_legend("NPI\nScenario")) +
+#   theme(legend.position = "none")
 
 x <- ggplot(disease_efficacy_plotting) +
   geom_line(aes(x = 100 * efficacy_disease_bpsv, y = central_deaths_averted, col = factor(NPI_int)), size = 1) +
