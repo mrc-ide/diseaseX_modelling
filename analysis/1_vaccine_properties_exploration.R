@@ -31,7 +31,7 @@ minimal_mandate_reduction <- 0.25    # Fold-reduction in R0 achieved under minim
 # Generate parameter combinations for model running
 
 ### BPSV Efficacy Against Disease
-raw_bpsv_efficacy_scenarios <- create_scenarios(R0 = c(1.5, 2.5, 3.5),                         # Basic reproduction number
+raw_bpsv_efficacy_scenarios <- create_scenarios(R0 = c(1.5, 2, 2.5, 3.5),                      # Basic reproduction number
                                                 IFR = c(0.5, 1, 1.5),                          # IFR
                                                 population_size = 10^10,
                                                 Tg = 5.5,                                      # Tg
@@ -53,13 +53,13 @@ raw_bpsv_efficacy_scenarios <- create_scenarios(R0 = c(1.5, 2.5, 3.5),          
                                                 min_age_group_index_non_priority = 4)          # index of the youngest age group that *receives* vaccines (4 = 15+)
 raw_bpsv_efficacy_scenarios$main_varied <- "disease_efficacy"
 NPIs_bpsv_eff <- default_NPI_scenarios(lockdown_Rt = lockdown_Rt, minimal_mandate_reduction = minimal_mandate_reduction, 
-                                       NPI_scenarios = c(2, 4, 6), scenarios = raw_bpsv_efficacy_scenarios)
+                                       NPI_scenarios = 1:9, scenarios = raw_bpsv_efficacy_scenarios)
 bpsv_eff_scenarios <- raw_bpsv_efficacy_scenarios %>%
   full_join(NPIs_bpsv_eff, by = c("R0", "country", "population_size", "detection_time", "bpsv_start",    # joining by all columns which influence NPI scenario timing
                                   "specific_vaccine_start", "vaccination_rate", "coverage", "min_age_group_index_priority"), multiple = "all")
 
 ### BPSV Delay Between Vaccination Receipt & Protection
-raw_bpsv_delay_scenarios <- create_scenarios(R0 = c(1.5, 2.5, 3.5),                         # Basic reproduction number
+raw_bpsv_delay_scenarios <- create_scenarios(R0 = c(1.5, 2, 2.5, 3.5),                      # Basic reproduction number
                                              IFR = c(0.5, 1, 1.5),                          # IFR
                                              population_size = 10^10,
                                              Tg = 5.5,                                      # Tg
@@ -81,13 +81,13 @@ raw_bpsv_delay_scenarios <- create_scenarios(R0 = c(1.5, 2.5, 3.5),             
                                              min_age_group_index_non_priority = 4)          # index of the youngest age group that *receives* vaccines (4 = 15+)
 raw_bpsv_delay_scenarios$main_varied <- "protection_delay"
 NPIs_bpsv_delay <- default_NPI_scenarios(lockdown_Rt = lockdown_Rt, minimal_mandate_reduction = minimal_mandate_reduction, 
-                                         NPI_scenarios = c(2, 4, 6), scenarios = raw_bpsv_delay_scenarios)
+                                         NPI_scenarios = 1:9, scenarios = raw_bpsv_delay_scenarios)
 bpsv_delay_scenarios <- raw_bpsv_delay_scenarios %>%
   full_join(NPIs_bpsv_delay, by = c("R0", "country", "population_size", "detection_time", "bpsv_start",    # joining by all columns which influence NPI scenario timing
                                     "specific_vaccine_start", "vaccination_rate", "coverage", "min_age_group_index_priority"), multiple = "all")
 
 ### BPSV Duration of Immunity
-raw_dur_bpsv_scenarios <- create_scenarios(R0 = c(1.5, 2.5, 3.5),                         # Basic reproduction number
+raw_dur_bpsv_scenarios <- create_scenarios(R0 = c(1.5, 2, 2.5, 3.5),                      # Basic reproduction number
                                            IFR = c(0.5, 1, 1.5),                          # IFR
                                            population_size = 10^10,
                                            Tg = 5.5,                                      # Tg
@@ -109,7 +109,7 @@ raw_dur_bpsv_scenarios <- create_scenarios(R0 = c(1.5, 2.5, 3.5),               
                                            min_age_group_index_non_priority = 4)          # index of the youngest age group that *receives* vaccines (4 = 15+)
 raw_dur_bpsv_scenarios$main_varied <- "immunity_duration"
 NPIs_bpsv_dur <- default_NPI_scenarios(lockdown_Rt = lockdown_Rt, minimal_mandate_reduction = minimal_mandate_reduction, 
-                                        NPI_scenarios = c(2, 4, 6), scenarios = raw_dur_bpsv_scenarios)
+                                        NPI_scenarios = 1:9, scenarios = raw_dur_bpsv_scenarios)
 bpsv_dur_scenarios <- raw_dur_bpsv_scenarios %>%
   full_join(NPIs_bpsv_dur, by = c("R0", "country", "population_size", "detection_time", "bpsv_start",    # joining by all columns which influence NPI scenario timing
                                   "specific_vaccine_start", "vaccination_rate", "coverage", "min_age_group_index_priority"), multiple = "all")
