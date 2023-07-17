@@ -30,8 +30,8 @@ minimal_mandate_reduction <- 0.25    # Fold-reduction in R0 achieved under minim
 # Generate parameter combinations for model running
 
 ### BPSV Efficacy Against Disease
-raw_bpsv_efficacy_scenarios <- create_scenarios(R0 = c(2.25, 2.5, 2.75),                       # Basic reproduction number
-                                                IFR = c(0.75, 1, 1.25),                        # IFR
+raw_bpsv_efficacy_scenarios <- create_scenarios(R0 = c(1.5, 2.5, 3),                           # Basic reproduction number
+                                                IFR = c(0.5, 1, 1.5),                          # IFR
                                                 population_size = 10^10,
                                                 Tg = 7,                                        # Tg
                                                 detection_time = 14,                           # detection time
@@ -58,8 +58,8 @@ bpsv_eff_scenarios <- raw_bpsv_efficacy_scenarios %>%
                                   "specific_vaccine_start", "vaccination_rate", "coverage", "min_age_group_index_priority"), multiple = "all")
 
 ### BPSV Delay Between Vaccination Receipt & Protection
-raw_bpsv_delay_scenarios <- create_scenarios(R0 = c(2.25, 2.5, 2.75),                       # Basic reproduction number
-                                             IFR = c(0.75, 1, 1.25),                        # IFR
+raw_bpsv_delay_scenarios <- create_scenarios(R0 = c(1.5, 2.5, 3),                           # Basic reproduction number
+                                             IFR = c(0.5, 1, 1.5),                          # IFR
                                              population_size = 10^10,
                                              Tg = 7,                                        # Tg
                                              detection_time = 14,                           # detection time
@@ -86,8 +86,8 @@ bpsv_delay_scenarios <- raw_bpsv_delay_scenarios %>%
                                     "specific_vaccine_start", "vaccination_rate", "coverage", "min_age_group_index_priority"), multiple = "all")
 
 ### BPSV Duration of Immunity
-raw_dur_bpsv_scenarios <- create_scenarios(R0 = c(2.25, 2.5, 2.75),                       # Basic reproduction number
-                                           IFR = c(0.75, 1, 1.25),                        # IFR
+raw_dur_bpsv_scenarios <- create_scenarios(R0 = c(1.5, 2.5, 3),                           # Basic reproduction number
+                                           IFR = c(0.5, 1, 1.5),                          # IFR
                                            population_size = 10^10,
                                            Tg = 7,                                        # Tg
                                            detection_time = 14,                           # detection time
@@ -124,7 +124,7 @@ vaccine_property_scenarios <- vaccine_property_scenarios %>%
 
 ## Running the model and summarising the output
 cores <- parallel::detectCores() - 2
-fresh_run <- TRUE
+fresh_run <- FALSE
 if (fresh_run) {
   plan(multisession, workers = cores) # multicore does nothing on windows as multicore isn't supported
   system.time({out <- future_pmap(vaccine_property_scenarios, run_sars_x, .progress = TRUE, .options = furrr_options(seed = 123))})
@@ -136,29 +136,31 @@ if (fresh_run) {
 
 ## Plotting the output
 colour_func <- scales::hue_pal()(9)
-NPI_colours <- colour_func[c(2, 4, 6, 9)]
+NPI_colours <- colour_func[c(2, 4, 6)]
 population_size <- unique(model_outputs$population_size)
 
 ## Efficacy plot
 disease_efficacy_plotting <- model_outputs %>%
-  filter(map_lgl(varied, ~ setequal(., c("R0", "IFR", "efficacy_disease_bpsv")))) %>%
-  group_by(efficacy_disease_bpsv, NPI_int) %>%
-  filter(NPI_int != 9 & NPI_int != 4) %>%
+  filter(R0 == 2.5, IFR == 1) %>%
+  filter(map_lgl(varied, ~ setequal(., c("R0", "IFR", "specific_vaccine_start", "efficacy_disease_bpsv")))) %>%
+  group_by(specific_vaccine_start, efficacy_disease_bpsv, NPI_int) %>%
+  filter(NPI_int != 9) %>%
   summarise(min_deaths_averted = min(bpsv_deaths_averted) * 1000 / population_size,
             max_deaths_averted = max(bpsv_deaths_averted) * 1000 / population_size,
-            central_deaths_averted = bpsv_deaths_averted[R0 == 2.5 & IFR == 1] * 1000 / population_size)
+            central_deaths_averted = bpsv_deaths_averted * 1000 / population_size)
 
-disease_efficacy_plot <- ggplot(disease_efficacy_plotting) +
+ggplot(disease_efficacy_plotting) +
   geom_line(aes(x = 100 * efficacy_disease_bpsv, y = central_deaths_averted, col = factor(NPI_int)), size = 1) +
   # geom_ribbon(aes(x = 100 * efficacy_disease_bpsv, ymin = min_deaths_averted, ymax = max_deaths_averted,
   #                 fill = factor(NPI_int)), alpha = 0.1) +
   # geom_line(aes(x = 100 * efficacy_disease_bpsv, y = min_deaths_averted, col = factor(NPI_int)), size = 0.1) +
   # geom_line(aes(x = 100 * efficacy_disease_bpsv, y = max_deaths_averted, col = factor(NPI_int)), size = 0.1) + 
+  facet_wrap(. ~ specific_vaccine_start, scales = "free_y") +
   scale_colour_manual(values = NPI_colours) +
   scale_fill_manual(values = NPI_colours) +
   scale_x_continuous(breaks = c(0, 25, 50, 70, 100), labels = paste0(c(0, 25, 50, 75, 100), "%")) +
   theme_bw() +
-  labs(x = "BPSV Disease Efficacy", y = "Deaths Averted By BPSV")
+  labs(x = "BPSV Disease Efficacy", y = "Deaths Averted By BPSV Per 1000")
 
 
 ## Delay plot
