@@ -193,10 +193,10 @@ disease_efficacy_plotting <- model_outputs %>%
 ggplot(subset(disease_efficacy_plotting, specific_vaccine_start != 100)) +
   # geom_point(aes(x = 100 * efficacy_disease_bpsv, y = central_deaths_averted, fill = 100 * efficacy_disease_bpsv), 
   #            size = 3, pch = 21) +
-  geom_jitter(aes(x = 100 * efficacy_disease_bpsv, y = central_deaths_averted, fill = NPI_int), 
+  geom_jitter(aes(x = 100 * efficacy_disease_bpsv, y = central_deaths_averted, fill = R0), 
               size = 3, pch = 21, width = 5) +
   theme_bw() +
-  scale_x_continuous(breaks = c(0, 25, 50, 70, 100), labels = paste0(c(0, 25, 50, 75, 100), "%")) +
+  scale_x_continuous(breaks = c(0, 25, 50, 75, 100), labels = paste0(c(0, 25, 50, 75, 100), "%")) +
   scale_fill_viridis_c(name = "Vaccine Efficacy", option = "magma") +
   labs(x = "BPSV Disease Efficacy", y = "Deaths Averted By BPSV Per 1000") +
   guides(colour = guide_legend("NPI\nScenario")) +
@@ -208,7 +208,7 @@ ggplot(subset(disease_efficacy_plotting, NPI_int == 1 & R0 == 2.5)) +
   geom_jitter(aes(x = 100 * efficacy_disease_bpsv, y = central_deaths_averted, fill = specific_vaccine_start), 
               size = 3, pch = 21, width = 5) +
   theme_bw() +
-  scale_x_continuous(breaks = c(0, 25, 50, 70, 100), labels = paste0(c(0, 25, 50, 75, 100), "%")) +
+  scale_x_continuous(breaks = c(0, 25, 50, 75, 100), labels = paste0(c(0, 25, 50, 75, 100), "%")) +
   scale_fill_viridis_c(name = "Vaccine Efficacy", option = "magma") +
   labs(x = "BPSV Disease Efficacy", y = "Deaths Averted By BPSV Per 1000") +
   guides(colour = guide_legend("NPI\nScenario")) +
@@ -238,18 +238,18 @@ x <- ggplot(disease_efficacy_plotting) +
   facet_grid(R0 ~ specific_vaccine_start, scales = "free_y") +
   scale_colour_manual(values = NPI_colours) +
   scale_fill_manual(values = NPI_colours) +
-  scale_x_continuous(breaks = c(0, 25, 50, 70, 100), labels = paste0(c(0, 25, 50, 75, 100), "%")) +
+  scale_x_continuous(breaks = c(0, 25, 50, 75, 100), labels = paste0(c(0, 25, 50, 75, 100), "%")) +
   theme_bw() +
   labs(x = "BPSV Disease Efficacy", y = "Deaths Averted By BPSV Per 1000") +
   guides(colour = guide_legend("NPI\nScenario")) +
-  theme(legend.position = "none")
+  theme(legend.position = "right")
 
 y <- ggplot(disease_efficacy_plotting) +
   geom_line(aes(x = 100 * efficacy_disease_bpsv, y = perc_deaths_averted, col = factor(NPI_int)), size = 1) +
   facet_grid(R0 ~ specific_vaccine_start, scales = "free_y") +
   scale_colour_manual(values = NPI_colours) +
   scale_fill_manual(values = NPI_colours) +
-  scale_x_continuous(breaks = c(0, 25, 50, 70, 100), labels = paste0(c(0, 25, 50, 75, 100), "%")) +
+  scale_x_continuous(breaks = c(0, 25, 50, 75, 100), labels = paste0(c(0, 25, 50, 75, 100), "%")) +
   theme_bw() +
   labs(x = "BPSV Disease Efficacy", y = "% of Deaths Averted By BPSV") +
   guides(colour = guide_legend("NPI\nScenario")) +
