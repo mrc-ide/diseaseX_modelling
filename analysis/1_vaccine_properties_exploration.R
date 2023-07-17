@@ -11,6 +11,7 @@
 ###    vaxxed - does result in a little overshoot into younger age-groups, but doesn't influence deaths basically at all
 ### 7) Concern: The way dose_pops/vaccination_cov is calculated includes small but non-zero ineligible groups of people like those in hospital.
 ###    Probably it shouldn't.
+### 8) IFR calculation under the hood on my end not quite right, and need to sort (chat to Azra about this)
 
 ### Collecting intuition on bits of behaviour
 # 1) Only people who can get 2nd dose can be boostered. But in both-vaccines scenario, some of the BPSV'd elderly will die
@@ -30,14 +31,14 @@ minimal_mandate_reduction <- 0.25    # Fold-reduction in R0 achieved under minim
 # Generate parameter combinations for model running
 
 ### BPSV Efficacy Against Disease
-raw_bpsv_efficacy_scenarios <- create_scenarios(R0 = c(1.5, 2.5, 3),                           # Basic reproduction number
+raw_bpsv_efficacy_scenarios <- create_scenarios(R0 = c(1.5, 2.5, 3.5),                         # Basic reproduction number
                                                 IFR = c(0.5, 1, 1.5),                          # IFR
                                                 population_size = 10^10,
-                                                Tg = 7,                                        # Tg
+                                                Tg = 5.5,                                      # Tg
                                                 detection_time = 14,                           # detection time
-                                                bpsv_start = 14,                               # BPSV distribution start (time after detection time)
+                                                bpsv_start = 7,                                # BPSV distribution start (time after detection time)
                                                 bpsv_protection_delay = 7,                     # delay between receipt of BPSV dose and protection
-                                                specific_vaccine_start = c(100, 200, 365),     # specific vaccine distribution start (time after detection time)
+                                                specific_vaccine_start = c(100, 200, 365, 500),# specific vaccine distribution start (time after detection time)
                                                 specific_protection_delay = 7,                 # delay between receipt of specific dose and protection
                                                 efficacy_infection_bpsv = 0.35,                # vaccine efficacy against infection - BPSV
                                                 efficacy_disease_bpsv = seq(0.05, 1, 0.05),    # vaccine efficacy against disease - BPSV
@@ -58,14 +59,14 @@ bpsv_eff_scenarios <- raw_bpsv_efficacy_scenarios %>%
                                   "specific_vaccine_start", "vaccination_rate", "coverage", "min_age_group_index_priority"), multiple = "all")
 
 ### BPSV Delay Between Vaccination Receipt & Protection
-raw_bpsv_delay_scenarios <- create_scenarios(R0 = c(1.5, 2.5, 3),                           # Basic reproduction number
+raw_bpsv_delay_scenarios <- create_scenarios(R0 = c(1.5, 2.5, 3.5),                         # Basic reproduction number
                                              IFR = c(0.5, 1, 1.5),                          # IFR
                                              population_size = 10^10,
-                                             Tg = 7,                                        # Tg
+                                             Tg = 5.5,                                      # Tg
                                              detection_time = 14,                           # detection time
                                              bpsv_start = 14,                               # BPSV distribution start (time after detection time)
                                              bpsv_protection_delay = seq(2, 21, 1),         # delay between receipt of BPSV dose and protection
-                                             specific_vaccine_start = c(100, 200, 365),     # specific vaccine distribution start (time after detection time)
+                                             specific_vaccine_start = c(100, 200, 365, 500),# specific vaccine distribution start (time after detection time)
                                              specific_protection_delay = 7,                 # delay between receipt of specific dose and protection
                                              efficacy_infection_bpsv = 0.35,                # vaccine efficacy against infection - BPSV
                                              efficacy_disease_bpsv = 0.75,                  # vaccine efficacy against disease - BPSV
@@ -86,14 +87,14 @@ bpsv_delay_scenarios <- raw_bpsv_delay_scenarios %>%
                                     "specific_vaccine_start", "vaccination_rate", "coverage", "min_age_group_index_priority"), multiple = "all")
 
 ### BPSV Duration of Immunity
-raw_dur_bpsv_scenarios <- create_scenarios(R0 = c(1.5, 2.5, 3),                           # Basic reproduction number
+raw_dur_bpsv_scenarios <- create_scenarios(R0 = c(1.5, 2.5, 3.5),                         # Basic reproduction number
                                            IFR = c(0.5, 1, 1.5),                          # IFR
                                            population_size = 10^10,
-                                           Tg = 7,                                        # Tg
+                                           Tg = 5.5,                                      # Tg
                                            detection_time = 14,                           # detection time
                                            bpsv_start = 14,                               # BPSV distribution start (time after detection time)
                                            bpsv_protection_delay = 7,                     # delay between receipt of BPSV dose and protection
-                                           specific_vaccine_start = c(100, 200, 365),      # specific vaccine distribution start (time after detection time)
+                                           specific_vaccine_start = c(100, 200, 365, 500),# specific vaccine distribution start (time after detection time)
                                            specific_protection_delay = 7,                 # delay between receipt of specific dose and protection
                                            efficacy_infection_bpsv = 0.35,                # vaccine efficacy against infection - BPSV
                                            efficacy_disease_bpsv = 0.75,    # vaccine efficacy against disease - BPSV
@@ -138,30 +139,88 @@ if (fresh_run) {
 colour_func <- scales::hue_pal()(9)
 NPI_colours <- colour_func[c(2, 4, 6)]
 population_size <- unique(model_outputs$population_size)
+runtime <- unique(model_outputs$runtime)
+
+NPI_df <- NPIs_bpsv_eff %>%
+  filter(R0 == 2.5) %>%
+  filter(specific_vaccine_start == 200) %>%
+  select(R0, detection_time, bpsv_start, specific_vaccine_start, time_to_coverage_bpsv, time_to_coverage_spec, NPI_int, Rt, tt_Rt) %>%
+  rowwise() %>%
+  mutate(scenario_info = list(tibble(Rt = Rt, tt_Rt = tt_Rt))) %>%
+  select(-Rt, -tt_Rt) %>%
+  unnest(cols = c(scenario_info)) %>%
+  mutate(scenario = paste0("Scenario ", NPI_int)) %>%
+  group_by(scenario) %>%
+  mutate(next_time = lead(tt_Rt),
+         next_value = lead(Rt)) %>%
+  mutate(next_time = ifelse(is.na(next_time), runtime, next_time),
+         next_value = ifelse(is.na(next_value), R0, next_value))
+overplot_factor <- 1
+
+NPI_plot <- ggplot(NPI_df, aes(x = tt_Rt - overplot_factor, colour = scenario)) +
+  geom_hline(aes(yintercept = 1), linewidth = 0.2) +
+  geom_hline(aes(yintercept = lockdown_Rt), linetype = "dashed", linewidth = 0.2) +
+  geom_hline(aes(yintercept = R0 * (1 - minimal_mandate_reduction)), linetype = "dashed", linewidth = 0.2) +
+  geom_vline(aes(xintercept = detection_time), linewidth = 0.2) +
+  geom_vline(aes(xintercept = detection_time + bpsv_start + time_to_coverage_bpsv), linewidth = 0.2) +
+  geom_vline(aes(xintercept = detection_time + specific_vaccine_start + time_to_coverage_spec), linewidth = 0.2) +
+  geom_segment(aes(xend = next_time + overplot_factor, y = Rt, yend = Rt), size = 1) +
+  geom_segment(aes(x = next_time, xend = next_time, y = Rt, yend = next_value), size = 1) +
+  theme_bw() +
+  scale_colour_manual(values = NPI_colours) +
+  facet_wrap(scenario~., ncol = 1) +
+  labs(x = "Time Since Spillover (Days)") +
+  coord_cartesian(xlim = c(0, unique(NPI_df$detection_time) + unique(NPI_df$specific_vaccine_start) + unique(NPI_df$time_to_coverage_spec) + 10),
+                  ylim = c(0.5, unique(NPI_df$R0) + 0.5)) +
+  theme(legend.position = "none",
+        strip.background = element_rect(fill="#F5F5F5"))
 
 ## Efficacy plot
 disease_efficacy_plotting <- model_outputs %>%
-  filter(R0 == 2.5, IFR == 1) %>%
+  filter(IFR == 1) %>%
   filter(map_lgl(varied, ~ setequal(., c("R0", "IFR", "specific_vaccine_start", "efficacy_disease_bpsv")))) %>%
-  group_by(specific_vaccine_start, efficacy_disease_bpsv, NPI_int) %>%
+  group_by(R0, specific_vaccine_start, efficacy_disease_bpsv, NPI_int) %>%
   filter(NPI_int != 9) %>%
   summarise(min_deaths_averted = min(bpsv_deaths_averted) * 1000 / population_size,
             max_deaths_averted = max(bpsv_deaths_averted) * 1000 / population_size,
-            central_deaths_averted = bpsv_deaths_averted * 1000 / population_size)
+            central_deaths_averted = bpsv_deaths_averted * 1000 / population_size,
+            perc_deaths_averted = 100 * bpsv_deaths_averted / deaths_spec,
+            total_deaths_spec = deaths_spec * 1000 / population_size,
+            total_deaths_bpsv = deaths_bpsv * 1000 / population_size)
 
-ggplot(disease_efficacy_plotting) +
+x <- ggplot(disease_efficacy_plotting) +
   geom_line(aes(x = 100 * efficacy_disease_bpsv, y = central_deaths_averted, col = factor(NPI_int)), size = 1) +
-  # geom_ribbon(aes(x = 100 * efficacy_disease_bpsv, ymin = min_deaths_averted, ymax = max_deaths_averted,
-  #                 fill = factor(NPI_int)), alpha = 0.1) +
-  # geom_line(aes(x = 100 * efficacy_disease_bpsv, y = min_deaths_averted, col = factor(NPI_int)), size = 0.1) +
-  # geom_line(aes(x = 100 * efficacy_disease_bpsv, y = max_deaths_averted, col = factor(NPI_int)), size = 0.1) + 
-  facet_wrap(. ~ specific_vaccine_start, scales = "free_y") +
+  facet_grid(R0 ~ specific_vaccine_start, scales = "free_y") +
   scale_colour_manual(values = NPI_colours) +
   scale_fill_manual(values = NPI_colours) +
   scale_x_continuous(breaks = c(0, 25, 50, 70, 100), labels = paste0(c(0, 25, 50, 75, 100), "%")) +
   theme_bw() +
-  labs(x = "BPSV Disease Efficacy", y = "Deaths Averted By BPSV Per 1000")
+  labs(x = "BPSV Disease Efficacy", y = "Deaths Averted By BPSV Per 1000") +
+  guides(colour = guide_legend("NPI\nScenario")) +
+  theme(legend.position = "none")
 
+y <- ggplot(disease_efficacy_plotting) +
+  geom_line(aes(x = 100 * efficacy_disease_bpsv, y = perc_deaths_averted, col = factor(NPI_int)), size = 1) +
+  facet_grid(R0 ~ specific_vaccine_start, scales = "free_y") +
+  scale_colour_manual(values = NPI_colours) +
+  scale_fill_manual(values = NPI_colours) +
+  scale_x_continuous(breaks = c(0, 25, 50, 70, 100), labels = paste0(c(0, 25, 50, 75, 100), "%")) +
+  theme_bw() +
+  labs(x = "BPSV Disease Efficacy", y = "% of Deaths Averted By BPSV") +
+  guides(colour = guide_legend("NPI\nScenario")) +
+  theme(legend.position = "none")
+
+z <- ggplot(subset(disease_efficacy_plotting, efficacy_disease_bpsv == 0.5)) +
+  geom_bar(aes(x = factor(NPI_int), y = total_deaths_spec, fill = factor(NPI_int)), stat = "identity", size = 1) +
+  facet_grid(R0 ~ specific_vaccine_start) +
+  scale_colour_manual(values = NPI_colours) +
+  scale_fill_manual(values = NPI_colours) +
+  theme_bw() +
+  labs(x = "BPSV Disease Efficacy", y = "Total Deaths Baseline Scenario") +
+  guides(colour = guide_legend("NPI\nScenario")) +
+  theme(legend.position = "none")
+
+cowplot::plot_grid(NPI_plot, x, nrow = 1, rel_widths = c(1, 3))
 
 ## Delay plot
 delay_plotting <- model_outputs %>%
@@ -204,36 +263,7 @@ ggplot(data = efficacy_delay_joint_plotting, aes(x = 100 * efficacy_disease_bpsv
 
 
 ## Plotting the NPI Scenarios
-# NPI_df <- NPIs %>%
-#   select(R0, detection_time, bpsv_start, specific_vaccine_start, time_to_coverage_bpsv, time_to_coverage_spec, NPI_int, Rt, tt_Rt) %>%
-#   rowwise() %>%
-#   mutate(scenario_info = list(tibble(Rt = Rt, tt_Rt = tt_Rt))) %>%
-#   select(-Rt, -tt_Rt) %>%
-#   unnest(cols = c(scenario_info)) %>%
-#   mutate(scenario = paste0("Scenario ", NPI_int)) %>%
-#   group_by(scenario) %>%
-#   mutate(next_time = lead(tt_Rt),
-#          next_value = lead(Rt)) %>%
-#   mutate(next_time = ifelse(is.na(next_time), unique(baseline_scenarios$runtime), next_time),
-#          next_value = ifelse(is.na(next_value), R0, next_value))
-# overplot_factor <- 1
-# 
-# NPI_plot <- ggplot(NPI_df, aes(x = tt_Rt - overplot_factor, colour = scenario)) +
-#   geom_hline(aes(yintercept = 1), linewidth = 0.2) +
-#   geom_hline(aes(yintercept = lockdown_Rt), linetype = "dashed", linewidth = 0.2) +
-#   geom_hline(aes(yintercept = R0 * (1 - minimal_mandate_reduction)), linetype = "dashed", linewidth = 0.2) +
-#   geom_vline(aes(xintercept = detection_time), linewidth = 0.2) +
-#   geom_vline(aes(xintercept = detection_time + bpsv_start + time_to_coverage_bpsv), linewidth = 0.2) +
-#   geom_vline(aes(xintercept = detection_time + specific_vaccine_start + time_to_coverage_spec), linewidth = 0.2) +
-#   geom_segment(aes(xend = next_time + overplot_factor, y = Rt, yend = Rt), size = 1) +
-#   geom_segment(aes(x = next_time, xend = next_time, y = Rt, yend = next_value), size = 1) +
-#   theme_bw() +
-#   facet_wrap(~scenario) +
-#   labs(x = "Time Since Spillover (Days)") +
-#   coord_cartesian(xlim = c(0, unique(NPI_df$detection_time) + unique(NPI_df$specific_vaccine_start) + unique(NPI_df$time_to_coverage_spec) + 10), 
-#                   ylim = c(0.5, unique(NPI_df$R0) + 0.5)) +
-#   theme(legend.position = "none",
-#         strip.background = element_rect(fill="#F5F5F5"))
+
 # 
 # # Plotting model outputted deaths and time under NPIs
 # model_outputs <- model_outputs %>%
