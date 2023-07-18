@@ -21,6 +21,7 @@ library(flextable)
 library(officer)
 library(tictoc)
 library(egg)
+library(monochromeR)
 
 
 # colours
