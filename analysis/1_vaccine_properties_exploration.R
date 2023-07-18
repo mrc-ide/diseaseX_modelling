@@ -137,7 +137,7 @@ if (fresh_run) {
 
 ## Plotting the output
 colour_func <- scales::hue_pal()(max(model_outputs$NPI_int))
-NPI_colours <- colour_func[unique(model_outputs$NPI_int)]
+NPI_colours <- c("#C64191", "#F0803C", "#0D84A9")
 population_size <- unique(model_outputs$population_size)
 runtime <- unique(model_outputs$runtime)
 NPI_to_include <- c(4, 7, 8) # c(2, 4, 5, 7, 8)
@@ -161,6 +161,7 @@ NPI_plot <- ggplot(NPI_df, aes(x = tt_Rt - overplot_factor, colour = scenario)) 
   geom_hline(aes(yintercept = 1), linewidth = 0.2) +
   geom_hline(aes(yintercept = lockdown_Rt), linetype = "dashed", linewidth = 0.2) +
   geom_hline(aes(yintercept = R0 * (1 - minimal_mandate_reduction)), linetype = "dashed", linewidth = 0.2) +
+  geom_vline(aes(xintercept = 0), linewidth = 0.2) +
   geom_vline(aes(xintercept = detection_time), linewidth = 0.2) +
   geom_vline(aes(xintercept = detection_time + bpsv_start + time_to_coverage_bpsv), linewidth = 0.2) +
   geom_vline(aes(xintercept = detection_time + specific_vaccine_start + time_to_coverage_spec), linewidth = 0.2) +
@@ -168,19 +169,28 @@ NPI_plot <- ggplot(NPI_df, aes(x = tt_Rt - overplot_factor, colour = scenario)) 
   geom_segment(aes(x = next_time, xend = next_time, y = Rt, yend = next_value), size = 1) +
   theme_bw() +
   scale_colour_manual(values = NPI_colours) +
-  facet_wrap(scenario~., ncol = 3) +
-  labs(x = "Time Since Spillover (Days)") +
+  scale_x_continuous(breaks = c(0, unique(NPI_df$detection_time),
+                                unique(NPI_df$detection_time) + unique(NPI_df$bpsv_start) + unique(NPI_df$time_to_coverage_bpsv),
+                                unique(NPI_df$detection_time) + unique(NPI_df$specific_vaccine_start) + unique(NPI_df$time_to_coverage_spec)),
+                     labels = c("", "", "BPSV\nFinish", "Spec\nFinish")) +
+  scale_y_continuous(breaks = c(0, 1, unique(NPI_df$R0)),
+                     labels = c("", "1", "R0")) +
+  facet_wrap(scenario~., nrow = 3,
+             labeller = as_labeller(c(`Scenario 4`='Minimal', `Scenario 7`='Moderate', `Scenario 8`='Stringent'))) +
   coord_cartesian(xlim = c(0, unique(NPI_df$detection_time) + unique(NPI_df$specific_vaccine_start) + unique(NPI_df$time_to_coverage_spec) + 10),
                   ylim = c(0.5, unique(NPI_df$R0) + 0.5)) +
   theme(legend.position = "none",
+        axis.title.x = element_blank(),
+        axis.title.y = element_blank(),
         strip.background = element_rect(fill="#F5F5F5"))
 
 ## Efficacy plot
+IFR_fixed <- 1
+specific_vaccine_start_fixed <- 200
 disease_efficacy_plotting <- model_outputs %>%
-  filter(IFR == 1, NPI_int %in% NPI_to_include) %>%
+  filter(IFR == IFR_fixed, NPI_int %in% NPI_to_include, specific_vaccine_start == specific_vaccine_start_fixed) %>%
   filter(map_lgl(varied, ~ setequal(., c("R0", "IFR", "specific_vaccine_start", "efficacy_disease_bpsv")))) %>%
   group_by(R0, specific_vaccine_start, efficacy_disease_bpsv, NPI_int) %>%
-  # filter(NPI_int != 9) %>%
   summarise(min_deaths_averted = min(bpsv_deaths_averted) * 1000 / population_size,
             max_deaths_averted = max(bpsv_deaths_averted) * 1000 / population_size,
             central_deaths_averted = bpsv_deaths_averted * 1000 / population_size,
@@ -190,10 +200,55 @@ disease_efficacy_plotting <- model_outputs %>%
             time_under_NPIs_bpsv = time_under_NPIs_bpsv,
             composite_NPI_bpsv = composite_NPI_bpsv)
 
+ribbon_plotting <- disease_efficacy_plotting %>%
+  filter(R0 != 1.5) %>%
+  group_by(efficacy_disease_bpsv, R0) %>%
+  summarise(lower = ifelse(min(central_deaths_averted) - 0.2 < 0, 0, min(central_deaths_averted) - 0.2),
+            upper = max(central_deaths_averted) + 0.2)
+
+disease_efficacy_plot <- ggplot(subset(disease_efficacy_plotting, R0 != 1.5)) +
+  geom_ribbon(data = ribbon_plotting, aes(x = 100 * efficacy_disease_bpsv, ymin = lower, ymax = upper, group = R0), 
+              alpha = 0.1, colour = "black", linetype = "dashed") +
+  geom_line(aes(x = 100 * efficacy_disease_bpsv, y = central_deaths_averted, 
+                col = interaction(factor(R0), factor(NPI_int))), size = 1) +
+  geom_jitter(aes(x = 100 * efficacy_disease_bpsv, y = central_deaths_averted,
+                  fill = interaction(factor(R0), factor(NPI_int))),
+              size = 3, pch = 21, width = 0, height = 0) +
+  theme_bw() +
+  scale_colour_manual(values = c(rev(generate_palette(NPI_colours[1], modification = "go_lighter", 
+                                                      n_colours = 3, view_palette = TRUE)),
+                                 rev(generate_palette(NPI_colours[2], modification = "go_lighter", 
+                                                      n_colours = 3, view_palette = TRUE)),
+                                 rev(generate_palette(NPI_colours[3], modification = "go_lighter", 
+                                                      n_colours = 3, view_palette = TRUE))))  +
+  scale_fill_manual(values = c(rev(generate_palette(NPI_colours[1], modification = "go_lighter", 
+                                                    n_colours = 3, view_palette = TRUE)),
+                               rev(generate_palette(NPI_colours[2], modification = "go_lighter", 
+                                                    n_colours = 3, view_palette = TRUE)),
+                               rev(generate_palette(NPI_colours[3], modification = "go_lighter", 
+                                                    n_colours = 3, view_palette = TRUE)))) +
+  scale_x_continuous(breaks = c(25, 50, 75, 100), labels = paste0(c(25, 50, 75, 100), "%")) +
+  annotate("text", x = 102, y = 2, label = "R0=2.0", color = "black", size = 5, hjust = 0) +
+  annotate("text", x = 102, y = 5.5, label = "R0=2.5", color = "black", size = 5, hjust = 0) +
+  annotate("text", x = 102, y = 6.75, label = "R0=3.5", color = "black", size = 5, hjust = 0) +
+  coord_cartesian(ylim = c(0, 8),
+                  xlim = c(min(disease_efficacy_plotting$efficacy_disease_bpsv) * 100, 110)) +
+  labs(x = "BPSV Disease Efficacy", y = "Deaths Averted By BPSV Per 1000") +
+  guides(fill = guide_legend("NPI\nScenario"), colour = "none") +
+  theme(legend.position = "bottom")
+
+disease_efficacy_plot +
+  annotation_custom(
+    ggplotGrob(NPI_plot),
+    xmin = 0, xmax = 25, ymin = 3.3, ymax = 8.25)
+
+
+# cowplot::plot_grid(NPI_plot, overall_deaths_plot)
+
 ggplot(subset(disease_efficacy_plotting, specific_vaccine_start != 100 & R0 != 1.5)) +
-  # geom_point(aes(x = 100 * efficacy_disease_bpsv, y = central_deaths_averted, fill = 100 * efficacy_disease_bpsv), 
+  # geom_point(aes(x = 100 * efficacy_disease_bpsv, y = central_deaths_averted, fill = R0),
   #            size = 3, pch = 21) +
-  geom_jitter(aes(x = 100 * efficacy_disease_bpsv, y = central_deaths_averted, fill = R0), 
+  geom_jitter(aes(x = 100 * efficacy_disease_bpsv, y = central_deaths_averted, fill = R0),
               size = 3, pch = 21, width = 5) +
   theme_bw() +
   scale_x_continuous(breaks = c(0, 25, 50, 75, 100), labels = paste0(c(0, 25, 50, 75, 100), "%")) +
@@ -233,24 +288,6 @@ x <- ggplot(disease_efficacy_plotting) +
 
 test <- disease_efficacy_plotting %>%
   filter(round(efficacy_disease_bpsv, 2) == 0.75)
-
-x <- ggplot(test) +
-  geom_point(aes(x = specific_vaccine_start, y = central_deaths_averted, col = factor(R0)), size = 1) +
-  geom_line(aes(x = specific_vaccine_start, y = central_deaths_averted, col = factor(R0)), size = 1) +
-  scale_colour_manual(values = NPI_colours) +
-  scale_fill_manual(values = NPI_colours) +
-  scale_y_continuous(position = "right") +
-  facet_grid(NPI_int ~ ., scales = "free_y") +
-  theme_bw() +
-  labs(x = "Time to Disease-Specific vaccine", y = "Deaths Averted By BPSV Per 1000") +
-  guides(colour = guide_legend("R0")) +
-  theme(legend.position = "right",
-        strip.background = element_blank(),
-        strip.text = element_blank())
-NPI_plot2 <- NPI_plot +
-  facet_wrap(. ~ scenario, nrow = 3) 
-
-cowplot::plot_grid(NPI_plot2, x, rel_widths = c(1, 2))
 
 y <- ggplot(disease_efficacy_plotting) +
   geom_line(aes(x = 100 * efficacy_disease_bpsv, y = perc_deaths_averted, col = factor(NPI_int)), size = 1) +
