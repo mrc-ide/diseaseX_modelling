@@ -189,7 +189,7 @@ IFR_fixed <- 1
 specific_vaccine_start_fixed <- 200
 disease_efficacy_plotting <- model_outputs %>%
   filter(IFR == IFR_fixed, NPI_int %in% NPI_to_include, specific_vaccine_start == specific_vaccine_start_fixed) %>%
-  filter(map_lgl(varied, ~ setequal(., c("R0", "IFR", "specific_vaccine_start", "efficacy_disease_bpsv")))) %>%
+  filter(map_lgl(varied, ~ setequal(., c("R0", "specific_vaccine_start", "efficacy_disease_bpsv")))) %>%
   group_by(R0, specific_vaccine_start, efficacy_disease_bpsv, NPI_int) %>%
   summarise(min_deaths_averted = min(bpsv_deaths_averted) * 1000 / population_size,
             max_deaths_averted = max(bpsv_deaths_averted) * 1000 / population_size,
@@ -201,12 +201,12 @@ disease_efficacy_plotting <- model_outputs %>%
             composite_NPI_bpsv = composite_NPI_bpsv)
 
 ribbon_plotting_eff <- disease_efficacy_plotting %>%
-  filter(R0 != 1.5) %>%
+  filter(R0 != 1.5 & R0 != 3) %>%
   group_by(efficacy_disease_bpsv, R0) %>%
   summarise(lower = ifelse(min(central_deaths_averted) - 0.2 < 0, 0, min(central_deaths_averted) - 0.2),
             upper = max(central_deaths_averted) + 0.2)
 
-disease_efficacy_plot <- ggplot(subset(disease_efficacy_plotting, R0 != 1.5)) +
+disease_efficacy_plot <- ggplot(subset(disease_efficacy_plotting, R0 != 1.5 & R0 != 3)) +
   geom_ribbon(data = ribbon_plotting_eff, aes(x = 100 * efficacy_disease_bpsv, ymin = lower, ymax = upper, group = R0), 
               alpha = 0.1, colour = "black", linetype = "dashed") +
   geom_line(aes(x = 100 * efficacy_disease_bpsv, y = central_deaths_averted, 
@@ -231,7 +231,7 @@ disease_efficacy_plot <- ggplot(subset(disease_efficacy_plotting, R0 != 1.5)) +
   annotate("text", x = 102, y = 2, label = expression(paste("R"[0], " 2.0")), color = "black", size = 5, hjust = 0) +
   annotate("text", x = 102, y = 5.5, label = expression(paste("R"[0], " 2.5")), color = "black", size = 5, hjust = 0) +
   annotate("text", x = 102, y = 6.75, label = expression(paste("R"[0], " 3.5")), color = "black", size = 5, hjust = 0) +
-  coord_cartesian(ylim = c(0, 8.5),
+  coord_cartesian(ylim = c(0, 9),
                   xlim = c(min(disease_efficacy_plotting$efficacy_disease_bpsv) * 100, 110)) +
   labs(x = "BPSV Disease Efficacy", y = "Deaths Averted By BPSV Per 1000") +
   guides(fill = guide_legend("NPI\nScenario"), colour = "none") +
@@ -242,7 +242,7 @@ disease_efficacy_plot2 <- disease_efficacy_plot +
     ggplotGrob(NPI_plot),
     xmin = 0, xmax = 35, ymin = 3.8, ymax = 9.25)
 
-eff_plot <- ggplot(subset(disease_efficacy_plotting, R0 != 1.5)) +
+eff_plot <- ggplot(subset(disease_efficacy_plotting, R0 != 1.5 & R0 != 3)) +
   geom_ribbon(data = subset(ribbon_plotting_eff, R0 == 2.5),
               aes(x = 100 * efficacy_disease_bpsv,
                   ymin = lower, ymax = upper, group = R0),
@@ -250,7 +250,7 @@ eff_plot <- ggplot(subset(disease_efficacy_plotting, R0 != 1.5)) +
   geom_ribbon(data = subset(ribbon_plotting_eff, R0 == 2),
               aes(x = 100 * efficacy_disease_bpsv,
                   ymin = lower, ymax = upper, group = R0),
-              alpha = 0.03) +
+              alpha = 0.05) +
               # alpha = 0.03, col = "black",linetype = "dashed") +
   geom_ribbon(data = subset(ribbon_plotting_eff, R0 == 3.5),
               aes(x = 100 * efficacy_disease_bpsv,
@@ -295,7 +295,7 @@ dur_protect_plotting <- model_outputs %>%
   filter(IFR == IFR_fixed, 
          NPI_int %in% NPI_to_include, 
          specific_vaccine_start == specific_vaccine_start_fixed) %>%
-  filter(map_lgl(varied, ~ setequal(., c("R0", "IFR", "specific_vaccine_start", "dur_bpsv")))) %>%
+  filter(map_lgl(varied, ~ setequal(., c("R0", "specific_vaccine_start", "dur_bpsv")))) %>%
   group_by(R0, specific_vaccine_start, dur_bpsv , NPI_int) %>%
   summarise(min_deaths_averted = min(bpsv_deaths_averted) * 1000 / population_size,
             max_deaths_averted = max(bpsv_deaths_averted) * 1000 / population_size,
@@ -329,12 +329,12 @@ dur_protect_plot <- ggplot(subset(dur_protect_plotting, R0 == 2.5)) +
   theme(legend.position = "none")
 
 ribbon_plotting_dur <- dur_protect_plotting %>%
-  filter(R0 != 1.5) %>%
+  filter(R0 != 1.5 & R0 != 3) %>%
   group_by(dur_bpsv, R0) %>%
   summarise(lower = ifelse(min(central_deaths_averted) - 0.05 < 0, 0, min(central_deaths_averted) - 0.05),
             upper = max(central_deaths_averted) + 0.05)
 
-dur_protect_plot2 <- ggplot(subset(dur_protect_plotting, R0 != 1.5)) +
+dur_protect_plot2 <- ggplot(subset(dur_protect_plotting, R0 != 1.5 & R0 != 3)) +
   geom_ribbon(data = ribbon_plotting_dur, aes(x = dur_bpsv, ymin = lower, ymax = upper, group = R0), 
               alpha = 0.1, colour = "black", linetype = "dashed") +
   geom_line(aes(x = dur_bpsv, y = central_deaths_averted, 
@@ -364,7 +364,7 @@ delay_protect_plotting <- model_outputs %>%
   filter(IFR == IFR_fixed, 
          NPI_int %in% NPI_to_include,
          specific_vaccine_start == specific_vaccine_start_fixed) %>%
-  filter(map_lgl(varied, ~ setequal(., c("R0", "IFR", "specific_vaccine_start", "bpsv_protection_delay")))) %>%
+  filter(map_lgl(varied, ~ setequal(., c("R0", "specific_vaccine_start", "bpsv_protection_delay")))) %>%
   group_by(R0, specific_vaccine_start, bpsv_protection_delay , NPI_int) %>%
   summarise(min_deaths_averted = min(bpsv_deaths_averted) * 1000 / population_size,
             max_deaths_averted = max(bpsv_deaths_averted) * 1000 / population_size,
@@ -398,12 +398,12 @@ delay_protect_plot <- ggplot(subset(delay_protect_plotting, R0 == 2.5)) +
   theme(legend.position = "none")
 
 ribbon_plotting_delay <- delay_protect_plotting %>%
-  filter(R0 != 1.5) %>%
+  filter(R0 != 1.5 & R0 != 3) %>%
   group_by(bpsv_protection_delay, R0) %>%
   summarise(lower = ifelse(min(central_deaths_averted) - 0.2 < 0, 0, min(central_deaths_averted) - 0.2),
             upper = max(central_deaths_averted) + 0.2)
 
-delay_protect_plot2 <- ggplot(subset(delay_protect_plotting, R0 != 1.5)) +
+delay_protect_plot2 <- ggplot(subset(delay_protect_plotting, R0 != 1.5 & R0 != 3)) +
   geom_ribbon(data = ribbon_plotting_delay, aes(x = bpsv_protection_delay, ymin = lower, ymax = upper, group = R0), 
               alpha = 0.1, colour = "black", linetype = "dashed") +
   geom_line(aes(x = bpsv_protection_delay, y = central_deaths_averted, 
