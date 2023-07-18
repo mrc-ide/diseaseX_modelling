@@ -32,7 +32,7 @@ minimal_mandate_reduction <- 0.25    # Fold-reduction in R0 achieved under minim
 
 ### BPSV Efficacy Against Disease
 raw_bpsv_efficacy_scenarios <- create_scenarios(R0 = c(1.5, 2, 2.5, 3, 3.5),                   # Basic reproduction number
-                                                IFR = c(0.5, 1, 1.5),                          # IFR
+                                                IFR = 1,                          # IFR
                                                 population_size = 10^10,
                                                 Tg = 5.5,                                      # Tg
                                                 detection_time = 14,                           # detection time
@@ -60,12 +60,12 @@ bpsv_eff_scenarios <- raw_bpsv_efficacy_scenarios %>%
 
 ### BPSV Delay Between Vaccination Receipt & Protection
 raw_bpsv_delay_scenarios <- create_scenarios(R0 = c(1.5, 2, 2.5, 3, 3.5),                   # Basic reproduction number
-                                             IFR = c(0.5, 1, 1.5),                          # IFR
+                                             IFR = 1,                          # IFR
                                              population_size = 10^10,
                                              Tg = 5.5,                                      # Tg
                                              detection_time = 14,                           # detection time
-                                             bpsv_start = 14,                               # BPSV distribution start (time after detection time)
-                                             bpsv_protection_delay = seq(2, 100, 50),       # delay between receipt of BPSV dose and protection
+                                             bpsv_start = 7,                               # BPSV distribution start (time after detection time)
+                                             bpsv_protection_delay = seq(2, 42, 2),       # delay between receipt of BPSV dose and protection
                                              specific_vaccine_start = c(100, 200, 365, 500),# specific vaccine distribution start (time after detection time)
                                              specific_protection_delay = 7,                 # delay between receipt of specific dose and protection
                                              efficacy_infection_bpsv = 0.35,                # vaccine efficacy against infection - BPSV
@@ -88,11 +88,11 @@ bpsv_delay_scenarios <- raw_bpsv_delay_scenarios %>%
 
 ### BPSV Duration of Immunity
 raw_dur_bpsv_scenarios <- create_scenarios(R0 = c(1.5, 2, 2.5, 3, 3.5),                   # Basic reproduction number
-                                           IFR = c(0.5, 1, 1.5),                          # IFR
+                                           IFR = 1,                          # IFR
                                            population_size = 10^10,
                                            Tg = 5.5,                                      # Tg
                                            detection_time = 14,                           # detection time
-                                           bpsv_start = 14,                               # BPSV distribution start (time after detection time)
+                                           bpsv_start = 7,                               # BPSV distribution start (time after detection time)
                                            bpsv_protection_delay = 7,                     # delay between receipt of BPSV dose and protection
                                            specific_vaccine_start = c(100, 200, 365, 500),# specific vaccine distribution start (time after detection time)
                                            specific_protection_delay = 7,                 # delay between receipt of specific dose and protection
