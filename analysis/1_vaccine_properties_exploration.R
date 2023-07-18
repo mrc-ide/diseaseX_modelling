@@ -241,10 +241,6 @@ disease_efficacy_plot2 <- disease_efficacy_plot +
   annotation_custom(
     ggplotGrob(NPI_plot),
     xmin = 0, xmax = 35, ymin = 3.8, ymax = 9.25)
-ggsave(filename = "figures/disease_efficacy_plot.pdf",
-       plot = disease_efficacy_plot2,
-       height = 6.5,
-       width = 6.5)
 
 eff_plot <- ggplot(subset(disease_efficacy_plotting, R0 != 1.5)) +
   geom_ribbon(data = subset(ribbon_plotting_eff, R0 == 2.5),
@@ -445,8 +441,18 @@ overall1
 overall2
 overall3
 
-
-
+ggsave(filename = "figures/vaccine_properties_plot_V1.pdf",
+       plot = overall1,
+       height = 7.16,
+       width = 9.92)
+ggsave(filename = "figures/vaccine_properties_plot_V2.pdf",
+       plot = overall2,
+       height = 7.16,
+       width = 9.92)
+ggsave(filename = "figures/vaccine_properties_plot_V3.pdf",
+       plot = overall3,
+       height = 7.16,
+       width = 9.92)
 #####
 # 
 # delay_protect_plot <- ggplot(subset(delay_protect_plotting, R0 != 1.5 & NPI_int == 7)) +
