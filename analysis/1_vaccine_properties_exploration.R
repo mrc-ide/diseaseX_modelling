@@ -65,7 +65,7 @@ raw_bpsv_delay_scenarios <- create_scenarios(R0 = c(1.5, 2, 2.5, 3, 3.5),       
                                              Tg = 5.5,                                      # Tg
                                              detection_time = 14,                           # detection time
                                              bpsv_start = 14,                               # BPSV distribution start (time after detection time)
-                                             bpsv_protection_delay = seq(2, 21, 1),         # delay between receipt of BPSV dose and protection
+                                             bpsv_protection_delay = seq(2, 100, 50),       # delay between receipt of BPSV dose and protection
                                              specific_vaccine_start = c(100, 200, 365, 500),# specific vaccine distribution start (time after detection time)
                                              specific_protection_delay = 7,                 # delay between receipt of specific dose and protection
                                              efficacy_infection_bpsv = 0.35,                # vaccine efficacy against infection - BPSV
@@ -184,7 +184,7 @@ NPI_plot <- ggplot(NPI_df, aes(x = tt_Rt - overplot_factor, colour = scenario)) 
         axis.title.y = element_blank(),
         strip.background = element_rect(fill="#F5F5F5"))
 
-## Efficacy plot
+## Disease Efficacy plot
 IFR_fixed <- 1
 specific_vaccine_start_fixed <- 200
 disease_efficacy_plotting <- model_outputs %>%
@@ -200,14 +200,14 @@ disease_efficacy_plotting <- model_outputs %>%
             time_under_NPIs_bpsv = time_under_NPIs_bpsv,
             composite_NPI_bpsv = composite_NPI_bpsv)
 
-ribbon_plotting <- disease_efficacy_plotting %>%
+ribbon_plotting_eff <- disease_efficacy_plotting %>%
   filter(R0 != 1.5) %>%
   group_by(efficacy_disease_bpsv, R0) %>%
   summarise(lower = ifelse(min(central_deaths_averted) - 0.2 < 0, 0, min(central_deaths_averted) - 0.2),
             upper = max(central_deaths_averted) + 0.2)
 
 disease_efficacy_plot <- ggplot(subset(disease_efficacy_plotting, R0 != 1.5)) +
-  geom_ribbon(data = ribbon_plotting, aes(x = 100 * efficacy_disease_bpsv, ymin = lower, ymax = upper, group = R0), 
+  geom_ribbon(data = ribbon_plotting_eff, aes(x = 100 * efficacy_disease_bpsv, ymin = lower, ymax = upper, group = R0), 
               alpha = 0.1, colour = "black", linetype = "dashed") +
   geom_line(aes(x = 100 * efficacy_disease_bpsv, y = central_deaths_averted, 
                 col = interaction(factor(R0), factor(NPI_int))), size = 1) +
@@ -216,185 +216,449 @@ disease_efficacy_plot <- ggplot(subset(disease_efficacy_plotting, R0 != 1.5)) +
               size = 3, pch = 21, width = 0, height = 0) +
   theme_bw() +
   scale_colour_manual(values = c(rev(generate_palette(NPI_colours[1], modification = "go_lighter", 
-                                                      n_colours = 3, view_palette = TRUE)),
+                                                      n_colours = 3)),
                                  rev(generate_palette(NPI_colours[2], modification = "go_lighter", 
-                                                      n_colours = 3, view_palette = TRUE)),
+                                                      n_colours = 3)),
                                  rev(generate_palette(NPI_colours[3], modification = "go_lighter", 
-                                                      n_colours = 3, view_palette = TRUE))))  +
+                                                      n_colours = 3))))  +
   scale_fill_manual(values = c(rev(generate_palette(NPI_colours[1], modification = "go_lighter", 
-                                                    n_colours = 3, view_palette = TRUE)),
+                                                    n_colours = 3)),
                                rev(generate_palette(NPI_colours[2], modification = "go_lighter", 
-                                                    n_colours = 3, view_palette = TRUE)),
+                                                    n_colours = 3)),
                                rev(generate_palette(NPI_colours[3], modification = "go_lighter", 
-                                                    n_colours = 3, view_palette = TRUE)))) +
+                                                    n_colours = 3)))) +
   scale_x_continuous(breaks = c(25, 50, 75, 100), labels = paste0(c(25, 50, 75, 100), "%")) +
-  annotate("text", x = 102, y = 2, label = "R0=2.0", color = "black", size = 5, hjust = 0) +
-  annotate("text", x = 102, y = 5.5, label = "R0=2.5", color = "black", size = 5, hjust = 0) +
-  annotate("text", x = 102, y = 6.75, label = "R0=3.5", color = "black", size = 5, hjust = 0) +
-  coord_cartesian(ylim = c(0, 8),
+  annotate("text", x = 102, y = 2, label = expression(paste("R"[0], " 2.0")), color = "black", size = 5, hjust = 0) +
+  annotate("text", x = 102, y = 5.5, label = expression(paste("R"[0], " 2.5")), color = "black", size = 5, hjust = 0) +
+  annotate("text", x = 102, y = 6.75, label = expression(paste("R"[0], " 3.5")), color = "black", size = 5, hjust = 0) +
+  coord_cartesian(ylim = c(0, 8.5),
                   xlim = c(min(disease_efficacy_plotting$efficacy_disease_bpsv) * 100, 110)) +
   labs(x = "BPSV Disease Efficacy", y = "Deaths Averted By BPSV Per 1000") +
   guides(fill = guide_legend("NPI\nScenario"), colour = "none") +
-  theme(legend.position = "bottom")
+  theme(legend.position = "none")
 
-disease_efficacy_plot +
+disease_efficacy_plot2 <- disease_efficacy_plot + 
   annotation_custom(
     ggplotGrob(NPI_plot),
-    xmin = 0, xmax = 25, ymin = 3.3, ymax = 8.25)
+    xmin = 0, xmax = 35, ymin = 3.8, ymax = 9.25)
+ggsave(filename = "figures/disease_efficacy_plot.pdf",
+       plot = disease_efficacy_plot2,
+       height = 6.5,
+       width = 6.5)
 
-
-# cowplot::plot_grid(NPI_plot, overall_deaths_plot)
-
-ggplot(subset(disease_efficacy_plotting, specific_vaccine_start != 100 & R0 != 1.5)) +
-  # geom_point(aes(x = 100 * efficacy_disease_bpsv, y = central_deaths_averted, fill = R0),
-  #            size = 3, pch = 21) +
-  geom_jitter(aes(x = 100 * efficacy_disease_bpsv, y = central_deaths_averted, fill = R0),
-              size = 3, pch = 21, width = 5) +
+eff_plot <- ggplot(subset(disease_efficacy_plotting, R0 != 1.5)) +
+  geom_ribbon(data = subset(ribbon_plotting_eff, R0 == 2.5),
+              aes(x = 100 * efficacy_disease_bpsv,
+                  ymin = lower, ymax = upper, group = R0),
+              alpha = 0.1, col = "black",linetype = "dashed") +
+  geom_ribbon(data = subset(ribbon_plotting_eff, R0 == 2),
+              aes(x = 100 * efficacy_disease_bpsv,
+                  ymin = lower, ymax = upper, group = R0),
+              alpha = 0.03) +
+              # alpha = 0.03, col = "black",linetype = "dashed") +
+  geom_ribbon(data = subset(ribbon_plotting_eff, R0 == 3.5),
+              aes(x = 100 * efficacy_disease_bpsv,
+                  ymin = lower, ymax = upper, group = R0),
+              alpha = 0.05) +
+              # alpha = 0.05, col = "black",linetype = "dashed") +
+  geom_line(aes(x = 100 * efficacy_disease_bpsv, y = central_deaths_averted, 
+                col = interaction(factor(R0), factor(NPI_int))), size = 1) +
+  geom_jitter(aes(x = 100 * efficacy_disease_bpsv, y = central_deaths_averted,
+                  fill = interaction(factor(R0), factor(NPI_int))),
+              size = 3, pch = 21, width = 0, height = 0) +
   theme_bw() +
-  scale_x_continuous(breaks = c(0, 25, 50, 75, 100), labels = paste0(c(0, 25, 50, 75, 100), "%")) +
-  scale_fill_viridis_c(name = "Vaccine Efficacy", option = "magma") +
+  scale_alpha_manual(values = c(0.1, 0.5, 0.1)) +
+  scale_colour_manual(values = c(rev(generate_palette(NPI_colours[1], modification = "go_lighter", 
+                                                      n_colours = 3)),
+                                 rev(generate_palette(NPI_colours[2], modification = "go_lighter", 
+                                                      n_colours = 3)),
+                                 rev(generate_palette(NPI_colours[3], modification = "go_lighter", 
+                                                      n_colours = 3))))  +
+  scale_fill_manual(values = c(rev(generate_palette(NPI_colours[1], modification = "go_lighter", 
+                                                    n_colours = 3)),
+                               rev(generate_palette(NPI_colours[2], modification = "go_lighter", 
+                                                    n_colours = 3)),
+                               rev(generate_palette(NPI_colours[3], modification = "go_lighter", 
+                                                    n_colours = 3)))) +
+  scale_x_continuous(breaks = c(25, 50, 75, 100), labels = paste0(c(25, 50, 75, 100), "%")) +
+  annotate("text", x = 102, y = 2, label = expression(paste("R"[0], " 2.0")), color = "black", size = 5, hjust = 0) +
+  annotate("text", x = 102, y = 5.5, label = expression(paste("R"[0], " 2.5")), color = "black", size = 5, hjust = 0) +
+  annotate("text", x = 102, y = 6.75, label = expression(paste("R"[0], " 3.5")), color = "black", size = 5, hjust = 0) +
+  coord_cartesian(ylim = c(0, 9),
+                  xlim = c(min(disease_efficacy_plotting$efficacy_disease_bpsv) * 100, 110)) +
   labs(x = "BPSV Disease Efficacy", y = "Deaths Averted By BPSV Per 1000") +
-  guides(colour = guide_legend("NPI\nScenario")) +
-  theme(legend.position = "bottom")
+  guides(fill = guide_legend("NPI\nScenario"), colour = "none") +
+  theme(legend.position = "none")
+eff_plot2 <- eff_plot + 
+  annotation_custom(
+    ggplotGrob(NPI_plot),
+    xmin = 0, xmax = 35, ymin = 3.8, ymax = 9.25)
 
-# ggplot(disease_efficacy_plotting) +
-#   geom_point(aes(x = composite_NPI_bpsv, y = central_deaths_averted, col = 100 * efficacy_disease_bpsv), size = 1) +
+## Duration of protection plot
+dur_protect_plotting <- model_outputs %>%
+  filter(IFR == IFR_fixed, 
+         NPI_int %in% NPI_to_include, 
+         specific_vaccine_start == specific_vaccine_start_fixed) %>%
+  filter(map_lgl(varied, ~ setequal(., c("R0", "IFR", "specific_vaccine_start", "dur_bpsv")))) %>%
+  group_by(R0, specific_vaccine_start, dur_bpsv , NPI_int) %>%
+  summarise(min_deaths_averted = min(bpsv_deaths_averted) * 1000 / population_size,
+            max_deaths_averted = max(bpsv_deaths_averted) * 1000 / population_size,
+            central_deaths_averted = bpsv_deaths_averted * 1000 / population_size,
+            perc_deaths_averted = 100 * bpsv_deaths_averted / deaths_spec,
+            total_deaths_spec = deaths_spec * 1000 / population_size,
+            total_deaths_bpsv = deaths_bpsv * 1000 / population_size,
+            time_under_NPIs_bpsv = time_under_NPIs_bpsv,
+            composite_NPI_bpsv = composite_NPI_bpsv)
+
+dur_protect_plot <- ggplot(subset(dur_protect_plotting, R0 == 2.5)) +
+  geom_line(aes(x = dur_bpsv, y = central_deaths_averted, col = factor(NPI_int)), size = 1) +
+  geom_point(aes(x = dur_bpsv, y = central_deaths_averted, fill = factor(NPI_int)), 
+             size = 2, pch = 21, col = "black") +
+  scale_colour_manual(values = c(rev(generate_palette(NPI_colours[1], modification = "go_lighter", 
+                                                      n_colours = 3))[2],
+                                 rev(generate_palette(NPI_colours[2], modification = "go_lighter", 
+                                                      n_colours = 3))[2],
+                                 rev(generate_palette(NPI_colours[3], modification = "go_lighter", 
+                                                      n_colours = 3))[2]))  +
+  scale_fill_manual(values = c(rev(generate_palette(NPI_colours[1], modification = "go_lighter", 
+                                                    n_colours = 3))[2],
+                               rev(generate_palette(NPI_colours[2], modification = "go_lighter", 
+                                                    n_colours = 3))[2],
+                               rev(generate_palette(NPI_colours[3], modification = "go_lighter", 
+                                                    n_colours = 3))[2]))  +
+  theme_bw() +
+  lims(y = c(0, max(subset(dur_protect_plotting, R0 == 2.5)$central_deaths_averted))) +
+  labs(x = "BPSV Immunity Duration (Days)", y = "Deaths Averted By BPSV Per 1000") +
+  guides(fill = guide_legend("NPI\nScenario"), colour = "none") +
+  theme(legend.position = "none")
+
+ribbon_plotting_dur <- dur_protect_plotting %>%
+  filter(R0 != 1.5) %>%
+  group_by(dur_bpsv, R0) %>%
+  summarise(lower = ifelse(min(central_deaths_averted) - 0.05 < 0, 0, min(central_deaths_averted) - 0.05),
+            upper = max(central_deaths_averted) + 0.05)
+
+dur_protect_plot2 <- ggplot(subset(dur_protect_plotting, R0 != 1.5)) +
+  geom_ribbon(data = ribbon_plotting_dur, aes(x = dur_bpsv, ymin = lower, ymax = upper, group = R0), 
+              alpha = 0.1, colour = "black", linetype = "dashed") +
+  geom_line(aes(x = dur_bpsv, y = central_deaths_averted, 
+                col = interaction(factor(R0), factor(NPI_int))), size = 1) +
+  geom_point(aes(x = dur_bpsv, y = central_deaths_averted, 
+                 fill = interaction(factor(R0), factor(NPI_int))), 
+             size = 2, pch = 21, col = "black") +
+  scale_colour_manual(values = c(rev(generate_palette(NPI_colours[1], modification = "go_lighter", 
+                                                      n_colours = 3)),
+                                 rev(generate_palette(NPI_colours[2], modification = "go_lighter", 
+                                                      n_colours = 3)),
+                                 rev(generate_palette(NPI_colours[3], modification = "go_lighter", 
+                                                      n_colours = 3))))  +
+  scale_fill_manual(values = c(rev(generate_palette(NPI_colours[1], modification = "go_lighter", 
+                                                    n_colours = 3)),
+                               rev(generate_palette(NPI_colours[2], modification = "go_lighter", 
+                                                    n_colours = 3)),
+                               rev(generate_palette(NPI_colours[3], modification = "go_lighter", 
+                                                    n_colours = 3))))  +
+  theme_bw() +
+  labs(x = "BPSV Immunity Duration (Days)", y = "Deaths Averted By BPSV Per 1000") +
+  guides(fill = guide_legend("NPI\nScenario"), colour = "none") +
+  theme(legend.position = "none")
+
+## Delay to protection plot
+delay_protect_plotting <- model_outputs %>%
+  filter(IFR == IFR_fixed, 
+         NPI_int %in% NPI_to_include,
+         specific_vaccine_start == specific_vaccine_start_fixed) %>%
+  filter(map_lgl(varied, ~ setequal(., c("R0", "IFR", "specific_vaccine_start", "bpsv_protection_delay")))) %>%
+  group_by(R0, specific_vaccine_start, bpsv_protection_delay , NPI_int) %>%
+  summarise(min_deaths_averted = min(bpsv_deaths_averted) * 1000 / population_size,
+            max_deaths_averted = max(bpsv_deaths_averted) * 1000 / population_size,
+            central_deaths_averted = bpsv_deaths_averted * 1000 / population_size,
+            perc_deaths_averted = 100 * bpsv_deaths_averted / deaths_spec,
+            total_deaths_spec = deaths_spec * 1000 / population_size,
+            total_deaths_bpsv = deaths_bpsv * 1000 / population_size,
+            time_under_NPIs_bpsv = time_under_NPIs_bpsv,
+            composite_NPI_bpsv = composite_NPI_bpsv)
+
+delay_protect_plot <- ggplot(subset(delay_protect_plotting, R0 == 2.5)) +
+  geom_line(aes(x = bpsv_protection_delay, y = central_deaths_averted, col = factor(NPI_int)), size = 1) +
+  geom_point(aes(x = bpsv_protection_delay, y = central_deaths_averted, fill = factor(NPI_int)), 
+             size = 2, pch = 21, col = "black") +
+  scale_colour_manual(values = c(rev(generate_palette(NPI_colours[1], modification = "go_lighter", 
+                                                      n_colours = 3))[2],
+                                 rev(generate_palette(NPI_colours[2], modification = "go_lighter", 
+                                                      n_colours = 3))[2],
+                                 rev(generate_palette(NPI_colours[3], modification = "go_lighter", 
+                                                      n_colours = 3))[2]))  +
+  scale_fill_manual(values = c(rev(generate_palette(NPI_colours[1], modification = "go_lighter", 
+                                                      n_colours = 3))[2],
+                                 rev(generate_palette(NPI_colours[2], modification = "go_lighter", 
+                                                      n_colours = 3))[2],
+                                 rev(generate_palette(NPI_colours[3], modification = "go_lighter", 
+                                                      n_colours = 3))[2]))  +
+  theme_bw() +
+  lims(y = c(0, max(subset(delay_protect_plotting, R0 == 2.5)$central_deaths_averted))) +
+  labs(x = "Protection Delay (Days)", y = "Deaths Averted By BPSV Per 1000") +
+  guides(fill = guide_legend("NPI\nScenario"), colour = "none") +
+  theme(legend.position = "none")
+
+ribbon_plotting_delay <- delay_protect_plotting %>%
+  filter(R0 != 1.5) %>%
+  group_by(bpsv_protection_delay, R0) %>%
+  summarise(lower = ifelse(min(central_deaths_averted) - 0.2 < 0, 0, min(central_deaths_averted) - 0.2),
+            upper = max(central_deaths_averted) + 0.2)
+
+delay_protect_plot2 <- ggplot(subset(delay_protect_plotting, R0 != 1.5)) +
+  geom_ribbon(data = ribbon_plotting_delay, aes(x = bpsv_protection_delay, ymin = lower, ymax = upper, group = R0), 
+              alpha = 0.1, colour = "black", linetype = "dashed") +
+  geom_line(aes(x = bpsv_protection_delay, y = central_deaths_averted, 
+                col = interaction(factor(R0), factor(NPI_int))), size = 1) +
+  geom_point(aes(x = bpsv_protection_delay, y = central_deaths_averted, 
+                 fill = interaction(factor(R0), factor(NPI_int))), size = 2, pch = 21, col = "black") +
+  scale_colour_manual(values = c(rev(generate_palette(NPI_colours[1], modification = "go_lighter", 
+                                                      n_colours = 3)),
+                                 rev(generate_palette(NPI_colours[2], modification = "go_lighter", 
+                                                      n_colours = 3)),
+                                 rev(generate_palette(NPI_colours[3], modification = "go_lighter", 
+                                                      n_colours = 3))))  +
+  scale_fill_manual(values = c(rev(generate_palette(NPI_colours[1], modification = "go_lighter", 
+                                                      n_colours = 3)),
+                                 rev(generate_palette(NPI_colours[2], modification = "go_lighter", 
+                                                      n_colours = 3)),
+                                 rev(generate_palette(NPI_colours[3], modification = "go_lighter", 
+                                                      n_colours = 3))))  +
+  theme_bw() +
+  lims(y = c(0, max(subset(delay_protect_plotting, R0 != 1.5)$central_deaths_averted) + 0.2)) +
+  labs(x = "Protection Delay (Days)", y = "Deaths Averted By BPSV Per 1000") +
+  guides(fill = guide_legend("NPI\nScenario"), colour = "none") +
+  theme(legend.position = "none")
+
+## Altogether Plotting
+temp <- cowplot::plot_grid(dur_protect_plot2, delay_protect_plot2, nrow = 2, ncol = 1, labels = c("B", "C"))
+overall1 <- cowplot::plot_grid(disease_efficacy_plot2, temp, ncol = 2, rel_widths = c(1.5, 1), labels = c("A", ""))
+
+temp2 <- cowplot::plot_grid(dur_protect_plot, delay_protect_plot, nrow = 2, ncol = 1, labels = c("B", "C"))
+overall2 <- cowplot::plot_grid(disease_efficacy_plot2, temp2, ncol = 2, rel_widths = c(1.5, 1), labels = c("A", ""))
+
+overall3 <- cowplot::plot_grid(eff_plot2, temp2, ncol = 2, rel_widths = c(1.5, 1), labels = c("A", ""))
+
+overall1
+overall2
+overall3
+
+
+
+#####
+# 
+# delay_protect_plot <- ggplot(subset(delay_protect_plotting, R0 != 1.5 & NPI_int == 7)) +
+#   geom_line(aes(x = bpsv_protection_delay, y = central_deaths_averted, col = factor(R0)), size = 1) +
+#   scale_colour_manual(values = rev(generate_palette(NPI_colours[2], modification = "go_lighter", 
+#                                                     n_colours = 3, view_palette = TRUE))) +
 #   theme_bw() +
-#   labs(x = "BPSV Disease Efficacy", y = "Deaths Averted By BPSV Per 1000") +
-#   guides(colour = guide_legend("NPI\nScenario")) +
+#   labs(x = "Protection Delay (Days)", y = "Deaths Averted By BPSV Per 1000") +
+#   guides(fill = guide_legend("NPI\nScenario"), colour = "none") +
 #   theme(legend.position = "none")
 
-# ggplot(disease_efficacy_plotting) +
-#   geom_point(aes(x = composite_NPI_bpsv, y = central_deaths_averted, col = factor(NPI_int)), size = 1) +
+# ribbon_plotting <- disease_efficacy_plotting %>%
+#   filter(R0 != 1.5) %>%
+#   group_by(efficacy_disease_bpsv, R0) %>%
+#   summarise(lower = ifelse(min(central_deaths_averted) - 0.2 < 0, 0, min(central_deaths_averted) - 0.2),
+#             upper = max(central_deaths_averted) + 0.2)
+# 
+# disease_efficacy_plot <- ggplot(subset(disease_efficacy_plotting, R0 != 1.5)) +
+#   geom_ribbon(data = ribbon_plotting, aes(x = 100 * efficacy_disease_bpsv, ymin = lower, ymax = upper, group = R0), 
+#               alpha = 0.1, colour = "black", linetype = "dashed") +
+#   geom_line(aes(x = 100 * efficacy_disease_bpsv, y = central_deaths_averted, 
+#                 col = interaction(factor(R0), factor(NPI_int))), size = 1) +
+#   geom_jitter(aes(x = 100 * efficacy_disease_bpsv, y = central_deaths_averted,
+#                   fill = interaction(factor(R0), factor(NPI_int))),
+#               size = 3, pch = 21, width = 0, height = 0) +
+#   theme_bw() +
+#   scale_colour_manual(values = c(rev(generate_palette(NPI_colours[1], modification = "go_lighter", 
+#                                                       n_colours = 3, view_palette = TRUE)),
+#                                  rev(generate_palette(NPI_colours[2], modification = "go_lighter", 
+#                                                       n_colours = 3, view_palette = TRUE)),
+#                                  rev(generate_palette(NPI_colours[3], modification = "go_lighter", 
+#                                                       n_colours = 3, view_palette = TRUE))))  +
+#   scale_fill_manual(values = c(rev(generate_palette(NPI_colours[1], modification = "go_lighter", 
+#                                                     n_colours = 3, view_palette = TRUE)),
+#                                rev(generate_palette(NPI_colours[2], modification = "go_lighter", 
+#                                                     n_colours = 3, view_palette = TRUE)),
+#                                rev(generate_palette(NPI_colours[3], modification = "go_lighter", 
+#                                                     n_colours = 3, view_palette = TRUE)))) +
+#   scale_x_continuous(breaks = c(25, 50, 75, 100), labels = paste0(c(25, 50, 75, 100), "%")) +
+#   annotate("text", x = 102, y = 2, label = "R0=2.0", color = "black", size = 5, hjust = 0) +
+#   annotate("text", x = 102, y = 5.5, label = "R0=2.5", color = "black", size = 5, hjust = 0) +
+#   annotate("text", x = 102, y = 6.75, label = "R0=3.5", color = "black", size = 5, hjust = 0) +
+#   coord_cartesian(ylim = c(0, 8),
+#                   xlim = c(min(disease_efficacy_plotting$efficacy_disease_bpsv) * 100, 110)) +
+#   labs(x = "BPSV Disease Efficacy", y = "Deaths Averted By BPSV Per 1000") +
+#   guides(fill = guide_legend("NPI\nScenario"), colour = "none") +
+#   theme(legend.position = "none")
+# 
+# disease_efficacy_plot2 <- disease_efficacy_plot + 
+#   annotation_custom(
+#     ggplotGrob(NPI_plot),
+#     xmin = 0, xmax = 25, ymin = 3.3, ymax = 8.25)
+# ggsave(filename = "figures/disease_efficacy_plot.pdf",
+#        plot = disease_efficacy_plot2,
+#        height = 6.5,
+#        width = 6.5)
+# 
+# ## Vaccine Protection Delay Plot
+# 
+# 
+# 
+# 
+# ggplot(subset(disease_efficacy_plotting, specific_vaccine_start != 100 & R0 != 1.5)) +
+#   # geom_point(aes(x = 100 * efficacy_disease_bpsv, y = central_deaths_averted, fill = R0),
+#   #            size = 3, pch = 21) +
+#   geom_jitter(aes(x = 100 * efficacy_disease_bpsv, y = central_deaths_averted, fill = R0),
+#               size = 3, pch = 21, width = 5) +
+#   theme_bw() +
+#   scale_x_continuous(breaks = c(0, 25, 50, 75, 100), labels = paste0(c(0, 25, 50, 75, 100), "%")) +
+#   scale_fill_viridis_c(name = "Vaccine Efficacy", option = "magma") +
+#   labs(x = "BPSV Disease Efficacy", y = "Deaths Averted By BPSV Per 1000") +
+#   guides(colour = guide_legend("NPI\nScenario")) +
+#   theme(legend.position = "bottom")
+# 
+# # ggplot(disease_efficacy_plotting) +
+# #   geom_point(aes(x = composite_NPI_bpsv, y = central_deaths_averted, col = 100 * efficacy_disease_bpsv), size = 1) +
+# #   theme_bw() +
+# #   labs(x = "BPSV Disease Efficacy", y = "Deaths Averted By BPSV Per 1000") +
+# #   guides(colour = guide_legend("NPI\nScenario")) +
+# #   theme(legend.position = "none")
+# 
+# # ggplot(disease_efficacy_plotting) +
+# #   geom_point(aes(x = composite_NPI_bpsv, y = central_deaths_averted, col = factor(NPI_int)), size = 1) +
+# #   facet_grid(R0 ~ specific_vaccine_start, scales = "free_y") +
+# #   scale_colour_manual(values = NPI_colours) +
+# #   scale_fill_manual(values = NPI_colours) +
+# #   scale_x_continuous(breaks = c(0, 25, 50, 70, 100), labels = paste0(c(0, 25, 50, 75, 100), "%")) +
+# #   theme_bw() +
+# #   labs(x = "BPSV Disease Efficacy", y = "Deaths Averted By BPSV Per 1000") +
+# #   guides(colour = guide_legend("NPI\nScenario")) +
+# #   theme(legend.position = "none")
+# 
+# x <- ggplot(disease_efficacy_plotting) +
+#   geom_line(aes(x = 100 * efficacy_disease_bpsv, y = central_deaths_averted, col = factor(NPI_int)), size = 1) +
 #   facet_grid(R0 ~ specific_vaccine_start, scales = "free_y") +
 #   scale_colour_manual(values = NPI_colours) +
 #   scale_fill_manual(values = NPI_colours) +
-#   scale_x_continuous(breaks = c(0, 25, 50, 70, 100), labels = paste0(c(0, 25, 50, 75, 100), "%")) +
+#   scale_x_continuous(breaks = c(0, 25, 50, 75, 100), labels = paste0(c(0, 25, 50, 75, 100), "%")) +
 #   theme_bw() +
 #   labs(x = "BPSV Disease Efficacy", y = "Deaths Averted By BPSV Per 1000") +
 #   guides(colour = guide_legend("NPI\nScenario")) +
+#   theme(legend.position = "right")
+# 
+# test <- disease_efficacy_plotting %>%
+#   filter(round(efficacy_disease_bpsv, 2) == 0.75)
+# 
+# y <- ggplot(disease_efficacy_plotting) +
+#   geom_line(aes(x = 100 * efficacy_disease_bpsv, y = perc_deaths_averted, col = factor(NPI_int)), size = 1) +
+#   facet_grid(R0 ~ specific_vaccine_start, scales = "free_y") +
+#   scale_colour_manual(values = NPI_colours) +
+#   scale_fill_manual(values = NPI_colours) +
+#   scale_x_continuous(breaks = c(0, 25, 50, 75, 100), labels = paste0(c(0, 25, 50, 75, 100), "%")) +
+#   theme_bw() +
+#   labs(x = "BPSV Disease Efficacy", y = "% of Deaths Averted By BPSV") +
+#   guides(colour = guide_legend("NPI\nScenario")) +
 #   theme(legend.position = "none")
-
-x <- ggplot(disease_efficacy_plotting) +
-  geom_line(aes(x = 100 * efficacy_disease_bpsv, y = central_deaths_averted, col = factor(NPI_int)), size = 1) +
-  facet_grid(R0 ~ specific_vaccine_start, scales = "free_y") +
-  scale_colour_manual(values = NPI_colours) +
-  scale_fill_manual(values = NPI_colours) +
-  scale_x_continuous(breaks = c(0, 25, 50, 75, 100), labels = paste0(c(0, 25, 50, 75, 100), "%")) +
-  theme_bw() +
-  labs(x = "BPSV Disease Efficacy", y = "Deaths Averted By BPSV Per 1000") +
-  guides(colour = guide_legend("NPI\nScenario")) +
-  theme(legend.position = "right")
-
-test <- disease_efficacy_plotting %>%
-  filter(round(efficacy_disease_bpsv, 2) == 0.75)
-
-y <- ggplot(disease_efficacy_plotting) +
-  geom_line(aes(x = 100 * efficacy_disease_bpsv, y = perc_deaths_averted, col = factor(NPI_int)), size = 1) +
-  facet_grid(R0 ~ specific_vaccine_start, scales = "free_y") +
-  scale_colour_manual(values = NPI_colours) +
-  scale_fill_manual(values = NPI_colours) +
-  scale_x_continuous(breaks = c(0, 25, 50, 75, 100), labels = paste0(c(0, 25, 50, 75, 100), "%")) +
-  theme_bw() +
-  labs(x = "BPSV Disease Efficacy", y = "% of Deaths Averted By BPSV") +
-  guides(colour = guide_legend("NPI\nScenario")) +
-  theme(legend.position = "none")
-
-z <- ggplot(subset(disease_efficacy_plotting, efficacy_disease_bpsv == 0.5)) +
-  geom_bar(aes(x = factor(NPI_int), y = total_deaths_spec, fill = factor(NPI_int)), stat = "identity", size = 1) +
-  facet_grid(R0 ~ specific_vaccine_start) +
-  scale_colour_manual(values = NPI_colours) +
-  scale_fill_manual(values = NPI_colours) +
-  theme_bw() +
-  labs(x = "BPSV Disease Efficacy", y = "Total Deaths Baseline Scenario") +
-  guides(colour = guide_legend("NPI\nScenario")) +
-  theme(legend.position = "none")
-
-cowplot::plot_grid(NPI_plot, x, nrow = 1, rel_widths = c(1, 3))
-
-## Delay plot
-delay_plotting <- model_outputs %>%
-  filter(map_lgl(varied, ~ setequal(., c("R0", "IFR", "bpsv_protection_delay")))) %>%
-  group_by(bpsv_protection_delay, NPI_int) %>%
-  summarise(min_deaths_averted = min(bpsv_deaths_averted),
-            max_deaths_averted = max(bpsv_deaths_averted),
-            central_deaths_averted = bpsv_deaths_averted[R0 == 2.5 & IFR == 1])
-delay_plot <- ggplot(delay_plotting) +
-  geom_line(aes(x = bpsv_protection_delay, y = central_deaths_averted, col = factor(NPI_int)), size = 1) +
-  geom_ribbon(aes(x = bpsv_protection_delay, ymin = min_deaths_averted, ymax = max_deaths_averted,
-                  fill = factor(NPI_int)), alpha = 0.1) +
-  geom_line(aes(x = bpsv_protection_delay, y = min_deaths_averted, col = factor(NPI_int)), size = 0.1) +
-  geom_line(aes(x = bpsv_protection_delay, y = max_deaths_averted, col = factor(NPI_int)), size = 0.1) + 
-  scale_colour_manual(values = NPI_colours) +
-  scale_fill_manual(values = NPI_colours) +
-  theme_bw() +
-  labs(x = "Delay Between Vaccination & Protection", y = "Deaths Averted By BPSV")
-
-## Efficacy x delay heatmap
-efficacy_delay_joint_plotting <-  model_outputs %>%
-  filter(map_lgl(varied, ~ setequal(., c("R0", "IFR", "efficacy_disease_bpsv", "dur_vacc_delay")))) %>%
-  filter(NPI_int == 2, R0 == 2.5, IFR == 1) %>%
-  select(efficacy_disease_bpsv, dur_vacc_delay, bpsv_deaths_averted)
-
-ggplot(data = efficacy_delay_joint_plotting, aes(x = 100 * efficacy_disease_bpsv, y = dur_vacc_delay, fill = bpsv_deaths_averted)) +
-  geom_raster() +
-  scale_fill_gradient2(low = "white", high = "#7A6F9B", mid = "#8B85C1", 
-                       midpoint = 2500, space = "Lab", 
-                       name = "Deaths\nAverted") +
-  scale_x_continuous(breaks = seq(0, 100, 10), labels = paste0(seq(0, 100, 10), "%"),
-                     expand = c(0, 0)) +
-  scale_y_continuous(breaks = seq(0, 14, 1), expand = c(0, 0)) +
-  theme_bw() + 
-  theme(panel.grid = element_blank(),
-        panel.border = element_blank(),
-        panel.background = element_blank()) +
-  labs(x = "BPSV Disease Efficacy", y = "Delay from Vaccination to Protection")
-
-
-
-## Plotting the NPI Scenarios
-
 # 
-# # Plotting model outputted deaths and time under NPIs
-# model_outputs <- model_outputs %>%
-#   mutate(specific_vaccine_start = factor(specific_vaccine_start),
-#          detection_time = factor(detection_time),
-#          NPI_int = factor(NPI_int))
-# 
-# absolute_deaths_plot <- ggplot() +
-#   geom_segment(data = model_outputs, aes(x = composite_NPI_spec, xend = composite_NPI_spec, 
-#                                          y = deaths_spec, yend = deaths_bpsv + 75, group = factor(NPI_int)),
-#                arrow = arrow(length = unit(0.02, "npc"), type = "closed")) +
-#   geom_point(data = model_outputs, aes(x = composite_NPI_spec, y = deaths_spec, fill = factor(NPI_int)), 
-#              shape = 4, colour = "black", size = 2, pch = 21) +
-#   geom_point(data = model_outputs, aes(x = composite_NPI_spec, y = deaths_bpsv, fill = factor(NPI_int)), 
-#              colour = "black", size = 4, pch = 21) +
+# z <- ggplot(subset(disease_efficacy_plotting, efficacy_disease_bpsv == 0.5)) +
+#   geom_bar(aes(x = factor(NPI_int), y = total_deaths_spec, fill = factor(NPI_int)), stat = "identity", size = 1) +
+#   facet_grid(R0 ~ specific_vaccine_start) +
+#   scale_colour_manual(values = NPI_colours) +
+#   scale_fill_manual(values = NPI_colours) +
 #   theme_bw() +
-#   labs(x = "NPI Days (Composite Duration+Stringency", y = "Disease Deaths") +
-#   guides(fill = guide_legend(title = "Scenario"))
+#   labs(x = "BPSV Disease Efficacy", y = "Total Deaths Baseline Scenario") +
+#   guides(colour = guide_legend("NPI\nScenario")) +
+#   theme(legend.position = "none")
 # 
-# deaths_averted_plot <- ggplot() +
-#   geom_bar(data = model_outputs, aes(x = factor(NPI_int), y = bpsv_deaths_averted, fill = factor(NPI_int)), stat = "identity") +
-#   labs(x = "", y = "Deaths Averted") +
+# cowplot::plot_grid(NPI_plot, x, nrow = 1, rel_widths = c(1, 3))
+# 
+# ## Delay plot
+# delay_plotting <- model_outputs %>%
+#   filter(map_lgl(varied, ~ setequal(., c("R0", "IFR", "bpsv_protection_delay")))) %>%
+#   group_by(bpsv_protection_delay, NPI_int) %>%
+#   summarise(min_deaths_averted = min(bpsv_deaths_averted),
+#             max_deaths_averted = max(bpsv_deaths_averted),
+#             central_deaths_averted = bpsv_deaths_averted[R0 == 2.5 & IFR == 1])
+# delay_plot <- ggplot(delay_plotting) +
+#   geom_line(aes(x = bpsv_protection_delay, y = central_deaths_averted, col = factor(NPI_int)), size = 1) +
+#   geom_ribbon(aes(x = bpsv_protection_delay, ymin = min_deaths_averted, ymax = max_deaths_averted,
+#                   fill = factor(NPI_int)), alpha = 0.1) +
+#   geom_line(aes(x = bpsv_protection_delay, y = min_deaths_averted, col = factor(NPI_int)), size = 0.1) +
+#   geom_line(aes(x = bpsv_protection_delay, y = max_deaths_averted, col = factor(NPI_int)), size = 0.1) + 
+#   scale_colour_manual(values = NPI_colours) +
+#   scale_fill_manual(values = NPI_colours) +
 #   theme_bw() +
-#   theme(legend.position = "none",
-#         axis.title.x = element_blank(),
-#         plot.background = element_rect(colour = "black"))
+#   labs(x = "Delay Between Vaccination & Protection", y = "Deaths Averted By BPSV")
 # 
-# inset_prop_y <- 0.4
-# min_deaths <- min(model_outputs$deaths_bpsv)
-# max_deaths <- max(model_outputs$deaths_spec)
-# inset_ymin <- min_deaths + (1 - inset_prop_y) * (max_deaths - min_deaths)
-# inset_ymax <- max_deaths
+# ## Efficacy x delay heatmap
+# efficacy_delay_joint_plotting <-  model_outputs %>%
+#   filter(map_lgl(varied, ~ setequal(., c("R0", "IFR", "efficacy_disease_bpsv", "dur_vacc_delay")))) %>%
+#   filter(NPI_int == 2, R0 == 2.5, IFR == 1) %>%
+#   select(efficacy_disease_bpsv, dur_vacc_delay, bpsv_deaths_averted)
 # 
-# inset_prop_x <- 0.5
-# min_NPI <- min(model_outputs$composite_NPI_spec)
-# max_NPI <- max(model_outputs$composite_NPI_spec)
-# inset_xmin <- min_NPI + (1 - inset_prop_x) * (max_NPI - min_NPI)
-# inset_xmax <- max_NPI
+# ggplot(data = efficacy_delay_joint_plotting, aes(x = 100 * efficacy_disease_bpsv, y = dur_vacc_delay, fill = bpsv_deaths_averted)) +
+#   geom_raster() +
+#   scale_fill_gradient2(low = "white", high = "#7A6F9B", mid = "#8B85C1", 
+#                        midpoint = 2500, space = "Lab", 
+#                        name = "Deaths\nAverted") +
+#   scale_x_continuous(breaks = seq(0, 100, 10), labels = paste0(seq(0, 100, 10), "%"),
+#                      expand = c(0, 0)) +
+#   scale_y_continuous(breaks = seq(0, 14, 1), expand = c(0, 0)) +
+#   theme_bw() + 
+#   theme(panel.grid = element_blank(),
+#         panel.border = element_blank(),
+#         panel.background = element_blank()) +
+#   labs(x = "BPSV Disease Efficacy", y = "Delay from Vaccination to Protection")
 # 
-# overall_deaths_plot <- absolute_deaths_plot + 
-#   annotation_custom(
-#     ggplotGrob(deaths_averted_plot), 
-#     xmin = inset_xmin, xmax = inset_xmax, ymin = inset_ymin, ymax = inset_ymax)
-# cowplot::plot_grid(NPI_plot, overall_deaths_plot)
+# 
+# 
+# ## Plotting the NPI Scenarios
+# 
+# # 
+# # # Plotting model outputted deaths and time under NPIs
+# # model_outputs <- model_outputs %>%
+# #   mutate(specific_vaccine_start = factor(specific_vaccine_start),
+# #          detection_time = factor(detection_time),
+# #          NPI_int = factor(NPI_int))
+# # 
+# # absolute_deaths_plot <- ggplot() +
+# #   geom_segment(data = model_outputs, aes(x = composite_NPI_spec, xend = composite_NPI_spec, 
+# #                                          y = deaths_spec, yend = deaths_bpsv + 75, group = factor(NPI_int)),
+# #                arrow = arrow(length = unit(0.02, "npc"), type = "closed")) +
+# #   geom_point(data = model_outputs, aes(x = composite_NPI_spec, y = deaths_spec, fill = factor(NPI_int)), 
+# #              shape = 4, colour = "black", size = 2, pch = 21) +
+# #   geom_point(data = model_outputs, aes(x = composite_NPI_spec, y = deaths_bpsv, fill = factor(NPI_int)), 
+# #              colour = "black", size = 4, pch = 21) +
+# #   theme_bw() +
+# #   labs(x = "NPI Days (Composite Duration+Stringency", y = "Disease Deaths") +
+# #   guides(fill = guide_legend(title = "Scenario"))
+# # 
+# # deaths_averted_plot <- ggplot() +
+# #   geom_bar(data = model_outputs, aes(x = factor(NPI_int), y = bpsv_deaths_averted, fill = factor(NPI_int)), stat = "identity") +
+# #   labs(x = "", y = "Deaths Averted") +
+# #   theme_bw() +
+# #   theme(legend.position = "none",
+# #         axis.title.x = element_blank(),
+# #         plot.background = element_rect(colour = "black"))
+# # 
+# # inset_prop_y <- 0.4
+# # min_deaths <- min(model_outputs$deaths_bpsv)
+# # max_deaths <- max(model_outputs$deaths_spec)
+# # inset_ymin <- min_deaths + (1 - inset_prop_y) * (max_deaths - min_deaths)
+# # inset_ymax <- max_deaths
+# # 
+# # inset_prop_x <- 0.5
+# # min_NPI <- min(model_outputs$composite_NPI_spec)
+# # max_NPI <- max(model_outputs$composite_NPI_spec)
+# # inset_xmin <- min_NPI + (1 - inset_prop_x) * (max_NPI - min_NPI)
+# # inset_xmax <- max_NPI
+# # 
+# # overall_deaths_plot <- absolute_deaths_plot + 
+# #   annotation_custom(
+# #     ggplotGrob(deaths_averted_plot), 
+# #     xmin = inset_xmin, xmax = inset_xmax, ymin = inset_ymin, ymax = inset_ymax)
+# # cowplot::plot_grid(NPI_plot, overall_deaths_plot)
