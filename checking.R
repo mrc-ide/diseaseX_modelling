@@ -9,14 +9,15 @@ lockdown_Rt <- 0.9                   # Rt achieved under lockdown
 minimal_mandate_reduction <- 0.25    # Fold-reduction in R0 achieved under minimal mandate restrictions
 
 ### BPSV Delay Between Vaccination Receipt & Protection
-raw_bpsv_delay_scenarios <- create_scenarios(R0 = c(1.5, 2, 2.5, 3, 3.5),                   # Basic reproduction number
+raw_bpsv_delay_scenarios <- create_scenarios(R0 = c(2.5),                                   # Basic reproduction number
                                              IFR = 1,                                       # IFR
                                              population_size = 10^10,
+                                             seeding_cases = c(2, 20, 200, 2000),
                                              Tg = 5.5,                                      # Tg
                                              detection_time = 14,                           # detection time
                                              bpsv_start = 7,                                # BPSV distribution start (time after detection time)
-                                             bpsv_protection_delay = seq(10, 150, 10),        # delay between receipt of BPSV dose and protection
-                                             specific_vaccine_start = c(200, 265),          # specific vaccine distribution start (time after detection time)
+                                             bpsv_protection_delay = seq(20, 150, 5),       # delay between receipt of BPSV dose and protection
+                                             specific_vaccine_start = c(200),               # specific vaccine distribution start (time after detection time)
                                              specific_protection_delay = 7,                 # delay between receipt of specific dose and protection
                                              efficacy_infection_bpsv = 0.35,                # vaccine efficacy against infection - BPSV
                                              efficacy_disease_bpsv = 0.75,                  # vaccine efficacy against disease - BPSV
@@ -43,7 +44,7 @@ bpsv_delay_scenarios <- bpsv_delay_scenarios %>%
   mutate(scenario_index = 1:n())
 
 ## Running the model and summarising the output
-cores <- parallel::detectCores() - 3
+cores <- parallel::detectCores() - 10
 fresh_run <- FALSE
 if (fresh_run) {
   plan(multisession, workers = cores) # multicore does nothing on windows as multicore isn't supported
@@ -94,7 +95,7 @@ NPI_plot <- ggplot(NPI_df, aes(x = tt_Rt - overplot_factor, colour = scenario)) 
                      labels = c("", "", "BPSV\nFinish", "Spec\nFinish")) +
   scale_y_continuous(breaks = c(0, 1, unique(NPI_df$R0)),
                      labels = c("", "1", "R0")) +
-  facet_wrap(scenario~., nrow = 3,
+  facet_wrap(scenario~., nrow = 4,
              labeller = as_labeller(c(`Scenario 4`='Minimal', `Scenario 7`='Moderate', `Scenario 8`='Stringent',
                                       `Scenario 9`='Nothing'))) +
   coord_cartesian(xlim = c(0, unique(NPI_df$detection_time) + unique(NPI_df$specific_vaccine_start) + unique(NPI_df$time_to_coverage_spec) + 10),
@@ -105,11 +106,13 @@ NPI_plot <- ggplot(NPI_df, aes(x = tt_Rt - overplot_factor, colour = scenario)) 
         strip.background = element_rect(fill="#F5F5F5"))
 
 ## Delay to protection plot
+raw_bpsv_delay_scenarios$varied[[1]]
+specific_vaccine_start_fixed <- 200
 delay_protect_plotting <- model_outputs %>%
   filter(NPI_int %in% NPI_to_include,
          specific_vaccine_start == specific_vaccine_start_fixed) %>%
-  filter(map_lgl(varied, ~ setequal(., c("R0", "specific_vaccine_start", "bpsv_protection_delay")))) %>%
-  group_by(R0, specific_vaccine_start, bpsv_protection_delay , NPI_int) %>%
+  filter(map_lgl(varied, ~ setequal(., c("seeding_cases", "bpsv_protection_delay")))) %>%
+  group_by(R0, seeding_cases, specific_vaccine_start, bpsv_protection_delay , NPI_int) %>%
   summarise(min_deaths_averted = min(bpsv_deaths_averted) * 1000 / population_size,
             max_deaths_averted = max(bpsv_deaths_averted) * 1000 / population_size,
             central_deaths_averted = bpsv_deaths_averted * 1000 / population_size,
@@ -138,47 +141,83 @@ delay_protect_plot <- ggplot(subset(delay_protect_plotting, R0 == 2.5)) +
                                rev(generate_palette(NPI_colours[3], modification = "go_lighter", 
                                                     n_colours = 3))[2],
                                rev(generate_palette(NPI_colours[4], modification = "go_lighter", 
-                                                    n_colours = 3))[2]))  +
+                                                    n_colours = 3))[2]),
+                    labels = c("Minimal", "Moderate", "Stringent", "Nothing"))  +
   theme_bw() +
-  lims(y = c(0, max(subset(delay_protect_plotting, R0 == 2.5)$central_deaths_averted))) +
+  facet_wrap(. ~ seeding_cases, nrow = 3, 
+             labeller = as_labeller(c(`2`='Seed = 2',
+                                      `20`='Seed = 20',
+                                      `200`='Seed = 200',
+                                      `2000`='Seed = 2000'))) +
+  scale_y_continuous(position = "right",
+                     limits = c(0, max(subset(delay_protect_plotting, R0 == 2.5)$central_deaths_averted))) +
   labs(x = "Protection Delay (Days)", y = "Deaths Averted By BPSV Per 1000") +
-  guides(fill = guide_legend("NPI\nScenario"), colour = "none") +
-  theme(legend.position = "none")
+  guides(fill = guide_legend(title = "NPI\nScenario"), colour = "none") +
+  theme(legend.position = "right")
 
-ribbon_plotting_delay <- delay_protect_plotting %>%
-  filter(R0 != 1.5 & R0 != 3) %>%
-  group_by(bpsv_protection_delay, R0) %>%
-  summarise(lower = ifelse(min(central_deaths_averted) - 0.2 < 0, 0, min(central_deaths_averted) - 0.2),
-            upper = max(central_deaths_averted) + 0.2)
+delay_protect_plot
 
-delay_protect_plot2 <- ggplot(subset(delay_protect_plotting, R0 != 1.5 & R0 != 3)) +
-  geom_ribbon(data = ribbon_plotting_delay, aes(x = bpsv_protection_delay, ymin = lower, ymax = upper, group = R0), 
-              alpha = 0.1, colour = "black", linetype = "dashed") +
-  geom_line(aes(x = bpsv_protection_delay, y = central_deaths_averted, 
-                col = interaction(factor(R0), factor(NPI_int))), size = 1) +
-  geom_point(aes(x = bpsv_protection_delay, y = central_deaths_averted, 
-                 fill = interaction(factor(R0), factor(NPI_int))), size = 2, pch = 21, col = "black") +
-  scale_colour_manual(values = c(rev(generate_palette(NPI_colours[1], modification = "go_lighter", 
-                                                      n_colours = 3)),
-                                 rev(generate_palette(NPI_colours[2], modification = "go_lighter", 
-                                                      n_colours = 3)),
-                                 rev(generate_palette(NPI_colours[3], modification = "go_lighter", 
-                                                      n_colours = 3)),
-                                 rev(generate_palette(NPI_colours[4], modification = "go_lighter", 
-                                                      n_colours = 3)))) +
-  scale_fill_manual(values = c(rev(generate_palette(NPI_colours[1], modification = "go_lighter", 
-                                                    n_colours = 3)),
-                               rev(generate_palette(NPI_colours[2], modification = "go_lighter", 
-                                                    n_colours = 3)),
-                               rev(generate_palette(NPI_colours[3], modification = "go_lighter", 
-                                                    n_colours = 3)),
-                               rev(generate_palette(NPI_colours[4], modification = "go_lighter", 
-                                                    n_colours = 3)))) +
+delay_protect_plot2 <- ggplot(subset(delay_protect_plotting, R0 == 2.5)) +
+  geom_line(aes(x = bpsv_protection_delay, y = central_deaths_averted, col = factor(seeding_cases)), size = 1) +
+  geom_point(aes(x = bpsv_protection_delay, y = central_deaths_averted, fill = factor(seeding_cases)), 
+             size = 2, pch = 21, col = "black") +
+  scale_colour_manual(values = c("#FFC587", "#FF8E72", "#EE5F52", "#E72210"))  +
+  scale_fill_manual(values = c("#FFC587", "#FF8E72", "#EE5F52", "#E72210"))  +
   theme_bw() +
-  lims(y = c(0, max(subset(delay_protect_plotting, R0 != 1.5)$central_deaths_averted) + 0.2)) +
+  facet_wrap(. ~ NPI_int, nrow = 4,
+             labeller = as_labeller(c(`4`='Minimal', `7`='Moderate', 
+                                      `8`='Stringent', `9`='Nothing'))) +
+  scale_y_continuous(position = "right",
+                     limits = c(0, max(subset(delay_protect_plotting, R0 == 2.5)$central_deaths_averted))) +
   labs(x = "Protection Delay (Days)", y = "Deaths Averted By BPSV Per 1000") +
-  guides(fill = guide_legend("NPI\nScenario"), colour = "none") +
-  theme(legend.position = "none")
+  guides(fill = guide_legend(title = "Seeding\nCases"), colour = "none") +
+  theme(legend.position = "right")
+
+delay_protect_plot2
+
+overall_delay_plot1 <- cowplot::plot_grid(NPI_plot, delay_protect_plot, nrow = 1,
+                                          rel_widths = c(1, 3))
+overall_delay_plot2 <- cowplot::plot_grid(NPI_plot, delay_protect_plot2, nrow = 1,
+                                          rel_widths = c(1, 2.5))
+ggsave(plot = overall_delay_plot1, file = "figures/delay_protect_plot_V1.pdf",
+       width = 7.5, height = 6)
+ggsave(plot = overall_delay_plot2, file = "figures/delay_protect_plot_V2.pdf",
+       width = 7.5, height = 6)
+
+# ribbon_plotting_delay <- delay_protect_plotting %>%
+#   filter(R0 != 1.5 & R0 != 3) %>%
+#   group_by(bpsv_protection_delay, R0) %>%
+#   summarise(lower = ifelse(min(central_deaths_averted) - 0.2 < 0, 0, min(central_deaths_averted) - 0.2),
+#             upper = max(central_deaths_averted) + 0.2)
+# 
+# delay_protect_plot2 <- ggplot(subset(delay_protect_plotting, R0 != 1.5 & R0 != 3)) +
+#   geom_ribbon(data = ribbon_plotting_delay, aes(x = bpsv_protection_delay, ymin = lower, ymax = upper, group = R0), 
+#               alpha = 0.1, colour = "black", linetype = "dashed") +
+#   geom_line(aes(x = bpsv_protection_delay, y = central_deaths_averted, 
+#                 col = interaction(factor(R0), factor(NPI_int))), size = 1) +
+#   geom_point(aes(x = bpsv_protection_delay, y = central_deaths_averted, 
+#                  fill = interaction(factor(R0), factor(NPI_int))), size = 2, pch = 21, col = "black") +
+#   scale_colour_manual(values = c(rev(generate_palette(NPI_colours[1], modification = "go_lighter", 
+#                                                       n_colours = 3)),
+#                                  rev(generate_palette(NPI_colours[2], modification = "go_lighter", 
+#                                                       n_colours = 3)),
+#                                  rev(generate_palette(NPI_colours[3], modification = "go_lighter", 
+#                                                       n_colours = 3)),
+#                                  rev(generate_palette(NPI_colours[4], modification = "go_lighter", 
+#                                                       n_colours = 3)))) +
+#   scale_fill_manual(values = c(rev(generate_palette(NPI_colours[1], modification = "go_lighter", 
+#                                                     n_colours = 3)),
+#                                rev(generate_palette(NPI_colours[2], modification = "go_lighter", 
+#                                                     n_colours = 3)),
+#                                rev(generate_palette(NPI_colours[3], modification = "go_lighter", 
+#                                                     n_colours = 3)),
+#                                rev(generate_palette(NPI_colours[4], modification = "go_lighter", 
+#                                                     n_colours = 3)))) +
+#   theme_bw() +
+#   lims(y = c(0, max(subset(delay_protect_plotting, R0 != 1.5)$central_deaths_averted) + 0.2)) +
+#   labs(x = "Protection Delay (Days)", y = "Deaths Averted By BPSV Per 1000") +
+#   guides(fill = guide_legend("NPI\nScenario"), colour = "none") +
+#   theme(legend.position = "none")
 
 ### scenarios for close inspection
 scen_1 <- bpsv_delay_scenarios %>%
