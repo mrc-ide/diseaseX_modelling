@@ -811,6 +811,67 @@ calc_summary_metrics <- function(model_output) { # summary metrics = total death
               composite_NPI = composite))
 }
 
+## Tracking IDs of infected individuals in sub-trees
+traverse_tree <- function(check_id, df, counted) {
+  
+  # Get the ids of individuals directly infected by the current individual
+  children <- df %>% 
+    filter(ancestor == check_id) %>% 
+    pull(id)
+  
+  # Remove children that have already been counted
+  children <- setdiff(children, counted)
+  
+  # If there are no children left, return empty list
+  if (length(children) == 0) {
+    return(list())
+  }
+  
+  # Update the list of counted individuals
+  counted <- c(counted, children)
+  
+  # Recursively call this function on all the children and collect the ids
+  infected_individuals <- c(children, unlist(lapply(children, function(x) traverse_tree(x, df, counted))))
+  
+  # Return the list of infected individuals
+  return(infected_individuals)
+}
+
+# # Create an empty list to store the number of infections
+# infection_counts <- list()
+#   
+# traverse_tree <- function(check_id, df, counted) {
+#   
+#   # Get the ids of individuals directly infected by the current individual
+#   children <- df %>% 
+#     filter(ancestor == check_id) %>% 
+#     pull(id)
+#   
+#   # Remove children that have already been counted
+#   children <- setdiff(children, counted)
+#   
+#   # If there are no children left, return 0
+#   if (length(children) == 0) {
+#     return(0)
+#   }
+#   
+#   # Update the list of counted individuals
+#   counted <- c(counted, children)
+#   
+#   # Recursively call this function on all the children and add up the counts
+#   infection_count <- sum(1 + unlist(lapply(children, function(x) traverse_tree(x, df, counted))))
+#   
+#   # Return the total count of infections
+#   return(infection_count)
+# }
+# 
+# # Apply the recursive function on all root individuals
+# for (root in id_select_gen) {
+#   infection_counts[[as.character(root)]] <- traverse_tree(root, df, c())
+# }
+# unlist(infection_counts)
+# sum(unlist(infection_counts))  
+
 
 # generate_Rt_scenario(Rt = c(2), tt_Rt = c(0), change_type = c("instant"))
 # generate_Rt_scenario(Rt = c(2, 1), tt_Rt = c(0, 10), change_type = c("gradual"))
