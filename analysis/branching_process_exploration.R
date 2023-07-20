@@ -5,6 +5,9 @@
 # Load required libraries
 library(bpmodels); library(dplyr)
 
+# Sourcing functions
+source("functions/run_sars_x.R")
+
 # Set seed and run branching process with susceptible depletion up until day 50
 set.seed(457)
 chain_sim_eg <- chain_sim_susc(offspring = "pois", 
@@ -20,7 +23,8 @@ chain_sim_eg <- chain_sim_susc(offspring = "pois",
 indiv_num_infected <- chain_sim_eg %>%
   filter(!is.na(ancestor)) %>%
   group_by(ancestor) %>%
-  summarise(num_infected = n())
+  summarise(num_infected = n()) %>%
+  rename(id = ancestor)
 mean(indiv_num_infected$num_infected) ## double checking approximately matches the mean above
 
 # Get overall incidence
@@ -43,8 +47,9 @@ id_select_gen <- chain_sim_eg %>%
   pull(id)
 individual_transmission_branch_counts <- list()
 for (i in 1:length(id_select_gen)) {
+  cluster_ids <- traverse_tree(id_select_gen[i], chain_sim_eg, c())
   x <- chain_sim_eg %>%
-    filter(id %in% traverse_tree(id_select_gen[i], df, c())) %>%
+    filter(id %in% cluster_ids) %>%
     mutate(daily = round(time, digits = 0)) %>%
     group_by(daily) %>%
     summarise(incidence = n()) %>%
@@ -53,6 +58,89 @@ for (i in 1:length(id_select_gen)) {
   individual_transmission_branch_counts[[i]] <- x
   print(i)
 }
+
+# Get total number of infections arising from infections at time = t (ft removing all infectors for whom all infectees have happened)
+num_initial_infections <- 8
+gen_select <- chain_sim_eg %>%
+  group_by(generation) %>%
+  summarise(size = n()) %>%
+  filter(size > num_initial_infections) %>%
+  filter(generation == min(generation)) %>%
+  pull(generation)
+
+id_select_gen <- chain_sim_eg %>%
+  filter(generation %in% c(gen_select - 1, gen_select)) %>% 
+  left_join(indiv_num_infected, by = "id") %>%
+  mutate(num_infected = ifelse(is.na(num_infected), 0, num_infected)) %>%
+  arrange(time)
+
+potential_ids <- id_select_gen$id
+counter <- 1
+selected_ids <- c()
+i <- 1
+while(length(selected_ids) < num_initial_infections) {
+  temp <- potential_ids[i]
+  if (i == 1) {
+    num_infected <- id_select_gen$num_infected[id_select_gen$id %in% temp]
+    infected_ids <- id_select_gen$id[id_select_gen$ancestor %in% temp]
+    selected_ids <- c(selected_ids, temp)
+  } else {
+    ancestor <- id_select_gen$ancestor[id_select_gen$id %in% temp]
+    ancestor_num_infected <- id_select_gen$num_infected[id_select_gen$id %in% ancestor]
+    ancestor_infected <- id_select_gen$id[id_select_gen$ancestor == ancestor]
+    if (sum(ancestor_infected %in% c(selected_ids, temp)) == length(ancestor_infected)) {
+      selected_ids <- selected_ids[which(selected_ids != ancestor)]
+      selected_ids <- c(selected_ids, temp)
+    } else {
+      selected_ids <- c(selected_ids, temp)
+    }  
+  }
+  i <- i + 1
+}
+
+# for the selected ids, getting their number infected (minus those also in selected_ids)
+selected_id_df <- id_select_gen %>%
+  filter(id %in% selected_ids) 
+num_anc_occurence <- data.frame(ancestor = as.numeric(names(table(selected_id_df$ancestor))), 
+                                ancestor_num_infected = indiv_num_infected$num_infected[indiv_num_infected$id %in% as.numeric(names(table(selected_id_df$ancestor)))], 
+                                ancestor_count = as.vector(unname(table(selected_id_df$ancestor))))
+selected_id_df2 <- selected_id_df %>%
+  left_join(num_anc_occurence, by = "ancestor") %>%
+  mutate(diff = ancestor_num_infected - ancestor_count)
+
+# if some (not all) of infector's offspring have also been selected,
+# work out which haven't been selected so we can calculate branch size for them and then
+# sum them together later on.
+selected_id_df3 <- tibble(selected_id_df2)
+selected_id_df3$offspring_not_already_in_df <- NA_real_
+for (i in 1:length(selected_id_df3$id)) {
+  if (selected_id_df3$diff[i] == 0) {
+    selected_id_df3$offspring_not_already_in_df[i] <- NA_real_
+  } else {
+    temp_infector <- selected_id_df3$id[i]
+    temp_infectees <- chain_sim_eg$id[chain_sim_eg$ancestor == temp_infector & !is.na(chain_sim_eg$ancestor)]
+    not_present <- selected_id_df3 %>%
+      filter(ancestor == temp_infector)
+    to_consider <- temp_infectees[!(temp_infectees %in% not_present$id)]
+    selected_id_df3$offspring_not_already_in_df[i] <- list(to_consider)
+  }
+}
+
+individual_transmission_branch_counts <- list()
+for (i in 1:length(id_select_gen)) {
+  cluster_ids <- traverse_tree(id_select_gen[i], chain_sim_eg, c())
+  x <- chain_sim_eg %>%
+    filter(id %in% cluster_ids) %>%
+    mutate(daily = round(time, digits = 0)) %>%
+    group_by(daily) %>%
+    summarise(incidence = n()) %>%
+    tidyr::complete(daily = 0:max(daily), fill = list(incidence = 0)) %>%
+    mutate(cumulative = cumsum(incidence))
+  individual_transmission_branch_counts[[i]] <- x
+  print(i)
+}
+
+calc_time_to_cluster_size(individual_transmission_branch_counts, 10)
 
 sum(individual_transmission_branch_counts[[1]]$incidence) + 
   sum(individual_transmission_branch_counts[[2]]$incidence) + 

@@ -837,6 +837,16 @@ traverse_tree <- function(check_id, df, counted) {
   return(infected_individuals)
 }
 
+calc_time_to_cluster_size <- function(individual_transmission_branch_counts, cluster_size) {
+  first_time <- c()
+  for (i in 1:length(individual_transmission_branch_counts)) {
+    temp <- individual_transmission_branch_counts[[i]] %>%
+      filter(incidence >= cluster_size) 
+    first_time <- c(first_time, min(temp$daily))
+  }
+  return(min(first_time))
+}
+
 # # Create an empty list to store the number of infections
 # infection_counts <- list()
 #   
