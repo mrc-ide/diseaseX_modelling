@@ -40,25 +40,6 @@ num_gen <- chain_sim_eg %>%
   group_by(generation) %>%
   summarise(count = n())
 
-# Get total number of infections arising from the individuals in the selected generation
-selected_generation <- 3
-id_select_gen <- chain_sim_eg %>%
-  filter(generation == selected_generation) %>%
-  pull(id)
-individual_transmission_branch_counts <- list()
-for (i in 1:length(id_select_gen)) {
-  cluster_ids <- traverse_tree(id_select_gen[i], chain_sim_eg, c())
-  x <- chain_sim_eg %>%
-    filter(id %in% cluster_ids) %>%
-    mutate(daily = round(time, digits = 0)) %>%
-    group_by(daily) %>%
-    summarise(incidence = n()) %>%
-    tidyr::complete(daily = 0:max(daily), fill = list(incidence = 0)) %>%
-    mutate(cumulative = cumsum(incidence))
-  individual_transmission_branch_counts[[i]] <- x
-  print(i)
-}
-
 # Get total number of infections arising from infections at time = t (ft removing all infectors for whom all infectees have happened)
 num_initial_infections <- 8
 gen_select <- chain_sim_eg %>%
@@ -104,9 +85,16 @@ selected_id_df <- id_select_gen %>%
 num_anc_occurence <- data.frame(ancestor = as.numeric(names(table(selected_id_df$ancestor))), 
                                 ancestor_num_infected = indiv_num_infected$num_infected[indiv_num_infected$id %in% as.numeric(names(table(selected_id_df$ancestor)))], 
                                 ancestor_count = as.vector(unname(table(selected_id_df$ancestor))))
+
+num_id_occurence <- data.frame(id = as.numeric(names(table(selected_id_df$id))))
+num_id_occurence$id_offspring_present <- NA
+for (i in 1:length(num_id_occurence$id)) {
+  num_id_occurence$id_offspring_present[i] <- sum(selected_id_df$ancestor %in% num_id_occurence$id[i])
+}
+
 selected_id_df2 <- selected_id_df %>%
-  left_join(num_anc_occurence, by = "ancestor") %>%
-  mutate(diff = ancestor_num_infected - ancestor_count)
+  left_join(num_id_occurence, by = "id") %>%
+  mutate(diff = ifelse(id_offspring_present == 0, 0, num_infected - id_offspring_present))
 
 # if some (not all) of infector's offspring have also been selected,
 # work out which haven't been selected so we can calculate branch size for them and then
@@ -127,18 +115,80 @@ for (i in 1:length(selected_id_df3$id)) {
 }
 
 individual_transmission_branch_counts <- list()
-for (i in 1:length(id_select_gen)) {
-  cluster_ids <- traverse_tree(id_select_gen[i], chain_sim_eg, c())
-  x <- chain_sim_eg %>%
-    filter(id %in% cluster_ids) %>%
-    mutate(daily = round(time, digits = 0)) %>%
-    group_by(daily) %>%
-    summarise(incidence = n()) %>%
-    tidyr::complete(daily = 0:max(daily), fill = list(incidence = 0)) %>%
-    mutate(cumulative = cumsum(incidence))
+for (i in 1:length(selected_id_df3$id)) {
+  check <- sum(is.na(selected_id_df3$offspring_not_already_in_df[[i]]))
+  if (check != 0) {
+    cluster_ids <- traverse_tree(selected_id_df3$id[i], chain_sim_eg, c())
+    x <- chain_sim_eg %>%
+      filter(id %in% cluster_ids) %>%
+      mutate(daily = round(time, digits = 0)) %>%
+      group_by(daily) %>%
+      summarise(incidence = n()) %>%
+      tidyr::complete(daily = 0:max(daily), fill = list(incidence = 0)) %>%
+      mutate(cumulative = cumsum(incidence))
+    individual_transmission_branch_counts[[i]] <- x
+  } else {
+    ids <- selected_id_df3$offspring_not_already_in_df[[i]]
+    for (j in 1:length(ids)) {
+      if (j == 1) {
+        children <- chain_sim_eg %>% 
+          filter(ancestor == ids[j]) %>% 
+          pull(id)
+        if(is.integer(children) & length(children) == 0) {
+          x <- data.frame(daily = 0, incidence = 0, cumulative = 0, chain_branch = j)
+        } else {
+          cluster_ids <- traverse_tree(ids[j], chain_sim_eg, c())
+          x <- chain_sim_eg %>%
+            filter(id %in% cluster_ids) %>%
+            mutate(daily = round(time, digits = 0)) %>%
+            group_by(daily) %>%
+            summarise(incidence = n()) %>%
+            tidyr::complete(daily = 0:max(daily), fill = list(incidence = 0)) %>%
+            mutate(cumulative = cumsum(incidence))  %>%
+            mutate(chain_branch = j)
+        }
+      } else {
+        children <- chain_sim_eg %>% 
+          filter(ancestor == ids[j]) %>% 
+          pull(id)
+        cluster_ids <- traverse_tree(ids[j], chain_sim_eg, c())
+        if(is.integer(children) & length(children) == 0) {
+          y <- data.frame(daily = 0, incidence = 0, cumulative = 0, chain_branch = j)
+        } else {
+          y <- chain_sim_eg %>%
+            filter(id %in% cluster_ids) %>%
+            mutate(daily = round(time, digits = 0)) %>%
+            group_by(daily) %>%
+            summarise(incidence = n()) %>%
+            tidyr::complete(daily = 0:max(daily), fill = list(incidence = 0)) %>%
+            mutate(cumulative = cumsum(incidence)) %>%
+            mutate(chain_branch = j)
+          x <- rbind(x, y)
+        }
+      }
+      print(j)
+    }
+    x <- x %>%
+      group_by(daily) %>%
+      summarise(incidence = sum(incidence),
+                cumulative = sum(cumulative))
+  }
   individual_transmission_branch_counts[[i]] <- x
   print(i)
 }
+
+colour_func <- scales::hue_pal()(length(individual_transmission_branch_counts))
+for (i in 1:length(individual_transmission_branch_counts)) {
+  if (i == 1) {
+    plot(individual_transmission_branch_counts[[i]]$incidence, type = "l", col = colour_func[i])
+  } else {
+    lines(individual_transmission_branch_counts[[i]]$incidence, col = colour_func[i])
+  }
+}
+## need to double check I'm counting initial individuals
+## need to double check what I do re time (perhaps rejig??) - I'm doing
+## a complete call above when defining these so perhaps want to rejig time so that it starts at time of that first seeding case 
+## (and is equal to 0)
 
 calc_time_to_cluster_size(individual_transmission_branch_counts, 10)
 
@@ -158,4 +208,23 @@ plot(individual_transmission_branch_counts[[1]]$cumulative, type = "l")
 lines(individual_transmission_branch_counts[[2]]$cumulative, col = "red")
 lines(individual_transmission_branch_counts[[3]]$cumulative, col = "blue")
 lines(individual_transmission_branch_counts[[4]]$cumulative, col = "purple")
+
+# Get total number of infections arising from the individuals in the selected generation
+# selected_generation <- 3
+# id_select_gen <- chain_sim_eg %>%
+#   filter(generation == selected_generation) %>%
+#   pull(id)
+# individual_transmission_branch_counts <- list()
+# for (i in 1:length(id_select_gen)) {
+#   cluster_ids <- traverse_tree(id_select_gen[i], chain_sim_eg, c())
+#   x <- chain_sim_eg %>%
+#     filter(id %in% cluster_ids) %>%
+#     mutate(daily = round(time, digits = 0)) %>%
+#     group_by(daily) %>%
+#     summarise(incidence = n()) %>%
+#     tidyr::complete(daily = 0:max(daily), fill = list(incidence = 0)) %>%
+#     mutate(cumulative = cumsum(incidence))
+#   individual_transmission_branch_counts[[i]] <- x
+#   print(i)
+# }
 
