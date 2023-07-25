@@ -13,11 +13,18 @@ set.seed(457)
 chain_sim_eg <- chain_sim_susc(offspring = "pois", 
                                mn_offspring = 2,
                                t0 = 0, 
-                               tf = 50,
+                               tf = 40,
                                serial = function(n) {
                                  rgamma(n, shape = 5, rate = 1)},
                                pop = 10^5,
                                initial_immune = 0)
+incidence <- chain_sim_eg %>%
+  mutate(daily = round(time, digits = 0)) %>%
+  group_by(daily) %>%
+  summarise(incidence = n()) %>%
+  tidyr::complete(daily = min(daily):max(daily), fill = list(incidence = 0))
+plot(incidence$daily, incidence$incidence, type = "l")
+
 
 # Get number of people infected by each infector
 indiv_num_infected <- chain_sim_eg %>%
@@ -177,6 +184,9 @@ for (i in 1:length(selected_id_df3$id)) {
   print(i)
 }
 
+calc_time_to_cluster_size(individual_transmission_branch_counts, 10)
+
+
 colour_func <- scales::hue_pal()(length(individual_transmission_branch_counts))
 for (i in 1:length(individual_transmission_branch_counts)) {
   if (i == 1) {
@@ -190,7 +200,6 @@ for (i in 1:length(individual_transmission_branch_counts)) {
 ## a complete call above when defining these so perhaps want to rejig time so that it starts at time of that first seeding case 
 ## (and is equal to 0)
 
-calc_time_to_cluster_size(individual_transmission_branch_counts, 10)
 
 sum(individual_transmission_branch_counts[[1]]$incidence) + 
   sum(individual_transmission_branch_counts[[2]]$incidence) + 

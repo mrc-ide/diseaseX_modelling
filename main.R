@@ -22,7 +22,7 @@ library(officer)
 library(tictoc)
 library(egg)
 library(monochromeR)
-
+library(bpmodels)
 
 # colours
 

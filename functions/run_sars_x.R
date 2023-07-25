@@ -844,7 +844,7 @@ calc_time_to_cluster_size <- function(individual_transmission_branch_counts, clu
       filter(incidence >= cluster_size) 
     first_time <- c(first_time, min(temp$daily))
   }
-  return(min(first_time))
+  return(first_time)
 }
 
 # # Create an empty list to store the number of infections

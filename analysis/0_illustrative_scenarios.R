@@ -14,10 +14,9 @@ baseline_scenarios <- create_scenarios(R0 = 2.5,                                
                                        efficacy_disease_bpsv = 0.75,                  # vaccine efficacy against disease - BPSV
                                        efficacy_infection_spec = 0.55,                # vaccine efficacy against infection - specific vaccine
                                        efficacy_disease_spec = 0.9,                   # vaccine efficacy against disease - specific vaccine
-                                       dur_R = 365000,                                # duration of infection-induced immunity
-                                       dur_V = 365000,                                # duration of vaccine-induced immunity for both vaccines
-                                       second_dose_delay = 7,                         # controls how many days after "1st dose" people receive second dose; see here: https://github.com/mrc-ide/squire.page/blob/main/inst/odin/nimue_booster.R#L427-L430
-                                       dur_vacc_delay = 7,                            # mean duration from vaccination to protection
+                                       dur_bpsv = 36500000,                             # duration of infection-induced immunity
+                                       dur_spec = 36500000,                             # duration of infection-induced immunity
+                                       dur_R = 36500000,                                # duration of vaccine-induced immunity for both vaccines
                                        coverage = 0.8,                                # proportion of the population vaccinated
                                        vaccination_rate = 0.035,                      # vaccination rate per week as percentage of population
                                        min_age_group_index_priority = 13,             # index of the youngest age group given priority w.r.t vaccines (13 = 60+)
@@ -124,8 +123,12 @@ overall_deaths_plot <- absolute_deaths_plot +
   annotation_custom(
     ggplotGrob(deaths_averted_plot), 
     xmin = inset_xmin, xmax = inset_xmax, ymin = inset_ymin, ymax = inset_ymax)
-cowplot::plot_grid(NPI_plot, overall_deaths_plot)
+x <- cowplot::plot_grid(NPI_plot, overall_deaths_plot)
 
+ggsave(filename = "figures/illustrative_NPI_plot.pdf",
+       plot = x,
+       width = 13,
+       height = 6.5)
 
 # example_NPI <- subset(NPI_df, scenario == "Scenario 1")
 # example_NPI$next_time[length(example_NPI$next_time)] <- 150
