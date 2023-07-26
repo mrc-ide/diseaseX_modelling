@@ -5,8 +5,8 @@ source(here::here("main.R"))
 source(here::here("functions/run_sars_x.R"))
 
 ## Branching-process based calculation of detection times
-num_iterations <- 50
-detection_hosp <- 1:50 # c(5, 10, 50)
+num_iterations <- 100
+detection_hosp <- 1:100 # c(5, 10, 50)
 cumulative_window <- 7
 delay_hosp <- 10 # check this aligns with squire.page 
 R0 <- c(1.5, 2, 2.5, 3, 3.5)
@@ -33,7 +33,7 @@ if (new_bp) {
                                          rgamma(n, shape = 13.4, rate = 2)}, # gamma with mean 6.7 (13.4/2)
                                        pop = 10^6,
                                        initial_immune = 0) 
-        if (nrow(chain_sim_eg) > 10) {
+        if (nrow(chain_sim_eg) > 15) {
           try_again <- 0
         }
       }
