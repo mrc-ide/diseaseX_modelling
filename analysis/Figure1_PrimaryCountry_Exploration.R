@@ -10,31 +10,12 @@ arg_pop <- squire::get_population("Argentina")
 IHR <- sum(prob_hosp * arg_pop$n / sum(arg_pop$n)) 
 
 ## Branching-process based calculation of detection times
-num_iterations <- 30
+num_iterations <- 50
 detection_hosp <- round(seq(1:20) / IHR, digits = 0)
 cumulative_window <- 7
 delay_hosp <- 10 # check this aligns with squire.page 
 R0 <- c(1.5, 2, 2.5, 3, 3.5)
 runtime <- c(140, 95, 70, 60, 55)
-
-bp_df <- array(data = NA, dim = c(length(R0), num_iterations, length(detection_hosp), 2))
-
-chain_sim_eg <- chain_sim_susc(offspring = "pois", 
-                               mn_offspring = 1.5,
-                               t0 = 0, 
-                               tf = 150,
-                               serial = function(n) {
-                                 rgamma(n, shape = 13.4, rate = 2)}, # gamma with mean 6.7 (13.4/2)
-                               pop = 10^8,
-                               initial_immune = 0) 
-incidence <- chain_sim_eg %>%
-  mutate(daily = round(time, digits = 0)) %>%
-  group_by(daily) %>%
-  summarise(incidence = n()) %>%
-  tidyr::complete(daily = min(daily):max(daily), fill = list(incidence = 0)) %>%
-  mutate(rolling_incidence = zoo::rollsum(x = incidence, k = 7, na.pad = TRUE, align = "right")) 
-
-
 
 new_bp <- FALSE
 if (new_bp) {
