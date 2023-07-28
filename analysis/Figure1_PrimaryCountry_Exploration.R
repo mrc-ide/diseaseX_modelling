@@ -268,7 +268,55 @@ R0_detectionFactor_plot <- ggplot(data = subset(centralSpec_deathsAverted, metri
 complete_R0_detectionFactor_plot <- cowplot::plot_grid(NPI_plot, R0_detectionFactor_plot, 
                                                        nrow = 1, rel_widths = c(1, 4), labels = c("C", "D"))
 
-## Single Epidemic Curve Plot
+
+### More plotting of actual results
+ggplot(data = subset(centralSpec_deathsAverted, metric == "Daily Incidence")) +
+  geom_bar(aes(x = factor(R0), y = bpsv_deaths_averted * 1000 / population_size, 
+               colour = factor(NPI_int), fill = factor(NPI_int)), 
+           stat = "identity", position = "dodge") +
+  facet_wrap(.~detection_timing, strip.position = "top",
+             labeller = as_labeller(c(early = "Early\nDetection", 
+                                      moderate = "Intermediate\nDetection",
+                                      late = "Late\nDetection"))) +
+  labs(x = "Reproduction Number (R0)", y = "Deaths Averted by BPSV (Per 1000)") + 
+  scale_fill_manual(values = NPI_colours) +
+  scale_colour_manual(values = NPI_colours) +
+  theme_classic() +
+  theme(strip.placement = "outside",
+        legend.position = "none")
+
+
+ggplot(data = subset(centralSpec_deathsAverted, metric == "Daily Incidence")) +
+  geom_line(aes(x = R0, y = bpsv_deaths_averted * 1000 / population_size, 
+                colour = factor(NPI_int), fill = factor(NPI_int)), 
+            stat = "identity", position = "dodge") +
+  facet_wrap(.~detection_timing, strip.position = "top",
+             labeller = as_labeller(c(early = "Early\nDetection", 
+                                      moderate = "Intermediate\nDetection",
+                                      late = "Late\nDetection"))) +
+  labs(x = "Reproduction Number (R0)", y = "Deaths Averted by BPSV (Per 1000)") + 
+  scale_fill_manual(values = NPI_colours) +
+  scale_colour_manual(values = NPI_colours) +
+  theme_classic() +
+  theme(strip.placement = "outside")
+
+
+ggplot(data = centralSpec_deathsAverted) +
+  geom_bar(aes(x = factor(R0), y = bpsv_deaths_averted, fill = factor(NPI_int)), 
+           stat = "identity", position = "dodge") +
+  facet_grid(metric~detection_timing)
+
+ggplot(data = subset(centralSpec_deathsAverted, metric == "Daily Incidence")) +
+  geom_bar(aes(x = factor(detection_timing), y = bpsv_deaths_averted, fill = factor(NPI_int)), 
+           stat = "identity", position = "dodge") +
+  facet_grid(NPI_int~R0)
+
+ggplot(data = subset(centralSpec_deathsAverted, metric == "Daily Incidence")) +
+  geom_bar(aes(x = factor(detection_timing), y = bpsv_deaths_averted, fill = factor(NPI_int)), 
+           stat = "identity", position = "dodge") +
+  facet_grid(NPI_int~R0)
+
+## Plotting Epidemic Curves and Timings
 population <- squire:::get_population("Argentina")
 population <- 10^6 * population$n / sum(population$n)
 mixing_matrix <- squire:::get_mixing_matrix("Argentina")
@@ -361,103 +409,12 @@ hosp_at_BPSV_finish <- low_R0_infections$value[low_R0_infections$t == relevant_t
 time_at_spec_start <- low_R0_infections$t[low_R0_infections$t == relevant_time + spec_develop_time]
 hosp_at_spec_start <- low_R0_infections$value[low_R0_infections$t == relevant_time + spec_develop_time]
 
-singleR0_example_plot <- ggplot(low_R0_infections, aes(x = t, y = log(value + 1), col = factor(R0))) +
-  scale_colour_manual(values = c("#C9DBBA")) +
-  theme_bw() +
-  labs(x = "Time Since Spillover", y = "log(Incidence)") +
-  coord_cartesian(xlim = c(0, 300)) +
-  geom_line(linewidth = 5) +
-  
-  ## Pathogen Detection Event Indicator Segments
-  geom_segment(x = -10, xend = time_at_detection - 5, 
-               y = log(hosp_at_detection + 1), yend = log(hosp_at_detection + 1), 
-               linewidth = 0.25, col = "black", linetype = "solid",
-               arrow = arrow(length = unit(0.015, "npc"), type = "closed")) +
-  annotate("text", x = -8, y = log(hosp_at_detection + 1) + 0.1, label = "Pathogen Detection", color = "black", hjust = 0) +
-  geom_point(x = time_at_detection, y = log(hosp_at_detection + 1), pch = 21, fill = "#C9DBBA", col = "black", size = 2) +
-  
-  ## BPSV Campaign Start Event Indicator Segments
-  geom_segment(x = -10, xend = time_at_BPSV_start - 5, 
-               y = log(hosp_at_BPSV_start + 1), yend = log(hosp_at_BPSV_start + 1), 
-               linewidth = 0.25, col = "black", linetype = "solid",
-               arrow = arrow(length = unit(0.015, "npc"), type = "closed")) +
-  annotate("text", x = -8, y = log(hosp_at_BPSV_start + 1) + 0.1, label = "BPSV Campaign Initiated", color = "black", hjust = 0) +
-  geom_point(x = time_at_BPSV_start, y = log(hosp_at_BPSV_start + 1), pch = 21, fill = "#C9DBBA", col = "black", size = 2) +
-  
-  ## BPSV Campaign Finish Event Indicator Segments
-  geom_segment(x = -10, xend = time_at_BPSV_finish - 5, 
-               y = log(hosp_at_BPSV_finish + 1), yend = log(hosp_at_BPSV_finish + 1), 
-               linewidth = 0.25, col = "black", linetype = "solid",
-               arrow = arrow(length = unit(0.015, "npc"), type = "closed")) +
-  annotate("text", x = -8, y = log(hosp_at_BPSV_finish + 1) + 0.1, label = "BPSV Campaign Finish", color = "black", hjust = 0) +
-  geom_point(x = time_at_BPSV_finish, y = log(hosp_at_BPSV_finish + 1), pch = 21, fill = "#C9DBBA", col = "black", size = 2) +
-  
-  ## Specific Vaccine Campaign Start Indicator Segments
-  geom_segment(x = -10, xend = time_at_spec_start - 7, 
-               y = log(hosp_at_spec_start), yend = log(hosp_at_spec_start), 
-               linewidth = 0.25, col = "black", linetype = "solid",
-               arrow = arrow(length = unit(0.015, "npc"), type = "closed")) +
-  annotate("text", x = -8, y = log(hosp_at_spec_start) + 0.1, label = "Specific Vaccine Development Time", color = "black", hjust = 0) +
-  geom_point(x = time_at_spec_start - 2, y = log(hosp_at_spec_start), pch = 21, fill = "#C9DBBA", col = "black", size = 2) +
-  
-  ## BPSV "Time to Deploy" Period Segments
-  geom_segment(x = time_at_detection, xend = time_at_detection + deploy_time, 
-               y = log(hosp_at_detection + 0.75), yend = log(hosp_at_detection + 0.75), 
-               linewidth = 0.25, col = "black", linetype = "dashed",
-               arrow = arrow(length = unit(0.015, "npc"), type = "closed", ends = "both")) +
-  geom_segment(x = time_at_detection + deploy_time/4, xend = time_at_detection + 3*deploy_time/4, 
-               y = log(hosp_at_detection + 0.5), yend = log(hosp_at_detection + 0.5), 
-               linewidth = 0.25, col = "black", linetype = "solid") +
-  geom_segment(x = time_at_detection + 7, xend = time_at_detection + 7, 
-               y = 0.5, yend = log(hosp_at_detection + 0.5), 
-               linewidth = 0.25, col = "black", linetype = "solid") +
-  geom_segment(x = time_at_detection + 7, xend = time_at_detection + 42.5, 
-               y = 0.5, yend = 0.5, 
-               linewidth = 0.25, col = "black", linetype = "solid") +
-  annotate("label", x = time_at_detection + 42.5, y = 0.5, label = "Time to Deploy BPSV", color = "black", hjust = 0) +
-  
-  ## BPSV "Vaccination Campaign" Period Segments
-  geom_segment(x = time_at_detection + deploy_time, xend = time_at_detection + deploy_time + bpsv_campaign_dur, 
-               y = log(hosp_at_BPSV_start) + 0.8, yend = log(hosp_at_BPSV_start) + 0.8, 
-               linewidth = 0.25, col = "black", linetype = "dashed",
-               arrow = arrow(length = unit(0.015, "npc"), type = "closed", ends = "both")) +
-  geom_segment(x = time_at_detection + deploy_time + bpsv_campaign_dur/4, xend = time_at_detection + deploy_time + bpsv_campaign_dur - bpsv_campaign_dur/4, 
-               y = log(hosp_at_BPSV_start) + 0.7, yend = log(hosp_at_BPSV_start) + 0.7, 
-               linewidth = 0.25, col = "black", linetype = "solid") +
-  geom_segment(x = time_at_detection + deploy_time + bpsv_campaign_dur/4 + bpsv_campaign_dur/4, xend = time_at_detection + deploy_time + bpsv_campaign_dur/4 + bpsv_campaign_dur/4, 
-               y = log(hosp_at_BPSV_start) + 0.2, yend = log(hosp_at_BPSV_start) + 0.7, 
-               linewidth = 0.25, col = "black", linetype = "solid") +
-  geom_segment(x = time_at_detection + deploy_time + bpsv_campaign_dur/4 + bpsv_campaign_dur/4, xend = time_at_detection + 42.5, 
-               y = log(hosp_at_BPSV_start) + 0.2, yend = log(hosp_at_BPSV_start) + 0.2, 
-               linewidth = 0.25, col = "black", linetype = "solid") +
-  annotate("label", x = time_at_detection + 43.5, y = log(hosp_at_BPSV_start) + 0.2, label = "Time to Complete BPSV\nVaccination Campaign", color = "black", hjust = 0) +
-  
-  ## Specific Vaccine Development Segments
-  geom_segment(x = time_at_detection, xend = time_at_detection + spec_develop_time - 2, 
-               y = log(hosp_at_spec_start) - 0.1, yend = log(hosp_at_spec_start) - 0.1, 
-               linewidth = 0.25, col = "black", linetype = "dashed",
-               arrow = arrow(length = unit(0.015, "npc"), type = "closed", ends = "both")) +
-  geom_segment(x = time_at_detection + spec_develop_time/2 - spec_develop_time/10, xend = time_at_detection + + spec_develop_time/2 + spec_develop_time/10, 
-               y = log(hosp_at_spec_start) - 0.2, yend = log(hosp_at_spec_start) - 0.2, 
-               linewidth = 0.25, col = "black", linetype = "solid") +
-  geom_segment(x = time_at_detection + spec_develop_time/2, xend = time_at_detection + spec_develop_time/2, 
-               y = 2.5, yend = log(hosp_at_spec_start) - 0.2, 
-               linewidth = 0.25, col = "black", linetype = "solid") +
-  geom_segment(x = time_at_detection + spec_develop_time/2, xend = time_at_detection + 5 + spec_develop_time/2, 
-               y = 2.5, yend = 2.5, 
-               linewidth = 0.25, col = "black", linetype = "solid") +
-  annotate("label", x = time_at_detection + 43.5, y = 2.5, label = "Time to Develop Specific Vaccine", color = "black", hjust = 0) +
-  theme(axis.text.x = element_blank(),
-        axis.ticks.x = element_blank(),
-        legend.position = "none")
-
-# singleR0_example_plot_withExtra <- 
-ggplot(low_R0_infections, aes(x = t, y = log(value + 1), col = factor(R0))) +
+singleR0_example_plot_withExtra <- ggplot(low_R0_infections, aes(x = t, y = log(value + 1), col = factor(R0))) +
   scale_colour_manual(values = c("#C9DBBA")) +
   geom_line(data = medium_R0_infections, aes(x = t, y = log(value + 1)), col = "#DCDBA8", linewidth = 5, alpha = 0.25) +
   geom_line(data = high_R0_infections, aes(x = t, y = log(value + 1)), col = "#FAA381", linewidth = 5, alpha = 0.25) +
   theme_bw() +
-  labs(x = "Time Since Spillover", y = "log(Incidence)") +
+  labs(x = "Time Since Spillover", y = "Daily Incidence") +
   coord_cartesian(xlim = c(0, 300)) +
   geom_line(linewidth = 5) +
   
@@ -542,7 +499,10 @@ ggplot(low_R0_infections, aes(x = t, y = log(value + 1), col = factor(R0))) +
   annotate("label", x = time_at_detection + 43.5, y = 2.5, label = "Time to Develop Specific Vaccine", color = "black", hjust = 0) +
   theme(axis.text.x = element_blank(),
         axis.ticks.x = element_blank(),
+        axis.text.y = element_blank(),
+        axis.ticks.y = element_blank(),
         legend.position = "none") +
+  geom_rect(xmin = 210, xmax = 305, ymin = 4.4, ymax = 5.4, fill = "white", col = "black", linewidth = 0.25) +
   geom_rect(xmin = 215, xmax = 225, ymin = 4.5, ymax = 4.7, fill = "#DCDBA8", col = "#DCDBA8") +
   annotate("text", x = 230, y = 4.6, label = "Low R0", color = "black", hjust = 0) +
   geom_rect(xmin = 215, xmax = 225, ymin = 4.8, ymax = 5, fill = "#C9DBBA") +
@@ -550,108 +510,194 @@ ggplot(low_R0_infections, aes(x = t, y = log(value + 1), col = factor(R0))) +
   geom_rect(xmin = 215, xmax = 225, ymin = 5.1, ymax = 5.3, fill = "#FAA381", col = "#FAA381") +
   annotate("text", x = 230, y = 5.2, label = "High R0", color = "black", hjust = 0) 
 
+# singleR0_example_plot <- ggplot(low_R0_infections, aes(x = t, y = log(value + 1), col = factor(R0))) +
+#   scale_colour_manual(values = c("#C9DBBA")) +
+#   theme_bw() +
+#   labs(x = "Time Since Spillover", y = "log(Incidence)") +
+#   coord_cartesian(xlim = c(0, 300)) +
+#   geom_line(linewidth = 5) +
+#   
+#   ## Pathogen Detection Event Indicator Segments
+#   geom_segment(x = -10, xend = time_at_detection - 5, 
+#                y = log(hosp_at_detection + 1), yend = log(hosp_at_detection + 1), 
+#                linewidth = 0.25, col = "black", linetype = "solid",
+#                arrow = arrow(length = unit(0.015, "npc"), type = "closed")) +
+#   annotate("text", x = -8, y = log(hosp_at_detection + 1) + 0.1, label = "Pathogen Detection", color = "black", hjust = 0) +
+#   geom_point(x = time_at_detection, y = log(hosp_at_detection + 1), pch = 21, fill = "#C9DBBA", col = "black", size = 2) +
+#   
+#   ## BPSV Campaign Start Event Indicator Segments
+#   geom_segment(x = -10, xend = time_at_BPSV_start - 5, 
+#                y = log(hosp_at_BPSV_start + 1), yend = log(hosp_at_BPSV_start + 1), 
+#                linewidth = 0.25, col = "black", linetype = "solid",
+#                arrow = arrow(length = unit(0.015, "npc"), type = "closed")) +
+#   annotate("text", x = -8, y = log(hosp_at_BPSV_start + 1) + 0.1, label = "BPSV Campaign Initiated", color = "black", hjust = 0) +
+#   geom_point(x = time_at_BPSV_start, y = log(hosp_at_BPSV_start + 1), pch = 21, fill = "#C9DBBA", col = "black", size = 2) +
+#   
+#   ## BPSV Campaign Finish Event Indicator Segments
+#   geom_segment(x = -10, xend = time_at_BPSV_finish - 5, 
+#                y = log(hosp_at_BPSV_finish + 1), yend = log(hosp_at_BPSV_finish + 1), 
+#                linewidth = 0.25, col = "black", linetype = "solid",
+#                arrow = arrow(length = unit(0.015, "npc"), type = "closed")) +
+#   annotate("text", x = -8, y = log(hosp_at_BPSV_finish + 1) + 0.1, label = "BPSV Campaign Finish", color = "black", hjust = 0) +
+#   geom_point(x = time_at_BPSV_finish, y = log(hosp_at_BPSV_finish + 1), pch = 21, fill = "#C9DBBA", col = "black", size = 2) +
+#   
+#   ## Specific Vaccine Campaign Start Indicator Segments
+#   geom_segment(x = -10, xend = time_at_spec_start - 7, 
+#                y = log(hosp_at_spec_start), yend = log(hosp_at_spec_start), 
+#                linewidth = 0.25, col = "black", linetype = "solid",
+#                arrow = arrow(length = unit(0.015, "npc"), type = "closed")) +
+#   annotate("text", x = -8, y = log(hosp_at_spec_start) + 0.1, label = "Specific Vaccine Development Time", color = "black", hjust = 0) +
+#   geom_point(x = time_at_spec_start - 2, y = log(hosp_at_spec_start), pch = 21, fill = "#C9DBBA", col = "black", size = 2) +
+#   
+#   ## BPSV "Time to Deploy" Period Segments
+#   geom_segment(x = time_at_detection, xend = time_at_detection + deploy_time, 
+#                y = log(hosp_at_detection + 0.75), yend = log(hosp_at_detection + 0.75), 
+#                linewidth = 0.25, col = "black", linetype = "dashed",
+#                arrow = arrow(length = unit(0.015, "npc"), type = "closed", ends = "both")) +
+#   geom_segment(x = time_at_detection + deploy_time/4, xend = time_at_detection + 3*deploy_time/4, 
+#                y = log(hosp_at_detection + 0.5), yend = log(hosp_at_detection + 0.5), 
+#                linewidth = 0.25, col = "black", linetype = "solid") +
+#   geom_segment(x = time_at_detection + 7, xend = time_at_detection + 7, 
+#                y = 0.5, yend = log(hosp_at_detection + 0.5), 
+#                linewidth = 0.25, col = "black", linetype = "solid") +
+#   geom_segment(x = time_at_detection + 7, xend = time_at_detection + 42.5, 
+#                y = 0.5, yend = 0.5, 
+#                linewidth = 0.25, col = "black", linetype = "solid") +
+#   annotate("label", x = time_at_detection + 42.5, y = 0.5, label = "Time to Deploy BPSV", color = "black", hjust = 0) +
+#   
+#   ## BPSV "Vaccination Campaign" Period Segments
+#   geom_segment(x = time_at_detection + deploy_time, xend = time_at_detection + deploy_time + bpsv_campaign_dur, 
+#                y = log(hosp_at_BPSV_start) + 0.8, yend = log(hosp_at_BPSV_start) + 0.8, 
+#                linewidth = 0.25, col = "black", linetype = "dashed",
+#                arrow = arrow(length = unit(0.015, "npc"), type = "closed", ends = "both")) +
+#   geom_segment(x = time_at_detection + deploy_time + bpsv_campaign_dur/4, xend = time_at_detection + deploy_time + bpsv_campaign_dur - bpsv_campaign_dur/4, 
+#                y = log(hosp_at_BPSV_start) + 0.7, yend = log(hosp_at_BPSV_start) + 0.7, 
+#                linewidth = 0.25, col = "black", linetype = "solid") +
+#   geom_segment(x = time_at_detection + deploy_time + bpsv_campaign_dur/4 + bpsv_campaign_dur/4, xend = time_at_detection + deploy_time + bpsv_campaign_dur/4 + bpsv_campaign_dur/4, 
+#                y = log(hosp_at_BPSV_start) + 0.2, yend = log(hosp_at_BPSV_start) + 0.7, 
+#                linewidth = 0.25, col = "black", linetype = "solid") +
+#   geom_segment(x = time_at_detection + deploy_time + bpsv_campaign_dur/4 + bpsv_campaign_dur/4, xend = time_at_detection + 42.5, 
+#                y = log(hosp_at_BPSV_start) + 0.2, yend = log(hosp_at_BPSV_start) + 0.2, 
+#                linewidth = 0.25, col = "black", linetype = "solid") +
+#   annotate("label", x = time_at_detection + 43.5, y = log(hosp_at_BPSV_start) + 0.2, label = "Time to Complete BPSV\nVaccination Campaign", color = "black", hjust = 0) +
+#   
+#   ## Specific Vaccine Development Segments
+#   geom_segment(x = time_at_detection, xend = time_at_detection + spec_develop_time - 2, 
+#                y = log(hosp_at_spec_start) - 0.1, yend = log(hosp_at_spec_start) - 0.1, 
+#                linewidth = 0.25, col = "black", linetype = "dashed",
+#                arrow = arrow(length = unit(0.015, "npc"), type = "closed", ends = "both")) +
+#   geom_segment(x = time_at_detection + spec_develop_time/2 - spec_develop_time/10, xend = time_at_detection + + spec_develop_time/2 + spec_develop_time/10, 
+#                y = log(hosp_at_spec_start) - 0.2, yend = log(hosp_at_spec_start) - 0.2, 
+#                linewidth = 0.25, col = "black", linetype = "solid") +
+#   geom_segment(x = time_at_detection + spec_develop_time/2, xend = time_at_detection + spec_develop_time/2, 
+#                y = 2.5, yend = log(hosp_at_spec_start) - 0.2, 
+#                linewidth = 0.25, col = "black", linetype = "solid") +
+#   geom_segment(x = time_at_detection + spec_develop_time/2, xend = time_at_detection + 5 + spec_develop_time/2, 
+#                y = 2.5, yend = 2.5, 
+#                linewidth = 0.25, col = "black", linetype = "solid") +
+#   annotate("label", x = time_at_detection + 43.5, y = 2.5, label = "Time to Develop Specific Vaccine", color = "black", hjust = 0) +
+#   theme(axis.text.x = element_blank(),
+#         axis.ticks.x = element_blank(),
+#         legend.position = "none")
 
 
-singleR0_example_plot_withExtra
-
-
-## Multiple Epidemic Curves Plot
-low_R0 <- run_booster(time_period = 365,
-                      contact_matrix_set = mixing_matrix,
-                      population = population,
-                      R0 = 1.5,     
-                      tt_R0 = 0, 
-                      hosp_bed_capacity = 10^9,                                     
-                      ICU_bed_capacity = 10^9,                                       
-                      dur_R = 365000000000,                                                        
-                      seeding_cases = 50,
-                      dur_V = 365000000000,                                              
-                      primary_doses = rep(0, 365),  
-                      second_doses = rep(0, 365),
-                      booster_doses = rep(0, 365))
-
-medium_R0 <- run_booster(time_period = 365,
-                         contact_matrix_set = mixing_matrix,
-                         population = population,
-                         R0 = 2,     
-                         tt_R0 = 0, 
-                         hosp_bed_capacity = 10^9,                                     
-                         ICU_bed_capacity = 10^9,                                       
-                         dur_R = 365000000000,                                                        
-                         seeding_cases = 100,
-                         dur_V = 365000000000,                                              
-                         primary_doses = rep(0, 365),  
-                         second_doses = rep(0, 365),
-                         booster_doses = rep(0, 365))
-
-high_R0 <- run_booster(time_period = 365,
-                       contact_matrix_set = mixing_matrix,
-                       population = population,
-                       R0 = 3,     
-                       tt_R0 = 0, 
-                       hosp_bed_capacity = 10^9,                                     
-                       ICU_bed_capacity = 10^9,                                       
-                       dur_R = 365000000000,                                                        
-                       seeding_cases = 100,
-                       dur_V = 365000000000,                                              
-                       primary_doses = rep(0, 365),  
-                       second_doses = rep(0, 365),
-                       booster_doses = rep(0, 365))
-
-
-low_R0_infections <- nimue::format(low_R0, compartments = "S", summaries = "hospitalisations") %>%
-  filter(compartment != "S") %>%
-  select(-replicate) %>%
-  mutate(value = ifelse(is.na(value), 0, value)) %>%
-  mutate(R0 = 1.5)
-
-medium_R0_infections <- nimue::format(medium_R0, compartments = "S", summaries = "hospitalisations") %>%
-  filter(compartment != "S") %>%
-  select(-replicate) %>%
-  mutate(value = ifelse(is.na(value), 0, value)) %>%
-  mutate(R0 = 2)
-
-high_R0_infections <- nimue::format(high_R0, compartments = "S", summaries = "hospitalisations") %>%
-  filter(compartment != "S") %>%
-  select(-replicate) %>%
-  mutate(value = ifelse(is.na(value), 0, value)) %>%
-  mutate(R0 = 3)
-
-overall_df <- rbind(low_R0_infections, medium_R0_infections, high_R0_infections)
-
-thresholds <- c(2, 5, 10, 50)
-raw_detection_times <- overall_df %>%
-  group_by(R0) %>%
-  nest() %>%
-  mutate(detection_times = map(data, ~ { ## nest creates a column of lists of data
-    sapply(thresholds, function(threshold) {
-      first(.x$t[.x$value >= threshold])
-      # .x$t[which.min(abs(.x$value - threshold))]
-      })
-    })) %>%
-  unnest_longer(col = detection_times, indices_to = "detection_threshold_index") %>%
-  mutate(detection_threshold = thresholds[detection_threshold_index]) %>%
-  select(-data)
-
-
-ggplot(overall_df, aes(x = t, y = log(value + 1), col = factor(R0))) +
-  geom_line(linewidth = 1.5) +
-  scale_colour_manual(values = c("#C9DBBA", "#DCDBA8", "#FAA381")) +
-  theme_bw() +
-  labs(x = "Time Since Spillover (Days)", y = "Daily Hospitalisations") +
-  coord_cartesian(xlim = c(0, 125)) +
-  geom_hline(yintercept = log(thresholds), linetype = "dashed") +
-  geom_segment(data = raw_detection_times,
-               aes(x = detection_times, 
-                   xend = detection_times, 
-                   y = 0,
-                   yend = log(detection_threshold))) +
-  annotate("text", x = -4, y = log(5) + 0.25, label = "Low Threshold", color = "black", hjust = 0) +
-  annotate("text", x = -4, y = log(10) + 0.25, label = "Moderate Threshold", color = "black", hjust = 0) +
-  annotate("text", x = -4, y = log(50) + 0.25, label = "High Threshold", color = "black", hjust = 0) +
-  theme(axis.text.x = element_blank(),
-        axis.ticks.x = element_blank()) +
-  guides(colour = guide_legend(title = "R0"))
+# ## Multiple Epidemic Curves Plot
+# low_R0 <- run_booster(time_period = 365,
+#                       contact_matrix_set = mixing_matrix,
+#                       population = population,
+#                       R0 = 1.5,     
+#                       tt_R0 = 0, 
+#                       hosp_bed_capacity = 10^9,                                     
+#                       ICU_bed_capacity = 10^9,                                       
+#                       dur_R = 365000000000,                                                        
+#                       seeding_cases = 50,
+#                       dur_V = 365000000000,                                              
+#                       primary_doses = rep(0, 365),  
+#                       second_doses = rep(0, 365),
+#                       booster_doses = rep(0, 365))
+# 
+# medium_R0 <- run_booster(time_period = 365,
+#                          contact_matrix_set = mixing_matrix,
+#                          population = population,
+#                          R0 = 2,     
+#                          tt_R0 = 0, 
+#                          hosp_bed_capacity = 10^9,                                     
+#                          ICU_bed_capacity = 10^9,                                       
+#                          dur_R = 365000000000,                                                        
+#                          seeding_cases = 100,
+#                          dur_V = 365000000000,                                              
+#                          primary_doses = rep(0, 365),  
+#                          second_doses = rep(0, 365),
+#                          booster_doses = rep(0, 365))
+# 
+# high_R0 <- run_booster(time_period = 365,
+#                        contact_matrix_set = mixing_matrix,
+#                        population = population,
+#                        R0 = 3,     
+#                        tt_R0 = 0, 
+#                        hosp_bed_capacity = 10^9,                                     
+#                        ICU_bed_capacity = 10^9,                                       
+#                        dur_R = 365000000000,                                                        
+#                        seeding_cases = 100,
+#                        dur_V = 365000000000,                                              
+#                        primary_doses = rep(0, 365),  
+#                        second_doses = rep(0, 365),
+#                        booster_doses = rep(0, 365))
+# 
+# 
+# low_R0_infections <- nimue::format(low_R0, compartments = "S", summaries = "hospitalisations") %>%
+#   filter(compartment != "S") %>%
+#   select(-replicate) %>%
+#   mutate(value = ifelse(is.na(value), 0, value)) %>%
+#   mutate(R0 = 1.5)
+# 
+# medium_R0_infections <- nimue::format(medium_R0, compartments = "S", summaries = "hospitalisations") %>%
+#   filter(compartment != "S") %>%
+#   select(-replicate) %>%
+#   mutate(value = ifelse(is.na(value), 0, value)) %>%
+#   mutate(R0 = 2)
+# 
+# high_R0_infections <- nimue::format(high_R0, compartments = "S", summaries = "hospitalisations") %>%
+#   filter(compartment != "S") %>%
+#   select(-replicate) %>%
+#   mutate(value = ifelse(is.na(value), 0, value)) %>%
+#   mutate(R0 = 3)
+# 
+# overall_df <- rbind(low_R0_infections, medium_R0_infections, high_R0_infections)
+# 
+# thresholds <- c(2, 5, 10, 50)
+# raw_detection_times <- overall_df %>%
+#   group_by(R0) %>%
+#   nest() %>%
+#   mutate(detection_times = map(data, ~ { ## nest creates a column of lists of data
+#     sapply(thresholds, function(threshold) {
+#       first(.x$t[.x$value >= threshold])
+#       # .x$t[which.min(abs(.x$value - threshold))]
+#       })
+#     })) %>%
+#   unnest_longer(col = detection_times, indices_to = "detection_threshold_index") %>%
+#   mutate(detection_threshold = thresholds[detection_threshold_index]) %>%
+#   select(-data)
+# 
+# 
+# ggplot(overall_df, aes(x = t, y = log(value + 1), col = factor(R0))) +
+#   geom_line(linewidth = 1.5) +
+#   scale_colour_manual(values = c("#C9DBBA", "#DCDBA8", "#FAA381")) +
+#   theme_bw() +
+#   labs(x = "Time Since Spillover (Days)", y = "Daily Hospitalisations") +
+#   coord_cartesian(xlim = c(0, 125)) +
+#   geom_hline(yintercept = log(thresholds), linetype = "dashed") +
+#   geom_segment(data = raw_detection_times,
+#                aes(x = detection_times, 
+#                    xend = detection_times, 
+#                    y = 0,
+#                    yend = log(detection_threshold))) +
+#   annotate("text", x = -4, y = log(5) + 0.25, label = "Low Threshold", color = "black", hjust = 0) +
+#   annotate("text", x = -4, y = log(10) + 0.25, label = "Moderate Threshold", color = "black", hjust = 0) +
+#   annotate("text", x = -4, y = log(50) + 0.25, label = "High Threshold", color = "black", hjust = 0) +
+#   theme(axis.text.x = element_blank(),
+#         axis.ticks.x = element_blank()) +
+#   guides(colour = guide_legend(title = "R0"))
 
 
 # ggplot(overall_df, aes(x = t, y = log(value + 1), col = factor(R0))) +
@@ -674,83 +720,19 @@ ggplot(overall_df, aes(x = t, y = log(value + 1), col = factor(R0))) +
 #   guides(colour = guide_legend(title = "R0"))
 
 
-
-
-
-  
-
-
-
-ggplot(overall_df, aes(x = t, y = value, col = factor(R0))) +
-  geom_line(linewidth = 1.5) +
-  scale_colour_manual(values = c("#C9DBBA", "#DCDBA8", "#FAA381")) +
-  theme_bw() +
-  labs(x = "Time Since Spillover (Days)", y = "Daily Hospitalisations") +
-  coord_cartesian(xlim = c(0, 275))
-
-inset_plot <- ggplot(overall_df, aes(x = t, y = value, col = factor(R0))) +
-  geom_line(linewidth = 1.5) +
-  scale_colour_manual(values = c("#C9DBBA", "#DCDBA8", "#FAA381")) +
-  theme_bw() +
-  labs(x = "Time Since Spillover (Days)", y = "Daily Hospitalisations") +
-  coord_cartesian(xlim = c(0, 275))
-
-
-
-
-
-  
-  
-
-
-
-
-ggplot(data = subset(centralSpec_deathsAverted, metric == "Daily Incidence")) +
-  geom_bar(aes(x = factor(R0), y = bpsv_deaths_averted * 1000 / population_size, 
-               colour = factor(NPI_int), fill = factor(NPI_int)), 
-           stat = "identity", position = "dodge") +
-  facet_wrap(.~detection_timing, strip.position = "top",
-             labeller = as_labeller(c(early = "Early\nDetection", 
-                                      moderate = "Intermediate\nDetection",
-                                      late = "Late\nDetection"))) +
-  labs(x = "Reproduction Number (R0)", y = "Deaths Averted by BPSV (Per 1000)") + 
-  scale_fill_manual(values = NPI_colours) +
-  scale_colour_manual(values = NPI_colours) +
-  theme_classic() +
-  theme(strip.placement = "outside",
-        legend.position = "none")
-
-
-ggplot(data = subset(centralSpec_deathsAverted, metric == "Daily Incidence")) +
-  geom_line(aes(x = R0, y = bpsv_deaths_averted * 1000 / population_size, 
-               colour = factor(NPI_int), fill = factor(NPI_int)), 
-           stat = "identity", position = "dodge") +
-  facet_wrap(.~detection_timing, strip.position = "top",
-             labeller = as_labeller(c(early = "Early\nDetection", 
-                                      moderate = "Intermediate\nDetection",
-                                      late = "Late\nDetection"))) +
-  labs(x = "Reproduction Number (R0)", y = "Deaths Averted by BPSV (Per 1000)") + 
-  scale_fill_manual(values = NPI_colours) +
-  scale_colour_manual(values = NPI_colours) +
-  theme_classic() +
-  theme(strip.placement = "outside")
-
-
-ggplot(data = centralSpec_deathsAverted) +
-  geom_bar(aes(x = factor(R0), y = bpsv_deaths_averted, fill = factor(NPI_int)), 
-           stat = "identity", position = "dodge") +
-  facet_grid(metric~detection_timing)
-
-ggplot(data = subset(centralSpec_deathsAverted, metric == "Daily Incidence")) +
-  geom_bar(aes(x = factor(detection_timing), y = bpsv_deaths_averted, fill = factor(NPI_int)), 
-           stat = "identity", position = "dodge") +
-  facet_grid(NPI_int~R0)
-
-ggplot(data = subset(centralSpec_deathsAverted, metric == "Daily Incidence")) +
-  geom_bar(aes(x = factor(detection_timing), y = bpsv_deaths_averted, fill = factor(NPI_int)), 
-           stat = "identity", position = "dodge") +
-  facet_grid(NPI_int~R0)
-
+# ggplot(overall_df, aes(x = t, y = value, col = factor(R0))) +
+#   geom_line(linewidth = 1.5) +
+#   scale_colour_manual(values = c("#C9DBBA", "#DCDBA8", "#FAA381")) +
+#   theme_bw() +
+#   labs(x = "Time Since Spillover (Days)", y = "Daily Hospitalisations") +
+#   coord_cartesian(xlim = c(0, 275))
+# 
+# inset_plot <- ggplot(overall_df, aes(x = t, y = value, col = factor(R0))) +
+#   geom_line(linewidth = 1.5) +
+#   scale_colour_manual(values = c("#C9DBBA", "#DCDBA8", "#FAA381")) +
+#   theme_bw() +
+#   labs(x = "Time Since Spillover (Days)", y = "Daily Hospitalisations") +
+#   coord_cartesian(xlim = c(0, 275))
 
 # ggplot(low_R0_infections, aes(x = t, y = log(value + 1), col = factor(R0))) +
 #   geom_point(linewidth = 1.5) +
