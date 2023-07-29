@@ -93,13 +93,7 @@ if (new_bp) {
 bp_df_long_mean <- bp_df_long %>%
   filter(!is.infinite(value)) %>%
   group_by(R0, detection, metric, detection_threshold) %>%
-  summarise(mean = mean(value)) %>%
-  filter(detection %in% c(5, 10, 50, 100)) %>%
-  mutate(detection_timing = case_when(detection == 5 ~ "early",
-                                      detection == 10 ~ "moderate",
-                                      detection == 50 ~ "late",
-                                      detection == 100 ~ "very_late")) %>%
-  select(-detection_threshold)
+  summarise(mean = mean(value)) 
 bp_detection_time_plot <- ggplot(bp_df_long_mean, aes(x = R0, y = mean, col = factor(detection))) + 
   geom_line() +
   facet_grid(.~metric)
