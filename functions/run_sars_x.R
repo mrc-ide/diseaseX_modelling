@@ -17,11 +17,12 @@ generate_standard_pop <- function(country = "Argentina", population_size = 1e9) 
 
 ## Generate generation time #### THIS IS WRONG AND NEEDS TO CHANGE
 scale_generation_time <- function(target_Tg) {
-  current_Tg <- squire.page:::durs_booster$dur_IMild + squire.page:::durs_booster$dur_ICase
-  Tg_ratio <- target_Tg / current_Tg
+  current_Tg_mild <- squire.page:::durs_booster$dur_E + squire.page:::durs_booster$dur_IMild
+  current_Tg_case <- squire.page:::durs_booster$dur_E + squire.page:::durs_booster$dur_ICase
+  overall_Tg <- 0.98 * current_Tg_mild + 0.02 * current_Tg_case # (approx 2% IHR - might need changing)
+  Tg_ratio <- target_Tg / overall_Tg
   TgVary_dur_IMild <- Tg_ratio * squire.page:::durs_booster$dur_IMild
   TgVary_dur_ICase <- Tg_ratio * squire.page:::durs_booster$dur_ICase
-  # stop("charlie you need to change this because it's wrong")
   return(list(dur_IMild = TgVary_dur_IMild, dur_ICase = TgVary_dur_ICase))
 }
 
