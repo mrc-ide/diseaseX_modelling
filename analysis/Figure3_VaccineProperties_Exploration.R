@@ -24,6 +24,21 @@ source(here::here("main.R"))
 # Load required functions
 source(here::here("functions/run_sars_x.R"))
 
+# Loading in bp based detection and calculating detection times for the the different R0 values
+bp_df_long <- readRDS("outputs/Figure1_bp_detection_times.rds")
+prob_hosp <- squire.page:::probs_booster$prob_hosp
+arg_pop <- squire::get_population("Argentina")
+IHR <- sum(prob_hosp * arg_pop$n / sum(arg_pop$n)) 
+num_hosp <- 1:20
+detection_hosp <- round(num_hosp / IHR, digits = 0)
+num_hosp <- c(1, 5, 10)
+infection_thresholds <- detection_hosp[num_hosp]
+bp_df_mean_subset <- bp_df_long %>%
+  filter(!is.infinite(value),
+         detection %in% infection_thresholds) %>%
+  group_by(R0, detection, metric) %>%
+  summarise(mean = mean(value)) 
+
 # NPI Relevant Parameters
 lockdown_Rt <- 0.9                   # Rt achieved under lockdown
 minimal_mandate_reduction <- 0.25    # Fold-reduction in R0 achieved under minimal mandate restrictions
@@ -31,14 +46,16 @@ minimal_mandate_reduction <- 0.25    # Fold-reduction in R0 achieved under minim
 # Generate parameter combinations for model running
 
 ### BPSV Efficacy Against Disease
+
+#### Generate initial sets of scenarios (note placeholder for detection time)
 raw_bpsv_efficacy_scenarios <- create_scenarios(R0 = c(1.5, 2, 2.5, 3, 3.5),                   # Basic reproduction number
-                                                IFR = 1,                          # IFR
+                                                IFR = 1,                                       # IFR
                                                 population_size = 10^10,
                                                 Tg = 5.5,                                      # Tg
-                                                detection_time = 14,                           # detection time
+                                                detection_time = 1,                            # PLACEHOLDER FOR NOW
                                                 bpsv_start = 7,                                # BPSV distribution start (time after detection time)
                                                 bpsv_protection_delay = 7,                     # delay between receipt of BPSV dose and protection
-                                                specific_vaccine_start = c(100, 200, 365, 500),# specific vaccine distribution start (time after detection time)
+                                                specific_vaccine_start = c(100, 200, 365),     # specific vaccine distribution start (time after detection time)
                                                 specific_protection_delay = 7,                 # delay between receipt of specific dose and protection
                                                 efficacy_infection_bpsv = 0.35,                # vaccine efficacy against infection - BPSV
                                                 efficacy_disease_bpsv = seq(0.05, 1, 0.05),    # vaccine efficacy against disease - BPSV
@@ -51,22 +68,41 @@ raw_bpsv_efficacy_scenarios <- create_scenarios(R0 = c(1.5, 2, 2.5, 3, 3.5),    
                                                 vaccination_rate = 0.035,                      # vaccination rate per week as percentage of population
                                                 min_age_group_index_priority = 13,             # index of the youngest age group given priority w.r.t vaccines (13 = 60+)
                                                 min_age_group_index_non_priority = 4)          # index of the youngest age group that *receives* vaccines (4 = 15+)
-raw_bpsv_efficacy_scenarios$main_varied <- "disease_efficacy"
+
+## Join detection time dataframe (note currently have all combos of R0 and detection time and we want specific pairings)
+raw_bpsv_efficacy_scenarios2 <- expand_grid(raw_bpsv_efficacy_scenarios,
+                                            detection_threshold = unique(bp_df_mean_subset$detection)) %>%
+  left_join(bp_df_mean_subset, by = c("R0" = "R0", "detection_threshold" = "detection")) %>%
+  mutate(detection_time = round(mean, digits = 0)) %>%
+  select(-mean) 
+
+## Generating NPIs based on specific detection times, R0, and other vaccine-related events
 NPIs_bpsv_eff <- default_NPI_scenarios(lockdown_Rt = lockdown_Rt, minimal_mandate_reduction = minimal_mandate_reduction, 
-                                       NPI_scenarios = 1:9, scenarios = raw_bpsv_efficacy_scenarios)
-bpsv_eff_scenarios <- raw_bpsv_efficacy_scenarios %>%
+                                       NPI_scenarios = c(4, 7, 8), scenarios = raw_bpsv_efficacy_scenarios2)
+bpsv_eff_scenarios <- raw_bpsv_efficacy_scenarios2 %>%
   full_join(NPIs_bpsv_eff, by = c("R0", "country", "population_size", "detection_time", "bpsv_start",    # joining by all columns which influence NPI scenario timing
                                   "specific_vaccine_start", "vaccination_rate", "coverage", "min_age_group_index_priority"), multiple = "all")
 
+## Filtering the above to only select R0 and detection time pairs that actually occurred (the expand grid call above generated all combos)
+R0_detection_time_pairs <- bp_df_mean_subset %>%
+  mutate(detection_time = round(mean, digits = 0)) %>%
+  ungroup() %>%
+  select(R0, detection_time, metric)
+final_bpsv_eff_scenarios <- bpsv_eff_scenarios %>%
+  semi_join(R0_detection_time_pairs, by = c("R0", "detection_time", "metric")) %>%
+  mutate(main_varied = "disease_efficacy")
+# R0 * spec vax * vaccine scenarios * detection * detection metric * efficacy * NPIs
+5 * 3 * 2 * 3 * 2 * 20 * 3
+
 ### BPSV Delay Between Vaccination Receipt & Protection
 raw_bpsv_delay_scenarios <- create_scenarios(R0 = c(1.5, 2, 2.5, 3, 3.5),                   # Basic reproduction number
-                                             IFR = 1,                          # IFR
+                                             IFR = 1,                                       # IFR
                                              population_size = 10^10,
                                              Tg = 5.5,                                      # Tg
-                                             detection_time = 14,                           # detection time
-                                             bpsv_start = 7,                               # BPSV distribution start (time after detection time)
-                                             bpsv_protection_delay = seq(2, 42, 2),       # delay between receipt of BPSV dose and protection
-                                             specific_vaccine_start = c(100, 200, 365, 500),# specific vaccine distribution start (time after detection time)
+                                             detection_time = 1,                            # PLACEHOLDER FOR NOW
+                                             bpsv_start = 7,                                # BPSV distribution start (time after detection time)
+                                             bpsv_protection_delay = seq(2, 42, 2),         # delay between receipt of BPSV dose and protection
+                                             specific_vaccine_start = c(100, 200, 365),     # specific vaccine distribution start (time after detection time)
                                              specific_protection_delay = 7,                 # delay between receipt of specific dose and protection
                                              efficacy_infection_bpsv = 0.35,                # vaccine efficacy against infection - BPSV
                                              efficacy_disease_bpsv = 0.75,                  # vaccine efficacy against disease - BPSV
@@ -79,25 +115,44 @@ raw_bpsv_delay_scenarios <- create_scenarios(R0 = c(1.5, 2, 2.5, 3, 3.5),       
                                              vaccination_rate = 0.035,                      # vaccination rate per week as percentage of population
                                              min_age_group_index_priority = 13,             # index of the youngest age group given priority w.r.t vaccines (13 = 60+)
                                              min_age_group_index_non_priority = 4)          # index of the youngest age group that *receives* vaccines (4 = 15+)
-raw_bpsv_delay_scenarios$main_varied <- "protection_delay"
+
+## Join detection time dataframe (note currently have all combos of R0 and detection time and we want specific pairings)
+raw_bpsv_delay_scenarios2 <- expand_grid(raw_bpsv_delay_scenarios,
+                                         detection_threshold = unique(bp_df_mean_subset$detection)) %>%
+  left_join(bp_df_mean_subset, by = c("R0" = "R0", "detection_threshold" = "detection")) %>%
+  mutate(detection_time = round(mean, digits = 0)) %>%
+  select(-mean) 
+
+## Generating NPIs based on specific detection times, R0, and other vaccine-related events
 NPIs_bpsv_delay <- default_NPI_scenarios(lockdown_Rt = lockdown_Rt, minimal_mandate_reduction = minimal_mandate_reduction, 
-                                         NPI_scenarios = 1:9, scenarios = raw_bpsv_delay_scenarios)
-bpsv_delay_scenarios <- raw_bpsv_delay_scenarios %>%
+                                         NPI_scenarios = c(4, 7, 8), scenarios = raw_bpsv_delay_scenarios2)
+bpsv_delay_scenarios <- raw_bpsv_delay_scenarios2 %>%
   full_join(NPIs_bpsv_delay, by = c("R0", "country", "population_size", "detection_time", "bpsv_start",    # joining by all columns which influence NPI scenario timing
-                                    "specific_vaccine_start", "vaccination_rate", "coverage", "min_age_group_index_priority"), multiple = "all")
+                                  "specific_vaccine_start", "vaccination_rate", "coverage", "min_age_group_index_priority"), multiple = "all")
+
+## Filtering the above to only select R0 and detection time pairs that actually occurred (the expand grid call above generated all combos)
+R0_detection_time_pairs <- bp_df_mean_subset %>%
+  mutate(detection_time = round(mean, digits = 0)) %>%
+  ungroup() %>%
+  select(R0, detection_time, metric)
+final_bpsv_delay_scenarios <- bpsv_delay_scenarios %>%
+  semi_join(R0_detection_time_pairs, by = c("R0", "detection_time", "metric")) %>%
+  mutate(main_varied = "protection_delay")
+# R0 * spec vax * vaccine scenarios * detection * detection metric * efficacy * NPIs
+5 * 3 * 2 * 3 * 2 * 21 * 3
 
 ### BPSV Duration of Immunity
 raw_dur_bpsv_scenarios <- create_scenarios(R0 = c(1.5, 2, 2.5, 3, 3.5),                   # Basic reproduction number
-                                           IFR = 1,                          # IFR
+                                           IFR = 1,                                       # IFR
                                            population_size = 10^10,
                                            Tg = 5.5,                                      # Tg
-                                           detection_time = 14,                           # detection time
-                                           bpsv_start = 7,                               # BPSV distribution start (time after detection time)
+                                           detection_time = 1,                            # PLACEHOLDER FOR NOW
+                                           bpsv_start = 7,                                # BPSV distribution start (time after detection time)
                                            bpsv_protection_delay = 7,                     # delay between receipt of BPSV dose and protection
-                                           specific_vaccine_start = c(100, 200, 365, 500),# specific vaccine distribution start (time after detection time)
+                                           specific_vaccine_start = c(100, 200, 365),     # specific vaccine distribution start (time after detection time)
                                            specific_protection_delay = 7,                 # delay between receipt of specific dose and protection
                                            efficacy_infection_bpsv = 0.35,                # vaccine efficacy against infection - BPSV
-                                           efficacy_disease_bpsv = 0.75,    # vaccine efficacy against disease - BPSV
+                                           efficacy_disease_bpsv = 0.75,                  # vaccine efficacy against disease - BPSV
                                            efficacy_infection_spec = 0.55,                # vaccine efficacy against infection - specific vaccine
                                            efficacy_disease_spec = 0.9,                   # vaccine efficacy against disease - specific vaccine
                                            dur_R = 365000000,                             # duration of infection-induced immunity
@@ -107,16 +162,34 @@ raw_dur_bpsv_scenarios <- create_scenarios(R0 = c(1.5, 2, 2.5, 3, 3.5),         
                                            vaccination_rate = 0.035,                      # vaccination rate per week as percentage of population
                                            min_age_group_index_priority = 13,             # index of the youngest age group given priority w.r.t vaccines (13 = 60+)
                                            min_age_group_index_non_priority = 4)          # index of the youngest age group that *receives* vaccines (4 = 15+)
-raw_dur_bpsv_scenarios$main_varied <- "immunity_duration"
+
+## Join detection time dataframe (note currently have all combos of R0 and detection time and we want specific pairings)
+raw_dur_bpsv_scenarios2 <- expand_grid(raw_dur_bpsv_scenarios,
+                                       detection_threshold = unique(bp_df_mean_subset$detection)) %>%
+  left_join(bp_df_mean_subset, by = c("R0" = "R0", "detection_threshold" = "detection")) %>%
+  mutate(detection_time = round(mean, digits = 0)) %>%
+  select(-mean) 
+
+## Generating NPIs based on specific detection times, R0, and other vaccine-related events
 NPIs_bpsv_dur <- default_NPI_scenarios(lockdown_Rt = lockdown_Rt, minimal_mandate_reduction = minimal_mandate_reduction, 
-                                        NPI_scenarios = 1:9, scenarios = raw_dur_bpsv_scenarios)
-bpsv_dur_scenarios <- raw_dur_bpsv_scenarios %>%
+                                         NPI_scenarios = c(4, 7, 8), scenarios = raw_dur_bpsv_scenarios2)
+bpsv_dur_scenarios <- raw_dur_bpsv_scenarios2 %>%
   full_join(NPIs_bpsv_dur, by = c("R0", "country", "population_size", "detection_time", "bpsv_start",    # joining by all columns which influence NPI scenario timing
                                   "specific_vaccine_start", "vaccination_rate", "coverage", "min_age_group_index_priority"), multiple = "all")
 
-vaccine_property_scenarios <- rbind(bpsv_eff_scenarios, bpsv_delay_scenarios, bpsv_dur_scenarios)
+## Filtering the above to only select R0 and detection time pairs that actually occurred (the expand grid call above generated all combos)
+R0_detection_time_pairs <- bp_df_mean_subset %>%
+  mutate(detection_time = round(mean, digits = 0)) %>%
+  ungroup() %>%
+  select(R0, detection_time, metric)
+final_bpsv_dur_scenarios <- bpsv_dur_scenarios %>%
+  semi_join(R0_detection_time_pairs, by = c("R0", "detection_time", "metric")) %>%
+  mutate(main_varied = "immunity_duration") 
+# R0 * spec vax * vaccine scenarios * detection * detection metric * efficacy * NPIs
+5 * 3 * 2 * 3 * 2 * 24 * 3
 
-## Creating index for output (important as it orders dataframe so that pairs of identical scenarios save for BPSV Y/N are next to each other)
+## Creating overall output and index for output (important as it orders dataframe so that pairs of identical scenarios save for BPSV Y/N are next to each other)
+vaccine_property_scenarios <- rbind(final_bpsv_eff_scenarios, final_bpsv_delay_scenarios, final_bpsv_dur_scenarios)
 vars_for_index <- c(variable_columns(vaccine_property_scenarios), "NPI_int")
 vaccine_property_scenarios <- vaccine_property_scenarios %>%
   group_by(vaccine_scenario) %>%
