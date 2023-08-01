@@ -221,7 +221,8 @@ model_outputs2 <- model_outputs %>%
   mutate(detection_threshold_hosp = round(detection_threshold * IHR)) %>%
   mutate(detection_timing = case_when(detection_threshold_hosp == 1 ~ "Early",
                                       detection_threshold_hosp == 5 ~ "Intermediate",
-                                      detection_threshold_hosp == 10 ~ "Late"))
+                                      detection_threshold_hosp == 10 ~ "Late",
+                                      detection_threshold_hosp == 20 ~ "Very Late"))
 
 ## Plotting the output
 colour_func <- scales::hue_pal()(max(model_outputs$NPI_int))
@@ -466,23 +467,25 @@ delay_protect_plotting <- model_outputs2 %>%
             time_under_NPIs_bpsv = time_under_NPIs_bpsv,
             composite_NPI_bpsv = composite_NPI_bpsv)
 
-delay_protect_plot <- ggplot(subset(delay_protect_plotting, R0 %in% c(1.5, 2.5, 3.5) & NPI_int == 7)) +
+delay_protect_plot <- ggplot(subset(delay_protect_plotting, R0 %in% c(1.5, 2.5, 3.5) & NPI_int == 7 &
+                                      detection_threshold_hosp %in% c(1, 10))) +
   geom_line(aes(x = bpsv_protection_delay, y = central_deaths_averted, col = factor(R0)), size = 1) +
   geom_point(aes(x = bpsv_protection_delay, y = central_deaths_averted, fill = factor(R0)), 
              size = 2, pch = 21, col = "black") +
-  scale_colour_manual(values = c(rev(generate_palette(NPI_colours[1], modification = "go_lighter", 
-                                                      n_colours = 3))[2],
+  scale_colour_manual(values = c(rev(generate_palette(NPI_colours[2], modification = "go_lighter", 
+                                                      n_colours = 3))[1],
                                  rev(generate_palette(NPI_colours[2], modification = "go_lighter", 
                                                       n_colours = 3))[2],
-                                 rev(generate_palette(NPI_colours[3], modification = "go_lighter", 
-                                                      n_colours = 3))[2]))  +
-  scale_fill_manual(values = c(rev(generate_palette(NPI_colours[1], modification = "go_lighter", 
-                                                      n_colours = 3))[2],
+                                 rev(generate_palette(NPI_colours[2], modification = "go_lighter", 
+                                                      n_colours = 3))[3]))  +
+  scale_fill_manual(values = c(rev(generate_palette(NPI_colours[2], modification = "go_lighter", 
+                                                      n_colours = 3))[1],
                                  rev(generate_palette(NPI_colours[2], modification = "go_lighter", 
                                                       n_colours = 3))[2],
-                                 rev(generate_palette(NPI_colours[3], modification = "go_lighter", 
-                                                      n_colours = 3))[2]))  +
-  facet_grid(detection_threshold_hosp ~ .) +
+                                 rev(generate_palette(NPI_colours[2], modification = "go_lighter", 
+                                                      n_colours = 3))[3]))  +
+  facet_grid(detection_threshold_hosp ~ .,
+             labeller = as_labeller(c(`1` = "Early Detect", `10` = "Late Detect"))) +
   theme_bw() +
   lims(y = c(0, max(subset(delay_protect_plotting, R0 == 3.5)$central_deaths_averted))) +
   labs(x = "Protection Delay (Days)", y = "Deaths Averted By BPSV Per 1000") +
@@ -521,30 +524,13 @@ delay_protect_plot2 <- ggplot(subset(delay_protect_plotting, R0 != 1.5 & R0 != 3
   theme(legend.position = "none")
 
 ## Altogether Plotting
-temp <- cowplot::plot_grid(dur_protect_plot2, delay_protect_plot2, nrow = 2, ncol = 1, labels = c("B", "C"))
-overall1 <- cowplot::plot_grid(disease_efficacy_plot2, temp, ncol = 2, rel_widths = c(1.5, 1), labels = c("A", ""))
-
 temp2 <- cowplot::plot_grid(dur_protect_plot, delay_protect_plot, nrow = 2, ncol = 1, labels = c("B", "C"))
 overall2 <- cowplot::plot_grid(disease_efficacy_plot2, temp2, ncol = 2, rel_widths = c(1.5, 1), labels = c("A", ""))
-
-overall3 <- cowplot::plot_grid(eff_plot2, temp2, ncol = 2, rel_widths = c(1.5, 1), labels = c("A", ""))
-
-overall1
-overall2
-overall3
-
-ggsave(filename = "figures/vaccine_properties_plot_V1.pdf",
-       plot = overall1,
-       height = 7.16,
-       width = 9.92)
-ggsave(filename = "figures/vaccine_properties_plot_V2.pdf",
+ggsave(filename = "figures/Figure3_VaccineProperties_Exploration.pdf",
        plot = overall2,
-       height = 7.16,
+       height = 7.75,
        width = 9.92)
-ggsave(filename = "figures/vaccine_properties_plot_V3.pdf",
-       plot = overall3,
-       height = 7.16,
-       width = 9.92)
+
 #####
 # 
 # delay_protect_plot <- ggplot(subset(delay_protect_plotting, R0 != 1.5 & NPI_int == 7)) +
