@@ -1,5 +1,7 @@
 # Load required libraries
 source(here::here("main.R"))
+library(magick)
+library(pdftools)
 
 # Load required functions
 source(here::here("functions/run_sars_x.R"))
@@ -27,7 +29,7 @@ raw_rel_start_scenarios <- create_scenarios(R0 = c(1.5, 2, 2.5, 3, 3.5),        
                                             population_size = 10^10,
                                             Tg = 6.7,                                      # Tg
                                             detection_time = 1,                            # PLACEHOLDER
-                                            bpsv_start = 7,                                # BPSV distribution start (time after detection time)
+                                            bpsv_start = 0,                                # BPSV distribution start (time after detection time)
                                             bpsv_protection_delay = 7,                     # delay between receipt of BPSV dose and protection
                                             specific_vaccine_start = c(100, 200, 365),     # specific vaccine distribution start (time after detection time)
                                             specific_protection_delay = 7,                 # delay between receipt of specific dose and protection
@@ -45,33 +47,29 @@ raw_rel_start_scenarios <- create_scenarios(R0 = c(1.5, 2, 2.5, 3, 3.5),        
                                             min_age_group_index_non_priority = 4,          # index of the youngest age group that *receives* vaccines (4 = 15+)
                                             runtime = 1250)
 
-raw_rel_start_scenarios2 <- expand_grid(raw_rel_start_scenarios, days_ahead_arrival = seq(100, -100, -1))
+raw_rel_start_scenarios2 <- expand_grid(raw_rel_start_scenarios, days_ahead_arrival = seq(100, -100, -50))
 
-for (i in 1:nrow(raw_rel_start_scenarios2)) {
-  if (raw_rel_start_scenarios2$days_ahead_arrival[i] <= 0) { ## BPSV campaign and specific development starts after pathogen arrival
-    
-    raw_rel_start_scenarios2$detection_time[i] <- -raw_rel_start_scenarios2$days_ahead_arrival[i]
-    raw_rel_start_scenarios2$bpsv_start[i] <- 0
-    raw_rel_start_scenarios2$bpsv_protection_delay[i] <- 7
-    raw_rel_start_scenarios2$specific_vaccine_start[i] <- raw_rel_start_scenarios2$specific_vaccine_start[i]
-    raw_rel_start_scenarios2$specific_protection_delay[i] <- 7
-    raw_rel_start_scenarios2$Rt[i] <- list(raw_rel_start_scenarios2$R0[i])
-    raw_rel_start_scenarios2$tt_Rt[i] <- list(0)
-    
-  } else if (raw_rel_start_scenarios2$days_ahead_arrival[i] > 0) { ## BPSV campaign and specific development starts ahead of pathogen arrival
-    
-    raw_rel_start_scenarios2$detection_time[i] <- 0
-    raw_rel_start_scenarios2$bpsv_start[i] <- 0
-    raw_rel_start_scenarios2$bpsv_protection_delay[i] <- 7
-    raw_rel_start_scenarios2$specific_vaccine_start[i] <- raw_rel_start_scenarios2$specific_vaccine_start[i]
-    raw_rel_start_scenarios2$specific_protection_delay[i] <- 7
-    raw_rel_start_scenarios2$Rt[i] <- list(c(raw_rel_start_scenarios2$R0[i], 0.9, raw_rel_start_scenarios2$R0[i]))
-    raw_rel_start_scenarios2$tt_Rt[i] <- list(c(0, 1, raw_rel_start_scenarios2$days_ahead_arrival[i]))
 
-  } else {
-    stop("what???")
-  }
-}
+# for (i in 1:nrow(raw_rel_start_scenarios2)) {
+#   if (raw_rel_start_scenarios2$days_ahead_arrival[i] <= 0) { ## BPSV campaign and specific development starts after pathogen arrival
+#     raw_rel_start_scenarios2$detection_time[i] <- -raw_rel_start_scenarios2$days_ahead_arrival[i]
+#     raw_rel_start_scenarios2$bpsv_start[i] <- 0
+#     raw_rel_start_scenarios2$bpsv_protection_delay[i] <- 7
+#     raw_rel_start_scenarios2$specific_vaccine_start[i] <- raw_rel_start_scenarios2$specific_vaccine_start[i]
+#     raw_rel_start_scenarios2$specific_protection_delay[i] <- 7
+#     raw_rel_start_scenarios2$Rt[i] <- list(raw_rel_start_scenarios2$R0[i])
+#     raw_rel_start_scenarios2$tt_Rt[i] <- list(0)
+#     
+#   } else if (raw_rel_start_scenarios2$days_ahead_arrival[i] > 0) { ## BPSV campaign and specific development starts ahead of pathogen arrival
+#     raw_rel_start_scenarios2$detection_time[i] <- 0
+#     raw_rel_start_scenarios2$bpsv_start[i] <- 0
+#     raw_rel_start_scenarios2$bpsv_protection_delay[i] <- 7
+#     raw_rel_start_scenarios2$specific_vaccine_start[i] <- raw_rel_start_scenarios2$specific_vaccine_start[i]
+#     raw_rel_start_scenarios2$specific_protection_delay[i] <- 7
+#     raw_rel_start_scenarios2$Rt[i] <- list(c(1, raw_rel_start_scenarios2$R0[i]))
+#     raw_rel_start_scenarios2$tt_Rt[i] <- list(c(0, raw_rel_start_scenarios2$days_ahead_arrival[i]))
+#   }
+# }
 
 ## Creating overall output and index for output (important as it orders dataframe so that pairs of identical scenarios save for BPSV Y/N are next to each other)
 vars_for_index <- c(variable_columns(raw_rel_start_scenarios2))
@@ -105,25 +103,128 @@ model_outputs2 <- model_outputs %>%
   filter(days_ahead_arrival >= -30)
 population <- unique(model_outputs2$population_size)
 
+ggplot(model_outputs2, aes(x = -days_ahead_arrival, 
+                           y = bpsv_deaths_averted * 1000 / population, col = factor(R0))) +
+  geom_line() +
+  facet_wrap(specific_vaccine_start ~ ., 
+             labeller = as_labeller(c(`100`='Specific Vaccine In 100 Days', 
+                                      `200`='Specific Vaccine In 200 Days',
+                                      `365`='Specific Vaccine In 365 Days'))) +
+  theme_bw() +
+  labs(x = "Days Pathogen Detection is Ahead of Pathogen Arrival",
+       y = "Deaths Averted By BPSV\n(Per 1,000 Population)") +
+  theme(strip.placement = "outside",
+        legend.position = "none",
+        strip.background = element_rect(fill="white")) 
+
+ggplot(model_outputs2, aes(x = -days_ahead_arrival, 
+                           y = deaths_spec * 1000 / population, col = factor(R0))) +
+  geom_line() +
+  facet_wrap(specific_vaccine_start ~ ., 
+             labeller = as_labeller(c(`100`='Specific Vaccine In 100 Days', 
+                                      `200`='Specific Vaccine In 200 Days',
+                                      `365`='Specific Vaccine In 365 Days'))) +
+  theme_bw() +
+  labs(x = "Days Pathogen Detection is Ahead of Pathogen Arrival",
+       y = "Deaths Averted By BPSV\n(Per 1,000 Population)") +
+  theme(strip.placement = "outside",
+        legend.position = "none",
+        strip.background = element_rect(fill="white")) 
+
+
 ggplot(model_outputs2, aes(x = -days_ahead_arrival, y = deaths_spec, col = factor(R0))) +
   geom_line() +
   facet_wrap(.~specific_vaccine_start) 
 
-ggplot(model_outputs2, aes(x = -days_ahead_arrival, 
-                           y = bpsv_deaths_averted * 1000 / population, col = factor(R0))) +
-  geom_line() +
-  facet_wrap(.~specific_vaccine_start) +
+
+
+### Plotting the dynamics in source, early and late secondary countries
+population <- squire:::get_population("Argentina")
+population <- 10^6 * population$n / sum(population$n)
+mixing_matrix <- squire:::get_mixing_matrix("Argentina")
+test_run <- run_booster(time_period = 1300,
+                        contact_matrix_set = mixing_matrix,
+                        population = population,
+                        R0 = 1.15,     
+                        tt_R0 = 0, 
+                        hosp_bed_capacity = 10^9,                                     
+                        ICU_bed_capacity = 10^9,                                       
+                        dur_R = 365000000000,                                                        
+                        seeding_cases = 10,
+                        dur_V = 365000000000,                                              
+                        primary_doses = rep(0, 1300),  
+                        second_doses = rep(0, 1300),
+                        booster_doses = rep(0, 1300))
+
+
+buffer <- 125
+infections <- nimue::format(test_run, compartments = "S", summaries = "infections") %>%
+  filter(compartment != "S") %>%
+  mutate(t = t + buffer) %>%
+  select(-replicate) %>%
+  mutate(value = ifelse(is.na(value), 0, value)) %>%
+  mutate(R0 = 1.15) %>%
+  complete(t = seq(0, max(t), 1),
+           fill = list(value = 0.0920248, R0 = 1.15, compartment = "infections"))
+
+secondary_early_start <- 200
+infections2 <- infections %>%
+  mutate(t = t + secondary_early_start) %>%
+  complete(t = seq(0, max(t), 1),
+           fill = list(value = NA, R0 = 1.15, compartment = "infections"))
+
+secondary_late_start <- 650
+infections3 <- infections %>%
+  mutate(t = t + secondary_late_start) %>%
+  complete(t = seq(0, max(t), 1),
+           fill = list(value = NA, R0 = 1.15, compartment = "infections"))
+
+base_plot <- ggplot(data = infections3, aes(x = t, y = value)) +
+  geom_hline(yintercept = 0, color = "black", linetype="solid") + # Adds vertical line at x=0
+  geom_line(linewidth = 1, col = "#70C243") +
+  geom_line(data = infections2, aes(x = t, y = value), linewidth = 1, col = "#e5a445") +
+  geom_line(data = infections, aes(x = t, y = value), linewidth = 1, col = "#ca4d3d") +
+  geom_point(x = 0, y = 0, pch = 21, fill = "#ca4d3d", col = "black", size = 2) +
+  geom_point(x = secondary_early_start, y = 0, pch = 21, fill = "#e5a445", col = "black", size = 2) +
+  geom_point(x = secondary_late_start, y = 0, pch = 21, fill = "#70C243", col = "black", size = 2) +
+  
   theme_bw() +
-  labs(x = "Days Vaccine Development/Deployment is Ahead of Pathogen Arrival",
-       y = "Deaths Averted By BPSV (Per 1,000 Population)")
+  coord_cartesian(xlim = c(0, 1500), ylim = c(-200, 1000)) +
+  
+  geom_segment(x = 0, xend = secondary_early_start, 
+               y = -100, yend = -100, 
+               linewidth = 1, col = "black", linetype = "solid") +
+  geom_point(x = 0, y = -100, pch = 21, fill = "#ca4d3d", col = "black", size = 2) +
+  geom_point(x = secondary_early_start, y = -100, pch = 21, fill = "#e5a445", col = "black", size = 2) +
+  annotate("text", x = secondary_early_start + 25, y = -100, label = "Earlier Importation", color = "black", hjust = 0) +
+  
+  geom_segment(x = 0, xend = secondary_late_start, 
+               y = -200, yend = -200, 
+               linewidth = 1, col = "black", linetype = "solid") +
+  geom_point(x = 0, y = -200, pch = 21, fill = "#ca4d3d", col = "black", size = 2) +
+  geom_point(x = secondary_late_start, y = -200, pch = 21, fill = "#70C243", col = "black", size = 2) +
+  annotate("text", x = secondary_late_start + 25, y = -200, label = "Later Importation", color = "black", hjust = 0) +
+  
+  labs(x = "Time Since Spillover", y = "Daily Incidence") +
+  theme_cowplot() +
+  theme(axis.text = element_blank(),
+        axis.ticks = element_blank(),
+        axis.line.x = element_blank()) +
+  geom_rect(xmin = 1300, xmax = 1325, ymin = 950, ymax = 1000, fill = "#ca4d3d", col = "#ca4d3d") +
+  geom_rect(xmin = 1300, xmax = 1325, ymin = 875, ymax = 925, fill = "#e5a445", col = "#e5a445") +
+  geom_rect(xmin = 1300, xmax = 1325, ymin = 800, ymax = 850, fill = "#70C243", col = "#70C243") +
+  
+  annotate("text", x = 1340, y = 975, label = "Source Country", color = "black", hjust = 0) +
+  annotate("text", x = 1340, y = 900, label = "Early Importer", color = "black", hjust = 0) +
+  annotate("text", x = 1340, y = 825, label = "Late Importer", color = "black", hjust = 0)
 
 
-
-
-
-
-
-
+image_path <- magick::image_read_pdf(path = "test_primarySecondary_figure.pdf")
+base_ft_inset <- ggdraw() +
+  draw_image(image_path, 
+             x = 0.0, y = 0.85, hjust = 0, vjust = 1, scale = 2, width = 0.25, height = 0.25) +
+  draw_plot(base_plot) 
+# 10.91 * 3.45 --> 11 * 3.5
 
 
 
