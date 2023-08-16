@@ -24,6 +24,9 @@ library(egg)
 library(monochromeR)
 library(bpmodels)
 library(bobfunctions2)
+library(magick)
+library(pdftools)
+library(cowplot)
 
 # colours
 
