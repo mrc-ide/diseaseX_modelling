@@ -325,12 +325,12 @@ default_NPI_scenarios <- function(lockdown_Rt = 0.9,
 }
 
 ## for secondary country
-lockdown_Rt = 0.9
-minimal_mandate_reduction = 0.25
-NPI_scenarios = 4 # c(4, 7, 8, 9)
-scenarios = raw_rel_start_scenarios2[raw_rel_start_scenarios2$days_source_detection_is_ahead_arrival_secondary %in% c(-2:2) &
-                                       raw_rel_start_scenarios2$R0 %in% 3.5 &
-                                       raw_rel_start_scenarios2$specific_vaccine_start %in% 100, ]
+# lockdown_Rt = 0.9
+# minimal_mandate_reduction = 0.25
+# NPI_scenarios = 4 # c(4, 7, 8, 9)
+# scenarios = raw_rel_start_scenarios2[raw_rel_start_scenarios2$days_source_detection_is_ahead_arrival_secondary %in% c(-2:2) &
+#                                        raw_rel_start_scenarios2$R0 %in% 3.5 &
+#                                        raw_rel_start_scenarios2$specific_vaccine_start %in% 100, ]
 
 default_NPI_scenarios_secondary <- function(lockdown_Rt = 0.9,
                                             minimal_mandate_reduction = 0.25,
@@ -414,14 +414,8 @@ default_NPI_scenarios_secondary <- function(lockdown_Rt = 0.9,
                                             ifelse(days_ago_bpsv_finish >= 0 & days_ago_spec_finish < 0, list(c(0, days_source_detection_is_ahead_arrival_secondary, days_source_detection_is_ahead_arrival_secondary + detection_time_secondary, seq(from = days_source_detection_is_ahead_arrival_secondary + detection_time_secondary + 1, to = days_source_detection_is_ahead_arrival_secondary + detection_time_secondary - days_ago_spec_finish - 1))),        ## corresponding to detection in secondary occurring after bpsv campaign finished but before spec campaign has finished
                                             ifelse(days_ago_bpsv_finish > 0 & days_ago_spec_finish > 0, list(c(0, days_source_detection_is_ahead_arrival_secondary)), NA))),  ## corresponding to detection in secondary occurring after bpsv campaign and spec campaign have both finished 
                              
-                             NPI_int == 9 ~ list(c(0, days_source_detection_is_ahead_arrival_secondary)))) #%>%
-    #select(-days_ago_bpsv_finish, -days_ago_spec_finish, -time_between_bpsv_finish_and_spec_finish, -time_between_arrival_and_spec_finish)
-  
-  # length(NPIs_arrival_before$Rt[[1]])
-  # length(NPIs_arrival_before$Rt[[2]])
-  # length(NPIs_arrival_before$Rt[[3]])
-  # length(NPIs_arrival_before$Rt[[4]])
-  
+                             NPI_int == 9 ~ list(c(0, days_source_detection_is_ahead_arrival_secondary)))) %>%
+    select(-days_ago_bpsv_finish, -days_ago_spec_finish, -time_between_bpsv_finish_and_spec_finish, -time_between_arrival_and_spec_finish)
   # sapply(NPIs_arrival_before$Rt, function(x) length(x)) == sapply(NPIs_arrival_before$tt_Rt, function(x) length(x)) # Checking Rt and tt_Rt are the same length
 
 
@@ -452,27 +446,8 @@ default_NPI_scenarios_secondary <- function(lockdown_Rt = 0.9,
     select(-temp)
   
   # sapply(NPIs_arrival_after$Rt, function(x) length(x)) == sapply(NPIs_arrival_after$tt_Rt, function(x) length(x)) # Checking Rt and tt_Rt are the same length
-  
-  # NPIs_arrival_on <- expand_grid(vacc_timings[vacc_timings$days_source_detection_is_ahead_arrival_secondary == 0],
-  #                                   R0 = unique(scenarios$R0),
-  #                                   NPI_int = NPI_scenarios) %>%
-  #   rowwise() %>%
-  #   mutate(temp = ((specific_vaccine_start + time_to_coverage_spec) - (bpsv_start + time_to_coverage_bpsv))) %>%
-  #   mutate(Rt = case_when(NPI_int == 4 ~ list(c(R0, R0 * (1 - minimal_mandate_reduction), R0)),
-  #                         NPI_int == 7 ~ list(c(R0, R0 * (1 - minimal_mandate_reduction), seq(from = R0 * (1 - minimal_mandate_reduction), to = R0, length.out = temp), R0)),
-  #                         NPI_int == 8 ~ list(c(R0, lockdown_Rt, seq(from = R0 * (1 - minimal_mandate_reduction), to = R0, length.out = temp), R0)),
-  #                         NPI_int == 9 ~ list(R0))) %>%
-  #   mutate(tt_Rt = case_when(NPI_int == 4 ~ list(c(0, detection_time + detection_time_secondary, detection_time + bpsv_start + time_to_coverage_bpsv)),
-  #                            NPI_int == 7 ~ list(c(0, detection_time + detection_time_secondary, detection_time + bpsv_start + time_to_coverage_bpsv, seq(from = detection_time + bpsv_start + time_to_coverage_bpsv, to = detection_time + specific_vaccine_start + time_to_coverage_spec - 1))),
-  #                            NPI_int == 8 ~ list(c(0, detection_time + detection_time_secondary, detection_time + bpsv_start + time_to_coverage_bpsv, seq(from = detection_time + bpsv_start + time_to_coverage_bpsv, to = detection_time + specific_vaccine_start + time_to_coverage_spec - 1))),
-  #                            NPI_int == 9 ~ list(0))) %>%
-  #   ### check with the lines above whether it's appropriate to have the "-1" at the end for NPIs 6, 7, 8
-  #   select(-temp)
-  
-  # sapply(NPIs_arrival_on$Rt, function(x) length(x)) == sapply(NPIs_arrival_on$tt_Rt, function(x) length(x)) # Checking Rt and tt_Rt are the same length
   overall <- rbind(NPIs_arrival_before, NPIs_arrival_after)
-  # overall <- rbind(NPIs_arrival_before, NPIs_arrival_on, NPIs_arrival_after)
-  
+
   return(overall)
 }
 

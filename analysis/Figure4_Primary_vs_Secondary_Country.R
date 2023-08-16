@@ -71,7 +71,7 @@ base_plot <- ggplot(data = infections3, aes(x = t, y = value)) +
   annotate("text", x = secondary_late_start + 25, y = -200, label = "Later Importation", color = "black", hjust = 0) +
   
   labs(x = "", y = "Daily Incidence") +
-  theme_cowplot() +
+  # theme_cowplot() +
   theme(axis.text = element_blank(),
         axis.ticks = element_blank(),
         axis.line.x = element_blank()) +
@@ -88,7 +88,9 @@ image_path <- magick::image_read_pdf(path = "test_primarySecondary_figure.pdf")
 base_ft_inset <- ggdraw() +
   draw_image(image_path, 
              x = 0.0, y = 0.85, hjust = 0, vjust = 1, scale = 2, width = 0.25, height = 0.25) +
-  draw_plot(base_plot) 
+  draw_plot(base_plot) +
+  theme_bw()
+
 # 10.91 * 3.45 --> 11 * 3.5
 
 
@@ -178,6 +180,7 @@ text_data <- data.frame(
 )
 
 low <- -60
+mid <- 10
 high <- 60
 
 annotation_data1 <- data.frame(
@@ -189,6 +192,14 @@ annotation_data1 <- data.frame(
   ymax = c(Inf, Inf) # y max position
 )
 annotation_data2 <- data.frame(
+  NPI_scenario = c("aNo NPIs", "bMinimal NPIs", "cModerate NPIs", "dStringent NPIs"),
+  specific_vaccine_start = 200,
+  xmin = c(-mid - 5, -mid - 5), # x min position
+  xmax = c(-mid + 5, -mid + 5), # x max position
+  ymin = c(-Inf, -Inf), # y min position
+  ymax = c(Inf, Inf) # y max position
+)
+annotation_data3 <- data.frame(
   NPI_scenario = c("aNo NPIs", "bMinimal NPIs", "cModerate NPIs", "dStringent NPIs"),
   specific_vaccine_start = 200,
   xmin = c(-low - 5, -low - 5), # x min position
@@ -203,14 +214,20 @@ deaths_averted <- ggplot(model_outputs2) +
   geom_rect(data = annotation_data1, 
             aes(xmin = xmin, xmax = xmax, ymin = ymin, ymax = ymax), 
             inherit.aes = FALSE, 
-            fill = c("#218243", "#218243", "#218243", "#218243"), 
-            colour = c("#218243", "#218243", "#218243", "#218243"), 
+            fill = c("#70C243", "#70C243", "#70C243", "#70C243"), 
+            colour = c("#70C243", "#70C243", "#70C243", "#70C243"), 
             alpha = 0.2) +
   geom_rect(data = annotation_data2, 
             aes(xmin = xmin, xmax = xmax, ymin = ymin, ymax = ymax), 
             inherit.aes = FALSE, 
-            fill = c("#FFBC42", "#FFBC42", "#FFBC42", "#FFBC42"), 
-            colour = c("#FFBC42", "#FFBC42", "#FFBC42", "#FFBC42"), 
+            fill = c("#e5a445", "#e5a445", "#e5a445", "#e5a445"), 
+            colour = c("#e5a445", "#e5a445", "#e5a445", "#e5a445"), 
+            alpha = 0.2) +
+  geom_rect(data = annotation_data3, 
+            aes(xmin = xmin, xmax = xmax, ymin = ymin, ymax = ymax), 
+            inherit.aes = FALSE, 
+            fill = c("#ca4d3d", "#ca4d3d", "#ca4d3d", "#ca4d3d"), 
+            colour = c("#ca4d3d", "#ca4d3d", "#ca4d3d", "#ca4d3d"), 
             alpha = 0.2) +
   geom_line(aes(x = -days_source_detection_is_ahead_arrival_secondary, 
                 y = bpsv_deaths_averted * 1000 / population_size, col = factor(R0))) +
@@ -340,22 +357,24 @@ deaths_NPI_plot <- deaths_averted +
            ymin = 3, ymax = Inf) 
 
 x <- model_outputs2 %>%
-  filter(-days_source_detection_is_ahead_arrival_secondary %in% c(-low, -high))
+  filter(-days_source_detection_is_ahead_arrival_secondary %in% c(-low, -mid, -high))
 
 deaths_averted_subset <- ggplot(subset(x, specific_vaccine_start == 200)) +
   geom_bar(aes(x = factor(-days_source_detection_is_ahead_arrival_secondary), 
                y = bpsv_deaths_averted * 1000 / population_size,
                col = factor(days_source_detection_is_ahead_arrival_secondary),
-               fill = interaction(factor(R0), factor(days_source_detection_is_ahead_arrival_secondary))), stat = "identity", position = "dodge") +
+               fill = interaction(factor(R0), factor(days_source_detection_is_ahead_arrival_secondary))), 
+           stat = "identity", position = "dodge", linewidth = 1) +
   facet_grid(NPI_scenario ~ specific_vaccine_start,
              labeller = as_labeller(c(`200`='200 Days',
                                       `bMinimal NPIs`="Minimal NPIs",
                                       `cModerate NPIs`="Moderate NPIs", 
                                       `dStringent NPIs`="Stringent NPIs",
                                       `aNo NPIs`="No NPIs"))) +
-  scale_fill_manual(values = c("#B8336A", "#726DA8", "#42A1B6",
-                                        "#B8336A", "#726DA8", "#42A1B6")) +
-                                          scale_colour_manual(values = c("#FFBC42", "#218243")) +
+  scale_fill_manual(values = c(adjustcolor("#B8336A", alpha.f = 0.75), adjustcolor("#726DA8", alpha.f = 0.75), adjustcolor("#42A1B6", alpha.f = 0.75),
+                               adjustcolor("#B8336A", alpha.f = 0.75), adjustcolor("#726DA8", alpha.f = 0.75), adjustcolor("#42A1B6", alpha.f = 0.75),
+                               adjustcolor("#B8336A", alpha.f = 0.75), adjustcolor("#726DA8", alpha.f = 0.75), adjustcolor("#42A1B6", alpha.f = 0.75))) +
+  scale_colour_manual(values = c("#70C243", "#e5a445", "#ca4d3d")) +
   scale_y_continuous(position = "right") +
   labs(x = "",
        y = "Deaths Averted By BPSV (Per 1,000 Population)") +
@@ -370,6 +389,11 @@ bottom_half <- cowplot::plot_grid(deaths_NPI_plot,
                                   labels = c("B", "C"),
                                   align = "hv", axis = "tb")
 
+cowplot::plot_grid(base_plot, bottom_half, 
+                   axis = "hv", align = "tblr", 
+                   nrow = 2, 
+                   rel_heights = c(1, 3), labels = c("A", ""))
+# 9 x 8
 
 
 
@@ -377,7 +401,7 @@ bottom_half <- cowplot::plot_grid(deaths_NPI_plot,
 
 ###########################################
 
-cowplot::plot_grid(base_ft_inset, temp_plot, axis = "hv", align = "tblr", nrow = 2, rel_heights = c(1, 2), labels = c("A", "B"))
+# cowplot::plot_grid(base_ft_inset, temp_plot, axis = "hv", align = "tblr", nrow = 2, rel_heights = c(1, 2), labels = c("A", "B"))
 
 
 # # OPTION 1: ALL IN TERMS OF CALENDAR DAYS, NO NPIs JUST UNMITIGATED
