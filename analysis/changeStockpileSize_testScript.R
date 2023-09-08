@@ -16,12 +16,12 @@ Tg <- 5.5
 detection_time <- 10
 bpsv_start <- 1
 bpsv_protection_delay <- 1
-specific_vaccine_start <- 200
+specific_vaccine_start <- 500
 specific_protection_delay <- 7                 
-efficacy_infection_bpsv <- 0.35                
+efficacy_infection_bpsv <- 0                
 efficacy_disease_bpsv <- 0.5
-efficacy_infection_spec <- 0.55             
-efficacy_disease_spec <- 0.9                   
+efficacy_infection_spec <- 0             
+efficacy_disease_spec <- 0                   
 dur_R <- 365000000                             
 dur_bpsv <- 365000000                          
 dur_spec <- 365000000
@@ -42,7 +42,7 @@ prob_hosp <- scale_IFR(country = country, population_size = population_size, tar
 # Setting up vaccination stuff
 
 ## Setting vaccination rates and coverages
-bpsv_stockpile_coverage <- 0.4
+bpsv_stockpile_coverage <- 0.9
 coverage <- 0.9
 priority_age_groups <- min_age_group_index_priority:17  
 vaccination_age_groups <- min_age_group_index_non_priority:17 
@@ -189,22 +189,33 @@ mod_run <- run_booster(time_period = runtime,
                        vaccine_booster_follow_up_coverage = vaccine_booster_follow_up_coverage,
                        vaccine_booster_initial_coverage = vaccine_booster_initial_coverage)
 
-check <- nimue::format(mod_run, compartments = c("vaccinated_first_dose", "vaccinated_second_dose", "vaccinated_booster_dose"),
+
+check2 <- nimue::format(mod_run, summaries = "deaths",
                        reduce_age = FALSE) %>%
-  filter(t > 1, compartment == "deaths" |  
-           compartment == "vaccinated_first_dose" | compartment == "vaccinated_second_dose" | compartment == "vaccinated_booster_dose") %>%
+  filter(t > 1, compartment == "deaths") %>%
   group_by(replicate, t) 
-
-
 ggplot() +
-  geom_line(data = subset(check, compartment == "vaccinated_booster_dose"),
+  geom_line(data = subset(check2, compartment == "deaths"),
             aes(x = t, y = value, col = compartment)) +
-  geom_line(data = subset(check, compartment == "vaccinated_first_dose"),
+  geom_line(data = subset(check2, compartment == "deaths"),
             aes(x = t, y = value, col = compartment)) +
-  geom_line(data = subset(check, compartment == "vaccinated_second_dose"),
+  geom_line(data = subset(check2, compartment == "deaths"),
             aes(x = t, y = value, col = compartment)) +
   facet_wrap(~age_group)
 
 # one check will be to run this with bpsv_coverage and coverage set to the same,
 # and compare it to the current/(I guess with this in place, old) framework to check they produce almost identical results
 
+# check <- nimue::format(mod_run, compartments = c("vaccinated_first_dose", "vaccinated_second_dose", "vaccinated_booster_dose"),
+#                        reduce_age = FALSE) %>%
+#   filter(t > 1, compartment == "deaths" |
+#            compartment == "vaccinated_first_dose" | compartment == "vaccinated_second_dose" | compartment == "vaccinated_booster_dose") %>%
+#   group_by(replicate, t)
+# ggplot() +
+#   geom_line(data = subset(check, compartment == "vaccinated_booster_dose"),
+#             aes(x = t, y = value, col = compartment)) +
+#   geom_line(data = subset(check, compartment == "vaccinated_first_dose"),
+#             aes(x = t, y = value, col = compartment)) +
+#   geom_line(data = subset(check, compartment == "vaccinated_second_dose"),
+#             aes(x = t, y = value, col = compartment)) +
+#   facet_wrap(~age_group)
