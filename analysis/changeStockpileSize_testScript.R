@@ -203,6 +203,15 @@ ggplot() +
             aes(x = t, y = value, col = compartment)) +
   facet_wrap(~age_group)
 
+sum(check2$value)
+
+
+##### IMPORTANT NOTE
+##### BECAUSE WE'RE NOW SPLITTING VACCINATION OF ELDERLY ACROSS PRIMARY DOSES AND BOOSTER DOSES,
+##### WE NEED TO ADJUST THE VACCINATION RATES ACCORDINGLY - OR ELSE IT'LL IN EFFECT BE TOO QUICK ALL ROUND
+##### I THINK IN GENERAL, WE PROBABLY NEED AN OVERALL VACCINATION RATE AND THEN DIVIDE IT AMONGST THE 
+##### DIFFERENT VACCINES (PRIMARY, SECOND OR BOOSTER) THAT NEED TO BE DELIVERED? IMPORTANT POINT, NEED TO CHECK AND SORT.
+
 # one check will be to run this with bpsv_coverage and coverage set to the same,
 # and compare it to the current/(I guess with this in place, old) framework to check they produce almost identical results
 
@@ -219,3 +228,55 @@ ggplot() +
 #   geom_line(data = subset(check, compartment == "vaccinated_second_dose"),
 #             aes(x = t, y = value, col = compartment)) +
 #   facet_wrap(~age_group)
+
+scenarios <- create_scenarios(R0 = Rt,                         
+                              IFR = IFR,  
+                              country = country,
+                              hosp_bed_capacity = hosp_bed_capacity,                                         
+                              ICU_bed_capacity = ICU_bed_capacity,
+                              population_size = population_size,             
+                              Tg = Tg,                                       
+                              detection_time = detection_time,               
+                              bpsv_start = bpsv_start,                       
+                              bpsv_protection_delay = bpsv_protection_delay, 
+                              specific_vaccine_start = specific_vaccine_start,          
+                              specific_protection_delay = specific_protection_delay,                 
+                              efficacy_infection_bpsv = efficacy_infection_bpsv,                
+                              efficacy_disease_bpsv = efficacy_disease_bpsv,                  
+                              efficacy_infection_spec = efficacy_infection_spec,                
+                              efficacy_disease_spec = efficacy_disease_spec,                   
+                              dur_R = dur_R,                             
+                              dur_bpsv = dur_bpsv,                          
+                              dur_spec = dur_spec,                          
+                              coverage = coverage,                           
+                              vaccination_rate = vaccination_rate,           
+                              min_age_group_index_priority = min_age_group_index_priority,
+                              min_age_group_index_non_priority = min_age_group_index_non_priority,
+                              runtime = runtime,
+                              seeding_cases = seeding_cases)
+
+Rt <- 2
+tt_Rt <- 0
+IFR <- 1
+country <- "Argentina"
+population_size <- 10^10
+hosp_bed_capacity <- 10^10                                         
+ICU_bed_capacity <- 10^10   
+Tg <- 5.5
+detection_time <- 10
+bpsv_start <- 1
+bpsv_protection_delay <- 1
+specific_vaccine_start <- 500
+specific_protection_delay <- 7                 
+efficacy_infection_bpsv <- 0                
+efficacy_disease_bpsv <- 0.5
+efficacy_infection_spec <- 0             
+efficacy_disease_spec <- 0                   
+dur_R <- 365000000                             
+dur_bpsv <- 365000000                          
+dur_spec <- 365000000
+vaccination_rate <- 0.035
+min_age_group_index_priority <- 13
+min_age_group_index_non_priority <- 4
+runtime <- 1000
+seeding_cases <- 50

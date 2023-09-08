@@ -24,14 +24,14 @@ lockdown_Rt <- 0.9                   # Rt achieved under lockdown
 minimal_mandate_reduction <- 0.25    # Fold-reduction in R0 achieved under minimal mandate restrictions
 
 # Calculating vaccination rates for use in sensitivity analyses
-days_to_coverage <- seq(10, 150, 10)
+days_to_bpsv_coverage <- seq(20, 120, 20)
 population_size <- 10^10
 min_age_group_index_priority <- 13
 standard_pop <- generate_standard_pop(country = "Argentina", population_size = population_size)
 coverage <- 0.8
 elderly_pop_to_vaccinate <- sum(standard_pop[min_age_group_index_priority:17]) * coverage 
-bpsv_vaccination_rate <- elderly_pop_to_vaccinate / (days_to_coverage * population_size / 7)
-coverage_time_df <- data.frame(days_to_coverage, vaccination_rate)
+bpsv_vaccination_rate <- elderly_pop_to_vaccinate / (days_to_bpsv_coverage * population_size / 7)
+bpsv_coverage_time_df <- data.frame(days_to_bpsv_coverage  = days_to_bpsv_coverage, vaccination_rate_bpsv = bpsv_vaccination_rate)
 
 ## Generating the scenarios
 raw_vacc_rate_scenarios <- create_scenarios(R0 = c(1.5, 2.5, 3.5),                         # Basic reproduction number
@@ -41,7 +41,7 @@ raw_vacc_rate_scenarios <- create_scenarios(R0 = c(1.5, 2.5, 3.5),              
                                             detection_time = 1,                            # PLACEHOLDER FOR NOW
                                             bpsv_start = 7,                                # BPSV distribution start (time after detection time)
                                             bpsv_protection_delay = 7,                     # delay between receipt of BPSV dose and protection
-                                            specific_vaccine_start = c(200, 365),          # specific vaccine distribution start (time after detection time)
+                                            specific_vaccine_start = c(150, 220, 365),     # specific vaccine distribution start (time after detection time)
                                             specific_protection_delay = 7,                 # delay between receipt of specific dose and protection
                                             efficacy_infection_bpsv = 0.35,                # vaccine efficacy against infection - BPSV
                                             efficacy_disease_bpsv = 0.75,                  # vaccine efficacy against disease - BPSV
@@ -51,7 +51,8 @@ raw_vacc_rate_scenarios <- create_scenarios(R0 = c(1.5, 2.5, 3.5),              
                                             dur_bpsv = 365000000,                          # duration of BPSV vaccine immunity
                                             dur_spec = 365000000,                          # duration of disease-specific vaccine immunity
                                             coverage = coverage,                           # proportion of the population vaccinated
-                                            vaccination_rate = vaccination_rate,           # vaccination rate per week as percentage of population
+                                            vaccination_rate = bpsv_vaccination_rate,      # vaccination rate per week as percentage of population
+                                            vaccination_rate_spec = 0.035,                 # disease-specific vaccination rate per week as percentage of population
                                             min_age_group_index_priority = min_age_group_index_priority,             # index of the youngest age group given priority w.r.t vaccines (13 = 60+)
                                             min_age_group_index_non_priority = 4)          # index of the youngest age group that *receives* vaccines (4 = 15+)
 
@@ -68,8 +69,9 @@ NPIs_vacc_rate <- default_NPI_scenarios(lockdown_Rt = lockdown_Rt,
                                         NPI_scenarios = c(4, 7, 8, 9), 
                                         scenarios = raw_vacc_rate_scenarios2)
 vacc_rate_scenarios <- raw_vacc_rate_scenarios2 %>%
-  full_join(NPIs_vacc_rate, by = c("R0", "country", "population_size", "detection_time", "bpsv_start",    # joining by all columns which influence NPI scenario timing
-                                   "specific_vaccine_start", "vaccination_rate", "coverage", "min_age_group_index_priority"), multiple = "all")
+  full_join(NPIs_vacc_rate, by = c("R0", "country", "population_size", "detection_time", "bpsv_start",         # joining by all columns which influence NPI scenario timing
+                                   "specific_vaccine_start", "vaccination_rate_bpsv", "vaccination_rate_spec", 
+                                   "coverage", "min_age_group_index_priority"), multiple = "all")
 
 ## Filtering the above to only select R0 and detection time pairs that actually occurred (the expand grid call above generated all combos)
 R0_detection_time_pairs <- bp_df_mean_subset %>%
@@ -117,8 +119,8 @@ model_outputs2 <- model_outputs %>%
 
 specific_vaccine_start_fixed <- 365
 vacc_rate_plotting <- model_outputs2 %>%
-  filter(specific_vaccine_start == specific_vaccine_start_fixed, metric == "Daily Incidence") %>%
-  group_by(R0, specific_vaccine_start, NPI_int, detection_time, detection_threshold_hosp, vaccination_rate) %>%
+  filter(metric == "Daily Incidence") %>%
+  group_by(R0, specific_vaccine_start, NPI_int, detection_time, detection_threshold_hosp, vaccination_rate_bpsv) %>%
   summarise(min_deaths_averted = min(bpsv_deaths_averted) * 1000 / population_size,
             max_deaths_averted = max(bpsv_deaths_averted) * 1000 / population_size,
             central_deaths_averted = bpsv_deaths_averted * 1000 / population_size,
@@ -127,11 +129,68 @@ vacc_rate_plotting <- model_outputs2 %>%
             total_deaths_bpsv = deaths_bpsv * 1000 / population_size,
             time_under_NPIs_bpsv = time_under_NPIs_bpsv,
             composite_NPI_bpsv = composite_NPI_bpsv) %>%
-  left_join(coverage_time_df, by = "vaccination_rate") %>%
-  mutate(cumulative_days_since_spillover = days_to_coverage + detection_time)
+  left_join(bpsv_coverage_time_df, by = "vaccination_rate_bpsv") 
 
-table(vacc_rate_plotting$R0, vacc_rate_plotting$detection_time)
+ggplot(subset(vacc_rate_plotting, detection_threshold_hosp == 5)) +
+  geom_line(aes(x = days_to_bpsv_coverage, y = central_deaths_averted, col = factor(specific_vaccine_start)), size = 1) +
+  facet_grid(R0~NPI_int)
 
-ggplot(vacc_rate_plotting) +
-  geom_line(aes(x = days_to_coverage, y = central_deaths_averted, col = factor(NPI_int)), size = 1) +
-  facet_grid(R0~detection_threshold_hosp)
+
+#####
+owid_vacc_data <- read.csv("data/owid-covid-data.csv") %>%
+  mutate(date = as.Date(date, format = "%d/%m/%Y")) %>%
+  filter(!is.na(total_vaccinations_per_hundred)) %>%
+  filter(date > as.Date("01/11/2020", format = "%d/%m/%Y"))
+
+ggplot() +
+  geom_path(data = owid_vacc_data, aes(x = date, y = total_vaccinations_per_hundred,
+                                       group = location),
+            colour = "grey") +
+  geom_path(data = subset(owid_vacc_data, location == "Europe"), 
+                          aes(x = date, y = total_vaccinations_per_hundred,
+                              group = location),
+            colour = "blue") +
+  geom_path(data = subset(owid_vacc_data, location == "North America"), 
+            aes(x = date, y = total_vaccinations_per_hundred,
+                group = location),
+            colour = "red") +
+  geom_path(data = subset(owid_vacc_data, location == "Africa"), 
+            aes(x = date, y = total_vaccinations_per_hundred,
+                group = location),
+            colour = "green") +
+  geom_path(data = subset(owid_vacc_data, location == "South America"), 
+            aes(x = date, y = total_vaccinations_per_hundred,
+                group = location),
+            colour = "orange") +
+  geom_path(data = subset(owid_vacc_data, location == "Oceania"), 
+            aes(x = date, y = total_vaccinations_per_hundred,
+                group = location),
+            colour = "purple") +
+  theme(legend.position = "none")
+
+
+afg <- owid_vacc_data %>%
+  filter(location == "Afghanistan")
+
+plot(as.Date(afg$date, format = "%d/%m/%Y"), afg$total_vaccinations_per_hundred)
+
+time_to_two <- owid_vacc_data %>%
+  filter(continent != "") %>%
+  mutate(date = as.Date(date, format = "%d/%m/%Y")) %>%
+  group_by(continent, location) %>%
+  filter(!is.na(total_vaccinations_per_hundred) & total_vaccinations_per_hundred >= 2) %>%
+  summarise(time = min(date)) %>%
+  ungroup() %>%
+  mutate(delay = as.numeric(time - min(time)))
+
+hist(time_to_two$delay, breaks = 20)
+hist(time_to_two$time, breaks = "months")
+
+time_to_two_continent <- time_to_two %>%
+  group_by(continent) %>%
+  summarise(mean_delay = mean(delay),
+            median_delay = median(delay),
+            lower = quantile(delay, 0.25),
+            upper = quantile(delay, 0.75),
+            number = n())
+
