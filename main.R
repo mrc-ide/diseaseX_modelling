@@ -27,6 +27,7 @@ library(bobfunctions2)
 library(magick)
 library(pdftools)
 library(cowplot)
+library(ggnewscale)
 
 # colours
 

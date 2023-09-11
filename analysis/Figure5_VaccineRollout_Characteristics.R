@@ -142,7 +142,7 @@ vaccination_rate_plot <- ggplot(data = subset(vacc_rate_plotting, specific_vacci
                                  "#9A8C98",
                                  "#4A4E69",
                                  "#22223B")) +
-  labs(y = "Deaths Averted by BPSV\n(Per 1,000 Population)", x = "Days Until Coverage of Elderly Population with BPSV") +
+  labs(y = "Deaths Averted by BPSV\n(Per 1,000 Population)", x = "Days to Finish BPSV Campaign") +
   theme_bw() +
   theme(legend.position = "right") +
   guides(colour = guide_legend(title = "R0"))
