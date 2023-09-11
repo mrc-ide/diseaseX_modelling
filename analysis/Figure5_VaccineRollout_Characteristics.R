@@ -24,7 +24,7 @@ lockdown_Rt <- 0.9                   # Rt achieved under lockdown
 minimal_mandate_reduction <- 0.25    # Fold-reduction in R0 achieved under minimal mandate restrictions
 
 # Calculating vaccination rates for use in sensitivity analyses
-days_to_bpsv_coverage <- seq(20, 120, 20)
+days_to_bpsv_coverage <- seq(20, 170, 10)
 population_size <- 10^10
 min_age_group_index_priority <- 13
 standard_pop <- generate_standard_pop(country = "Argentina", population_size = population_size)
@@ -34,14 +34,14 @@ bpsv_vaccination_rate <- elderly_pop_to_vaccinate / (days_to_bpsv_coverage * pop
 bpsv_coverage_time_df <- data.frame(days_to_bpsv_coverage  = days_to_bpsv_coverage, vaccination_rate_bpsv = bpsv_vaccination_rate)
 
 ## Generating the scenarios
-raw_vacc_rate_scenarios <- create_scenarios(R0 = c(1.5, 2.5, 3.5),                         # Basic reproduction number
+raw_vacc_rate_scenarios <- create_scenarios(R0 = c(1.5, 2, 2.5, 3, 3.5),                   # Basic reproduction number
                                             IFR = 1,                                       # IFR
                                             population_size = 10^10,                       # population size
                                             Tg = 7,                                        # Tg
                                             detection_time = 1,                            # PLACEHOLDER FOR NOW
                                             bpsv_start = 7,                                # BPSV distribution start (time after detection time)
                                             bpsv_protection_delay = 7,                     # delay between receipt of BPSV dose and protection
-                                            specific_vaccine_start = c(150, 220, 365),     # specific vaccine distribution start (time after detection time)
+                                            specific_vaccine_start = c(200, 365),          # specific vaccine distribution start (time after detection time)
                                             specific_protection_delay = 7,                 # delay between receipt of specific dose and protection
                                             efficacy_infection_bpsv = 0.35,                # vaccine efficacy against infection - BPSV
                                             efficacy_disease_bpsv = 0.75,                  # vaccine efficacy against disease - BPSV
@@ -66,7 +66,7 @@ raw_vacc_rate_scenarios2 <- expand_grid(raw_vacc_rate_scenarios,
 ## Generating NPIs based on specific detection times, R0, and other vaccine-related events
 NPIs_vacc_rate <- default_NPI_scenarios(lockdown_Rt = lockdown_Rt, 
                                         minimal_mandate_reduction = minimal_mandate_reduction, 
-                                        NPI_scenarios = c(4, 7, 8, 9), 
+                                        NPI_scenarios = c(4, 7, 8), 
                                         scenarios = raw_vacc_rate_scenarios2)
 vacc_rate_scenarios <- raw_vacc_rate_scenarios2 %>%
   full_join(NPIs_vacc_rate, by = c("R0", "country", "population_size", "detection_time", "bpsv_start",         # joining by all columns which influence NPI scenario timing
@@ -90,7 +90,7 @@ vacc_rate_scenarios3 <- vacc_rate_scenarios2 %>%
   mutate(scenario_index = 1:n())
 
 ## Running the model and summarising the output
-cores <- parallel::detectCores() - 2
+cores <- parallel::detectCores() - 4
 fresh_run <- TRUE
 if (fresh_run) {
   plan(multisession, workers = cores) # multicore does nothing on windows as multicore isn't supported
@@ -131,9 +131,31 @@ vacc_rate_plotting <- model_outputs2 %>%
             composite_NPI_bpsv = composite_NPI_bpsv) %>%
   left_join(bpsv_coverage_time_df, by = "vaccination_rate_bpsv") 
 
-ggplot(subset(vacc_rate_plotting, detection_threshold_hosp == 5)) +
-  geom_line(aes(x = days_to_bpsv_coverage, y = central_deaths_averted, col = factor(specific_vaccine_start)), size = 1) +
-  facet_grid(R0~NPI_int)
+ggplot(data = subset(vacc_rate_plotting, specific_vaccine_start == 200 & detection_threshold_hosp == 5 & NPI_int %in% c(7))) +
+  geom_line(aes(x = days_to_bpsv_coverage, 
+                y = central_deaths_averted, col = factor(R0))) +
+  scale_colour_manual(values = c("#F2E9E4", 
+                                 "#C9ADA7", 
+                                 "#9A8C98",
+                                 "#4A4E69",
+                                 "#22223B")) +
+  labs(y = "Deaths Averted by BPSV (Per 1,000 Population)", x = "Days Until Coverage of Elderly Population with BPSV") +
+  theme_bw() +
+  theme(legend.position = "right") +
+  guides(colour = guide_legend(title = "R0"))
+
+ggplot(data = subset(vacc_rate_plotting, specific_vaccine_start == 200 & detection_threshold_hosp == 5 & NPI_int %in% c(7))) +
+  geom_line(aes(x = specific_vaccine_start - days_to_bpsv_coverage, 
+                y = central_deaths_averted, col = factor(R0))) +
+  scale_colour_manual(values = c("#F2E9E4", 
+                                 "#C9ADA7", 
+                                 "#9A8C98",
+                                 "#4A4E69",
+                                 "#22223B")) +
+  labs(y = "Deaths Averted by BPSV (Per 1,000 Population)", x = "Days Between BPSV Vaccination Campaign\nCompletion and Specific Vaccination Campaign Initiation") +
+  theme_bw() +
+  theme(legend.position = "right") +
+  guides(colour = guide_legend(title = "R0"))
 
 
 ##### Delay to Access Figure #####

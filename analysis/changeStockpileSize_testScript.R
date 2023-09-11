@@ -21,7 +21,7 @@ specific_protection_delay <- 7
 efficacy_infection_bpsv <- 0                
 efficacy_disease_bpsv <- 0.5
 efficacy_infection_spec <- 0             
-efficacy_disease_spec <- 0                   
+efficacy_disease_spec <- 0.9                   
 dur_R <- 365000000                             
 dur_bpsv <- 365000000                          
 dur_spec <- 365000000
@@ -204,6 +204,86 @@ ggplot() +
   facet_wrap(~age_group)
 
 sum(check2$value)
+
+new <- run_sars_x(population_size = population_size, 
+                  country = country, 
+                  hosp_bed_capacity = hosp_bed_capacity, 
+                  ICU_bed_capacity = ICU_bed_capacity,
+                  Rt = Rt, 
+                  tt_Rt = tt_Rt, 
+                  Tg = Tg, 
+                  IFR = IFR,
+                  vaccine_scenario = "both_vaccines",       
+                  detection_time = detection_time,
+                  bpsv_start = bpsv_start,                          
+                  bpsv_protection_delay = bpsv_protection_delay,                
+                  specific_vaccine_start = specific_vaccine_start,             
+                  specific_protection_delay = specific_protection_delay,            
+                  efficacy_infection_bpsv = efficacy_infection_bpsv,           
+                  efficacy_disease_bpsv = efficacy_disease_bpsv,              
+                  efficacy_infection_spec = efficacy_infection_spec,           
+                  efficacy_disease_spec = efficacy_disease_spec,              
+                  dur_R = dur_R,                       
+                  dur_bpsv = dur_bpsv,                    
+                  dur_spec = dur_spec,                    
+                  coverage_bpsv = bpsv_stockpile_coverage,                     
+                  coverage_spec = coverage,                     
+                  vaccination_rate_bpsv = vaccination_rate,            
+                  vaccination_rate_spec = vaccination_rate,            
+                  min_age_group_index_priority = min_age_group_index_priority,       
+                  min_age_group_index_non_priority = min_age_group_index_non_priority,    
+                  runtime = runtime,
+                  approach = "old",
+                  seeding_cases = seeding_cases,
+                  output = "full")
+check3 <- nimue::format(new$model_output, summaries = "deaths",
+                        reduce_age = FALSE) %>%
+  filter(t > 1, compartment == "deaths") %>%
+  group_by(replicate, t) 
+sum(check3$value)
+
+new2 <- run_sars_x(population_size = population_size, 
+                  country = country, 
+                  hosp_bed_capacity = hosp_bed_capacity, 
+                  ICU_bed_capacity = ICU_bed_capacity,
+                  Rt = Rt, 
+                  tt_Rt = tt_Rt, 
+                  Tg = Tg, 
+                  IFR = IFR,
+                  vaccine_scenario = "both_vaccines",       
+                  detection_time = detection_time,
+                  bpsv_start = bpsv_start,                          
+                  bpsv_protection_delay = bpsv_protection_delay,                
+                  specific_vaccine_start = specific_vaccine_start,             
+                  specific_protection_delay = specific_protection_delay,            
+                  efficacy_infection_bpsv = efficacy_infection_bpsv,           
+                  efficacy_disease_bpsv = efficacy_disease_bpsv,              
+                  efficacy_infection_spec = efficacy_infection_spec,           
+                  efficacy_disease_spec = efficacy_disease_spec,              
+                  dur_R = dur_R,                       
+                  dur_bpsv = dur_bpsv,                    
+                  dur_spec = dur_spec,                    
+                  coverage_bpsv = bpsv_stockpile_coverage,                     
+                  coverage_spec = coverage,                     
+                  vaccination_rate_bpsv = vaccination_rate,            
+                  vaccination_rate_spec = vaccination_rate,            
+                  min_age_group_index_priority = min_age_group_index_priority,       
+                  min_age_group_index_non_priority = min_age_group_index_non_priority,    
+                  runtime = runtime,
+                  approach = "new",
+                  seeding_cases = seeding_cases,
+                  output = "full")
+check4 <- nimue::format(new2$model_output, summaries = "deaths",
+                        reduce_age = FALSE) %>%
+  filter(t > 1, compartment == "deaths") %>%
+  group_by(replicate, t) 
+sum(check4$value)
+sum(check3$value)
+sum(check2$value)
+
+
+
+
 
 
 ##### IMPORTANT NOTE
