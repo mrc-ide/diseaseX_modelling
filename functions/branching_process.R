@@ -122,7 +122,7 @@ chain_sim_susc_ring_vacc <- function(offspring = c("pois", "nbinom"), mn_offspri
       ##                              are not protected. If the individual receives the vaccination, protection develops and they are infected anyway, we assume that 
       ##                              the vaccine contributes to reduced transmissibility (with this decided probabilistically based on the vaccine efficacy against transmission).
       ## Note: Things still to do:
-      ### 1) Think we're possibly missing the folks currently who get infected before the vaccination takes place but who are asymptomatic and so infection is missed and are infected anyway
+      ### 1) Think we're possibly missing the folks currently who get infected before the vaccination takes place but who are asymptomatic and so infection is missed and are vaccinated anyway
       ###    I don't think this makes any difference in practice (as they would never get any benefit of vaccination) but might be worth making this explicit
       ### 2) Check there's nothing weird going on with index case asymptomatic and who's getting vaccinated in a given transmission tree 
       ###
