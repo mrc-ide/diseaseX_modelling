@@ -149,12 +149,7 @@ chain_sim_susc_ring_vacc <- function(offspring = c("pois", "nbinom"), mn_offspri
       ## If the vaccine is available
       } else {
         
-        ## If index case is asymptomatic, then none of the contacts are vaccinated and so none of the potential secondary infections get ring vaccinated
-        ### THIS ISN'T QUITE RIGHT - BECAUSE YOU MIGHT HAVE SOME FOLKS WHO ARE ASYMPTOMATIC, BUT THEIR PREVIOUS INDEX CASE WAS SYMPTOMATIC, AND
-        ### SO THEY GOT VACCINATED THAT WAY - no I think this is fine, because by definition, those included in the linelist will be either
-        ### i) those who got vaccinated but too late (therefore no benefit of vaccination);
-        ### ii) those who got vaccinated but it failed to protect (in which case, reduction in transmission taken care of above)
-        ### need to come back and double check this in detail.
+        ## If the index case is asymptomatic, all secondary cases arising from them won't be vaccinated because the index infection won't be detected (asymptomatic)
         if (index_asymptomatic == 1) {
           asymptomatic <- rbinom(n = n_offspring, size = 1, prob = prop_asymptomatic)
           new_df <- data.frame(id = current_max_id + seq_len(n_offspring), 
@@ -170,7 +165,8 @@ chain_sim_susc_ring_vacc <- function(offspring = c("pois", "nbinom"), mn_offspri
           tdf <- rbind(tdf, new_df)
           
         ## If index case is symptomatic, then the contacts are vaccinated and the potential secondary infections get ring vaccinated
-        ## Question then becomes are they vaccinated and develop protection in time to prevent infection - which we calculate below.
+        ## Below, we calculate when they are vaccinated and whether they develop protection in time to prevent infection (i.e. does protection
+        ## arise before the time of their infection by the index case - we calculate all of this below.
         } else {
           
           are_they_vaccinated <- vector(mode = "integer", length = n_offspring) ## vector of whether secondary infections get vaccinated
@@ -181,8 +177,7 @@ chain_sim_susc_ring_vacc <- function(offspring = c("pois", "nbinom"), mn_offspri
           time_to_secondary_vaccination <- onset_time_index_case + vaccine_logistical_delay                    ## Time between index case infected and secondary cases ring vaccinated
           time_to_secondary_vaccination_protection <- time_to_secondary_vaccination + vaccine_protection_delay ## Time between index case infected and secondary cases protected with vaccination
           
-          ## Checking whether vaccination occurs before or after the secondary cases have been generated;
-          ## and if so, whether or not the infection is prevented by the vaccine
+          ## Checking whether vaccination occurs before or after the secondary cases have been generated; and if so, whether or not the infection is prevented by the vaccine
           for (i in 1:n_offspring) {
             if (time_to_secondary_vaccination <= new_times[i]) {
               are_they_vaccinated[i] <- rbinom(n = 1, size = 1, prob = vaccine_coverage)
@@ -194,6 +189,7 @@ chain_sim_susc_ring_vacc <- function(offspring = c("pois", "nbinom"), mn_offspri
             }
           }
           
+          ## Calculating number of infections which actually occur despite vaccination, and creating relevant inputs to dataframe for these successful secondary infections
           new_n_offspring <- sum(infection_retained)
           new_new_times <- new_times[which(infection_retained == 1)]
           time_vaccinated <- ifelse(are_they_vaccinated == 1, time_to_secondary_vaccination, NA)
