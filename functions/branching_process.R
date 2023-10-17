@@ -73,36 +73,37 @@ chain_sim_susc <- function (offspring = c("pois", "nbinom"), mn_offspring, disp_
   return(tdf)
 }
 
-## (More Heavily) Modified version of chain_sim_susc from bpmodels (https://github.com/epiverse-trace/bpmodels)
-## to include ring vaccination.
-## Still to add in:
-### cases missed (per Kucharski)
-### >1 seeding cases
-### reduced onwards transmission
+## (More Heavily) Modified version of chain_sim_susc from bpmodels (https://github.com/epiverse-trace/bpmodels) to include ring vaccination.
+### Consider adding in probability of contact not being identified
+### Maybe add prop_asymptomatic in - still working out whether it makes sense currently - yes, because if someone is asymptomatic, their contacts won't get vaccinated
+### Add in something about vaccination starting based on accumulated number of cases or something (????) 
 
 offspring <- "pois"
-mn_offspring <- 6
-generation_time <- function(n) { rgamma(n, shape = 20, rate = 2) }
+mn_offspring <- 20
+generation_time <- function(n) {  rgamma(n, shape = 6, rate = 2) } # generation_time <- function(n) {  return(rep(7, n)) } 
 t0 <- 0
 tf <- Inf
-pop <- 10^7
-check_final_size <- 5000
+pop <- 10^8
+check_final_size <- 10000
 initial_immune <- 0
-infection_to_onset <- function(n) { rgamma(n, shape = 5, rate = 2) }
-vaccine_start <- 5
-vaccine_coverage <- 0.85
-vaccine_efficacy_infection <- 0.75
+infection_to_onset <- function(n) { rgamma(n, shape = 2, rate = 2) } # infection_to_onset <- function(n) { return(rep(2, n)) } 
+vaccine_start <- 1
+vaccine_coverage <- 1
+vaccine_efficacy_infection <- 0
+vaccine_efficacy_transmission <- 0.9
 vaccine_logistical_delay <- 1
 vaccine_protection_delay <- 1
-seeding_cases <- 5
+seeding_cases <- 1
+prop_asymptomatic <- 1
 
-0.75 * 0.85
+((1 - vaccine_coverage) * mn_offspring) + 
+  (vaccine_coverage * mn_offspring * (1 - vaccine_efficacy_infection) * vaccine_efficacy_transmission)
 
 chain_sim_susc_ring_vacc <- function (offspring = c("pois", "nbinom"), mn_offspring, disp_offspring, 
                                       generation_time, t0 = 0, tf = Inf, pop, check_final_size, initial_immune = 0,
-                                      seeding_cases, infection_to_onset,                                             ## epi properties relevant to vaccination
-                                      vaccine_start, vaccine_coverage, vaccine_efficacy_infection,                   ## vaccine properties i
-                                      vaccine_logistical_delay, vaccine_protection_delay) {                          ## vaccine properties ii
+                                      seeding_cases, infection_to_onset, prop_asymptomatic,                                 ## epi properties relevant to vaccination
+                                      vaccine_start, vaccine_coverage, vaccine_efficacy_infection,                          ## vaccine properties i
+                                      vaccine_efficacy_transmission, vaccine_logistical_delay, vaccine_protection_delay) {  ## vaccine properties ii
   
   ## Checking correct input of offspring distributions and setting up the offspring function
   offspring <- match.arg(offspring)
@@ -127,7 +128,8 @@ chain_sim_susc_ring_vacc <- function (offspring = c("pois", "nbinom"), mn_offspr
   
   ## Creating table to store branching process tree
   tdf <- data.frame(id = seq_along(1:seeding_cases), ancestor = NA_integer_, generation = 1L, time = t0 + seq(from = 0, to = 0.01, length.out = seeding_cases), 
-                    offspring_generated = FALSE, vaccinated = 0, time_vaccinated = NA)
+                    offspring_generated = FALSE, time_onset = NA, vaccinated = 0, time_vaccinated = NA, time_protected = NA)
+  ## note that currently time_onset is relative to time of infection (time) currently 
   
   ## Setting up the simulation initial conditions (initial time, initial size of susceptible population etc)
   susc <- pop - initial_immune - 1L
@@ -147,9 +149,17 @@ chain_sim_susc_ring_vacc <- function (offspring = c("pois", "nbinom"), mn_offspr
     gen_parent <- tdf$generation[idx]
     current_max_id <- max(tdf$id)
     index_vaccinated <- tdf$vaccinated[idx]
+    time_vaccinated <- tdf$time_vaccinated[idx]
+    time_protected <- tdf$time_protected[idx]
+    onset_time_index_case <- infection_to_onset(n = 1)  ## time to onset for index case
+    tdf$time_onset[idx] <- onset_time_index_case
+    index_asymptomatic <- tdf$asymptomatic[idx]
     
     ## Generating number of people infected by this infection
-    n_offspring <- offspring_fun(1, susc)
+    n_offspring <- offspring_fun(1, susc) 
+    if (index_vaccinated == 1 & (time_protected < t)) {  
+      n_offspring <- sum(rbinom(n = n_offspring, size = 1, prob = 1 - vaccine_efficacy_transmission))
+    }
     if (n_offspring %% 1 > 0) { # Checking offspring function is acting correctly (returning integers)
       stop("Offspring distribution must return integers")
     }
@@ -166,56 +176,80 @@ chain_sim_susc_ring_vacc <- function (offspring = c("pois", "nbinom"), mn_offspr
       
       ## Is the vaccine available?
       if (t >= vaccine_start) {
-
-        are_they_vaccinated <- vector(mode = "integer", length = n_offspring) ## vector of whether secondary infections get vaccinated
-        infection_retained <- vector(mode = "integer", length = n_offspring)  ## vector of whether secondary infections get retained (i.e. not prevented by ring vaccination)
-        infection_retained[1:length(infection_retained)] <- 1                 ## default to infections being retained; and then flow through below to see if they get removed
         
-        ## Is the index case being considered vaccinated?
-
-        ## Calculating time to vaccination protection for index case
-        onset_time <- infection_to_onset(n = 1)  ## time to onset for index case
-        time_to_secondary_vaccination <- onset_time + vaccine_logistical_delay                               ## Time between index case infected and secondary cases ring vaccinated
-        time_to_secondary_vaccination_protection <- time_to_secondary_vaccination + vaccine_protection_delay ## Time between index case infected and secondary cases protected with vaccination
-        
-        ## Checking whether vaccination occurs before or after the secondary cases have been generated;
-        ## and if so, whether or not the infection is prevented by the vaccine
-        for (i in 1:n_offspring) {
-          if (time_to_secondary_vaccination <= new_times[i]) {
-            are_they_vaccinated[i] <- rbinom(n = 1, size = 1, prob = vaccine_coverage)
-            did_they_have_potential_protection <- ifelse(time_to_secondary_vaccination_protection <= new_times[i], 1, 0)
-            were_they_protected <- rbinom(n = 1, size = 1, prob = vaccine_efficacy_infection * did_they_have_potential_protection)
-            infection_retained[i] <- ifelse(are_they_vaccinated[i] == 1 & were_they_protected == 1, 0, 1)
-          } else {
-            infection_retained[i] <- 1
-          }
-        }
-        
-        new_n_offspring <- sum(infection_retained)
-        new_new_times <- new_times[which(infection_retained == 1)]
-        time_vaccinated <- ifelse(are_they_vaccinated == 1, time_to_secondary_vaccination, NA)
-        
-        ## Checking whether there are any infections to add to the table
-        if (new_n_offspring != 0) {
-          new_df <- data.frame(id = current_max_id + seq_len(new_n_offspring), 
+        ## If index case is asymptomatic, then none of the contacts are vaccinated and so none of the potential secondary infections get ring vaccinated
+        if (index_asymptomatic == 1) {
+          asymptomatic <- rbinom(n = n_offspring, size = 1, prob = prop_asymptomatic)
+          new_df <- data.frame(id = current_max_id + seq_len(n_offspring), 
                                ancestor = id_parent,
                                generation = gen_parent + 1L, 
-                               time = new_new_times + t_parent, 
+                               time = new_times + t_parent, 
                                offspring_generated = FALSE,
-                               vaccinated = are_they_vaccinated[which(infection_retained == 1)],
-                               time_vaccinated = time_vaccinated[which(infection_retained == 1)] + t_parent)
+                               time_onset = NA,
+                               vaccinated = 0,
+                               time_vaccinated = NA,
+                               time_protected = NA,
+                               asymptomatic = asymptomatic)
           tdf <- rbind(tdf, new_df)
+          
+        ## If index case is symptomatic, then the contacts are vaccinated and the potential secondary infections get ring vaccinated
+        ## Question then becomes are they vaccinated and develop protection in time to prevent infection - which we calculate below.
+        } else {
+          
+          are_they_vaccinated <- vector(mode = "integer", length = n_offspring) ## vector of whether secondary infections get vaccinated
+          infection_retained <- vector(mode = "integer", length = n_offspring)  ## vector of whether secondary infections get retained (i.e. not prevented by ring vaccination)
+          infection_retained[1:length(infection_retained)] <- 1                 ## default to infections being retained; and then flow through below to see if they get removed
+          
+          ## Calculating time to vaccination protection
+          time_to_secondary_vaccination <- onset_time_index_case + vaccine_logistical_delay                    ## Time between index case infected and secondary cases ring vaccinated
+          time_to_secondary_vaccination_protection <- time_to_secondary_vaccination + vaccine_protection_delay ## Time between index case infected and secondary cases protected with vaccination
+          
+          ## Checking whether vaccination occurs before or after the secondary cases have been generated;
+          ## and if so, whether or not the infection is prevented by the vaccine
+          for (i in 1:n_offspring) {
+            if (time_to_secondary_vaccination <= new_times[i]) {
+              are_they_vaccinated[i] <- rbinom(n = 1, size = 1, prob = vaccine_coverage)
+              did_they_have_potential_protection <- ifelse(time_to_secondary_vaccination_protection <= new_times[i], 1, 0)
+              were_they_protected <- rbinom(n = 1, size = 1, prob = vaccine_efficacy_infection * did_they_have_potential_protection)
+              infection_retained[i] <- ifelse(are_they_vaccinated[i] == 1 & were_they_protected == 1, 0, 1)
+            } else {
+              infection_retained[i] <- 1
+            }
+          }
+          
+          new_n_offspring <- sum(infection_retained)
+          new_new_times <- new_times[which(infection_retained == 1)]
+          time_vaccinated <- ifelse(are_they_vaccinated == 1, time_to_secondary_vaccination, NA)
+          time_protected <- ifelse(are_they_vaccinated == 1, time_to_secondary_vaccination_protection, NA)
+          asymptomatic <- rbinom(n = new_n_offspring, size = 1, prob = prop_asymptomatic)
+          
+          ## Checking whether there are any infections to add to the table
+          if (new_n_offspring != 0) {
+            new_df <- data.frame(id = current_max_id + seq_len(new_n_offspring), 
+                                 ancestor = id_parent,
+                                 generation = gen_parent + 1L, 
+                                 time = new_new_times + t_parent, 
+                                 offspring_generated = FALSE,
+                                 time_onset = NA,
+                                 vaccinated = are_they_vaccinated[which(infection_retained == 1)],
+                                 time_vaccinated = time_vaccinated[which(infection_retained == 1)] + t_parent,
+                                 time_protected = time_protected[which(infection_retained == 1)] + t_parent,
+                                 asymptomatic = asymptomatic)
+            tdf <- rbind(tdf, new_df)
+          }
         }
-        
       } else {
-        
+        asymptomatic <- rbinom(n = n_offspring, size = 1, prob = prop_asymptomatic)
         new_df <- data.frame(id = current_max_id + seq_len(n_offspring), 
                              ancestor = id_parent,
                              generation = gen_parent + 1L, 
                              time = new_times + t_parent, 
                              offspring_generated = FALSE,
+                             time_onset = NA,
                              vaccinated = 0,
-                             time_vaccinated = NA)
+                             time_vaccinated = NA,
+                             time_protected = NA,
+                             asymptomatic = asymptomatic)
         tdf <- rbind(tdf, new_df)
       }
     }
@@ -226,6 +260,7 @@ chain_sim_susc_ring_vacc <- function (offspring = c("pois", "nbinom"), mn_offspr
   tdf <- tdf[tdf$time <= tf, ]
   tdf <- tdf[order(tdf$time, tdf$id), ]
   tdf$offspring_generated <- NULL
+  tdf$abs_time_onset <- tdf$time_onset + tdf$time
   
   return(tdf)
 }
@@ -236,10 +271,10 @@ x <- tdf %>%
 
 par(mfrow = c(2, 1))
 hist(x$n)
-hist(offspring_fun(n = 5000, susc = 10^7))
+hist(offspring_fun(n = 5000, susc = pop))
 
 mean(x$n)
-mean(offspring_fun(n = 5000, susc = 10^7))
+mean(offspring_fun(n = 5000, susc = pop))
 
 
 
