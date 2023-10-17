@@ -75,29 +75,24 @@ chain_sim_susc <- function (offspring = c("pois", "nbinom"), mn_offspring, disp_
 
 ## (More Heavily) Modified version of chain_sim_susc from bpmodels (https://github.com/epiverse-trace/bpmodels) to include ring vaccination.
 ### Consider adding in probability of contact not being identified
-### Maybe add prop_asymptomatic in - still working out whether it makes sense currently - yes, because if someone is asymptomatic, their contacts won't get vaccinated
 ### Add in something about vaccination starting based on accumulated number of cases or something (????) 
-
 offspring <- "pois"
 mn_offspring <- 20
-generation_time <- function(n) {  rgamma(n, shape = 6, rate = 2) } # generation_time <- function(n) {  return(rep(7, n)) } 
+generation_time <- function(n) {  rgamma(n, shape = 14, rate = 2) } # generation_time <- function(n) {  return(rep(7, n)) } 
 t0 <- 0
 tf <- Inf
 pop <- 10^8
 check_final_size <- 10000
 initial_immune <- 0
-infection_to_onset <- function(n) { rgamma(n, shape = 2, rate = 2) } # infection_to_onset <- function(n) { return(rep(2, n)) } 
+infection_to_onset <- function(n) { rgamma(n, shape = 1, rate = 2) } # infection_to_onset <- function(n) { return(rep(2, n)) } 
 vaccine_start <- 1
 vaccine_coverage <- 1
-vaccine_efficacy_infection <- 0
-vaccine_efficacy_transmission <- 0.9
+vaccine_efficacy_infection <- 0.5
+vaccine_efficacy_transmission <- 0
 vaccine_logistical_delay <- 1
 vaccine_protection_delay <- 1
 seeding_cases <- 1
-prop_asymptomatic <- 1
-
-((1 - vaccine_coverage) * mn_offspring) + 
-  (vaccine_coverage * mn_offspring * (1 - vaccine_efficacy_infection) * vaccine_efficacy_transmission)
+prop_asymptomatic <- 0
 
 chain_sim_susc_ring_vacc <- function (offspring = c("pois", "nbinom"), mn_offspring, disp_offspring, 
                                       generation_time, t0 = 0, tf = Inf, pop, check_final_size, initial_immune = 0,
@@ -128,7 +123,7 @@ chain_sim_susc_ring_vacc <- function (offspring = c("pois", "nbinom"), mn_offspr
   
   ## Creating table to store branching process tree
   tdf <- data.frame(id = seq_along(1:seeding_cases), ancestor = NA_integer_, generation = 1L, time = t0 + seq(from = 0, to = 0.01, length.out = seeding_cases), 
-                    offspring_generated = FALSE, time_onset = NA, vaccinated = 0, time_vaccinated = NA, time_protected = NA)
+                    offspring_generated = FALSE, time_onset = NA, vaccinated = 0, time_vaccinated = NA, time_protected = NA, asymptomatic = 0)
   ## note that currently time_onset is relative to time of infection (time) currently 
   
   ## Setting up the simulation initial conditions (initial time, initial size of susceptible population etc)
@@ -178,6 +173,11 @@ chain_sim_susc_ring_vacc <- function (offspring = c("pois", "nbinom"), mn_offspr
       if (t >= vaccine_start) {
         
         ## If index case is asymptomatic, then none of the contacts are vaccinated and so none of the potential secondary infections get ring vaccinated
+        ### THIS ISN'T QUITE RIGHT - BECAUSE YOU MIGHT HAVE SOME FOLKS WHO ARE ASYMPTOMATIC, BUT THEIR PREVIOUS INDEX CASE WAS SYMPTOMATIC, AND
+        ### SO THEY GOT VACCINATED THAT WAY - no I think this is fine, because by definition, those included in the linelist will be either
+        ### i) those who got vaccinated but too late (therefore no benefit of vaccination);
+        ### ii) those who got vaccinated but it failed to protect (in which case, reduction in transmission taken care of above)
+        ### need to come back and double check this in detail.
         if (index_asymptomatic == 1) {
           asymptomatic <- rbinom(n = n_offspring, size = 1, prob = prop_asymptomatic)
           new_df <- data.frame(id = current_max_id + seq_len(n_offspring), 
