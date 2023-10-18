@@ -225,70 +225,53 @@ chain_sim_susc_ring_vacc <- function(offspring = c("pois", "nbinom"), mn_offspri
   return(tdf)
 }
 
-## Testing and running the model
-offspring <- "pois"
-mn_offspring <- 15
-generation_time <- function(n) {  rgamma(n, shape = 8, rate = 2) } # generation_time <- function(n) {  return(rep(7, n)) } 
-t0 <- 0
-tf <- Inf
-pop <- 10^8
-check_final_size <- 10000
-initial_immune <- 0
-infection_to_onset <- function(n) { rgamma(n, shape = 3, rate = 2) } # infection_to_onset <- function(n) { return(rep(2, n)) } 
-vaccine_start <- 1
-vaccine_coverage <- 1
-vaccine_efficacy_infection <- 0.5
-vaccine_efficacy_transmission <- 0
-vaccine_logistical_delay <- 1
-vaccine_protection_delay <- 1
-seeding_cases <- 1
-prop_asymptomatic <- 0
+## Testing, checking and running the model
 
-test <- chain_sim_susc_ring_vacc(offspring = "pois", 
-                                 mn_offspring = 15, 
-                                 generation_time = generation_time,
-                                 t0 = 0, tf = Inf, pop = 10^8, check_final_size = 25000, initial_immune = 0, 
-                                 seeding_cases = 5, prop_asymptomatic = 0, 
-                                 infection_to_onset = infection_to_onset, 
-                                 vaccine_start = 5, vaccine_coverage = 1, 
-                                 vaccine_efficacy_infection = 0.85, 
-                                 vaccine_efficacy_transmission = 0.85, 
-                                 vaccine_logistical_delay = 3, 
-                                 vaccine_protection_delay = 1) 
-x <- test %>%
-  group_by(ancestor) %>%
-  summarise(n = n())
+### Single simulation
+# test <- chain_sim_susc_ring_vacc(offspring = "pois", 
+#                                  mn_offspring = 15, 
+#                                  generation_time = generation_time,
+#                                  t0 = 0, tf = Inf, pop = 10^8, check_final_size = 25000, initial_immune = 0, 
+#                                  seeding_cases = 5, prop_asymptomatic = 0, 
+#                                  infection_to_onset = infection_to_onset, 
+#                                  vaccine_start = 5, vaccine_coverage = 1, 
+#                                  vaccine_efficacy_infection = 0.85, 
+#                                  vaccine_efficacy_transmission = 0.85, 
+#                                  vaccine_logistical_delay = 3, 
+#                                  vaccine_protection_delay = 1) 
+# x <- test %>%
+#   group_by(ancestor) %>%
+#   summarise(n = n())
+# 
+# par(mfrow = c(2, 1))
+# hist(x$n)
+# hist(offspring_fun(n = 5000, susc = pop))
+# mean(x$n)
+# mean(offspring_fun(n = 5000, susc = pop))
 
-par(mfrow = c(2, 1))
-hist(x$n)
-hist(offspring_fun(n = 5000, susc = pop))
-
-mean(x$n)
-mean(offspring_fun(n = 5000, susc = pop))
-
-iterations <- 10
-R0_scan <- c(0.75, 1, 1.25, 1.5, 2, 3, 4, 5)
-storage <- matrix(nrow = iterations, ncol = length(R0_scan))
-for (i in 1:length(R0_scan)) {
-  for (j in 1:iterations) {
-    
-    test <- chain_sim_susc_ring_vacc(offspring = "pois", 
-                                     mn_offspring = R0_scan[i], 
-                                     generation_time = generation_time,
-                                     t0 = 0, tf = Inf, pop = 10^8, check_final_size = 2000, initial_immune = 0, 
-                                     seeding_cases = 5, prop_asymptomatic = 0, 
-                                     infection_to_onset = infection_to_onset, 
-                                     vaccine_start = 5, vaccine_coverage = 1, 
-                                     vaccine_efficacy_infection = 0.85, 
-                                     vaccine_efficacy_transmission = 0.85, 
-                                     vaccine_logistical_delay = 3, 
-                                     vaccine_protection_delay = 1) 
-    storage[j, i] <- nrow(test)
-  }
-  print(i)
-}
-
-
+## Multiple simulations
+# iterations <- 10
+# R0_scan <- c(0.75, 1, 1.25, 1.5, 2, 3, 4, 5)
+# storage <- matrix(nrow = iterations, ncol = length(R0_scan))
+# for (i in 1:length(R0_scan)) {
+#   for (j in 1:iterations) {
+#     
+#     test <- chain_sim_susc_ring_vacc(offspring = "pois", 
+#                                      mn_offspring = R0_scan[i], 
+#                                      generation_time = generation_time,
+#                                      t0 = 0, tf = Inf, pop = 10^8, check_final_size = 1000, initial_immune = 0, 
+#                                      seeding_cases = 5, prop_asymptomatic = 0, 
+#                                      infection_to_onset = infection_to_onset, 
+#                                      vaccine_start = 5, vaccine_coverage = 1, 
+#                                      vaccine_efficacy_infection = 0.85, 
+#                                      vaccine_efficacy_transmission = 0.85, 
+#                                      vaccine_logistical_delay = 1, 
+#                                      vaccine_protection_delay = 1) 
+#     storage[j, i] <- nrow(test)
+#   }
+#   print(i)
+# }
+# apply(storage, 2, mean)
 
 ## Tracking IDs of infected individuals in sub-trees
 # traverse_tree <- function(check_id, df, counted) {
