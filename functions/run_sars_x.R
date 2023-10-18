@@ -21,7 +21,7 @@ vaccine_milestone_timings <- function(country,
   daily_doses_bpsv <- vaccination_rate_bpsv * population_size / 7
   elderly_pop_to_vaccinate_bpsv <- ceiling(sum(standard_pop[priority_age_groups]) * coverage_bpsv) 
   time_to_coverage_bpsv <- ceiling(elderly_pop_to_vaccinate_bpsv/daily_doses_bpsv) + 1 # +1 added to ensure we reach the coverage targets in non-integer instances 
-  
+                                                                                       
   # Calculating time to disease-specific coverage for the elderly population
   # - Note that tis done separately for the elderly population who DID and DID NOT get the BPSV - with daily doses allocated proportionally 
   #   between these groups (i.e. not prioritising a particular elderly sub-group with the disease-specific vaccine)
@@ -79,7 +79,7 @@ create_vaccination_dose_series <- function(country,
     stop("parameter vaccine_scenario must be either 'specific_only' or 'both_vaccines'")
   }
   if (coverage_spec < coverage_bpsv) {
-    step("coverage with the disease-specific vaccine cannot be lower than coverage with the BPSV vaccine - adjust model inputs accordingly")
+    stop("coverage with the disease-specific vaccine cannot be lower than coverage with the BPSV vaccine - adjust model inputs accordingly")
   }
   
   # If the vaccine scenario only involves the disease-specific vaccine, then primary doses are the disease-specific vaccine for everyone
@@ -117,7 +117,7 @@ create_vaccination_dose_series <- function(country,
     # Daily number of bpsv doses available and associated time to vaccine elderly population  
     daily_doses_bpsv <- vaccination_rate_bpsv * population_size / 7
     elderly_pop_to_vaccinate_bpsv <- ceiling(sum(standard_pop[priority_age_groups]) * coverage_bpsv)
-    time_to_coverage_bpsv <- ceiling(elderly_pop_to_vaccinate_bpsv/daily_doses_bpsv) + 1 # +1 added to ensure we reach the coverage targets in non-integer instances 
+    time_to_coverage_bpsv <- ceiling(elderly_pop_to_vaccinate_bpsv/daily_doses_bpsv)
     
     # Daily number of disease-specific doses available and associated time to vaccine elderly population
     # - Note that tis done separately for the elderly population who DID and DID NOT get the BPSV - with daily doses allocated proportionally 
@@ -159,7 +159,8 @@ create_vaccination_dose_series <- function(country,
       c(rep(0, detection_time),                         ## time between epidemic start and detection
         rep(0, bpsv_start),                             ## time between detection and initiation of BPSV campaign
         rep(0, bpsv_protection_delay),                  ## time between initiation of BPSV campaign and people first being protected by that first dose
-        rep(daily_doses_bpsv, time_to_coverage_bpsv),   ## protection (if any) emerges in BPSV-vaccinated primary vaccinated folks
+        rep(daily_doses_bpsv, time_to_coverage_bpsv - 1),   ## protection (if any) emerges in BPSV-vaccinated primary vaccinated folks
+        rep(elderly_pop_to_vaccinate_bpsv - (daily_doses_bpsv * (time_to_coverage_bpsv - 1)), 1),
         rep(0, specific_vaccine_start - time_to_coverage_bpsv - bpsv_protection_delay - bpsv_start), # specific vaccine becomes available specific_vaccine_start days after detection
         rep(0, specific_protection_delay),                               ## time between initiation of specific vaccine campaign for elderly and them being protected by that vaccine
         rep(daily_doses_spec_no_bpsv, time_to_coverage_spec_no_bpsv),    ## no specific vaccine for non-elderly whilst that vaccination campaign is ongoing
@@ -316,9 +317,6 @@ run_sars_x <- function(## Demographic Parameters
   set.seed(123)
   
   ## Input Checking
-  if (!approach %in% c("old", "new")) {
-    stop("parameter approach must be either 'old' or 'new'")
-  }
   if (!output %in% c("summary", "full")) {
     stop("parameter output must be either 'summary' or 'full'")
   }
@@ -328,8 +326,11 @@ run_sars_x <- function(## Demographic Parameters
   if (is.null(ICU_bed_capacity)) {
     ICU_bed_capacity <- population_size
   }
-  if (dur_spec >= 1000 * 365) {
+  if (dur_spec < 1000 * 365) {
     stop("no waning of disease-specific vaccine possible within current setup - make dur_spec a number >= 1000 * 365")
+  }
+  if (coverage_spec < coverage_bpsv) {
+    stop("coverage with the disease-specific vaccine cannot be lower than coverage with the BPSV vaccine - adjust model inputs accordingly")
   }
   
   ## Country-specific population estimate
@@ -387,7 +388,8 @@ run_sars_x <- function(## Demographic Parameters
                                                     specific_protection_delay = specific_protection_delay,
                                                     vaccination_rate_bpsv = vaccination_rate_bpsv,
                                                     vaccination_rate_spec = vaccination_rate_spec,
-                                                    coverage = coverage_spec,
+                                                    coverage_bpsv = coverage_bpsv,
+                                                    coverage_spec = coverage_spec,
                                                     min_age_group_index_priority = min_age_group_index_priority,
                                                     runtime = runtime)
     primary_doses <- vaccine_doses$primary_doses
@@ -559,7 +561,7 @@ run_sars_x <- function(## Demographic Parameters
                              efficacy_infection_bpsv = efficacy_infection_bpsv, efficacy_disease_bpsv = efficacy_disease_bpsv, efficacy_infection_spec = efficacy_infection_spec,
                              efficacy_disease_spec = efficacy_disease_spec, dur_R = dur_R, dur_bpsv = dur_bpsv, dur_spec = dur_spec, bpsv_protection_delay = bpsv_protection_delay, specific_protection_delay = specific_protection_delay,                     
                              coverage_spec = coverage_spec, 
-                             coverage_bpsv = if (approach == "old") coverage_spec else coverage_bpsv, 
+                             coverage_bpsv = coverage_bpsv, 
                              vaccination_rate_bpsv = vaccination_rate_bpsv,
                              vaccination_rate_spec = vaccination_rate_spec,
                              min_age_group_index_priority = min_age_group_index_priority, min_age_group_index_non_priority = min_age_group_index_non_priority,     
@@ -577,7 +579,7 @@ run_sars_x <- function(## Demographic Parameters
                              efficacy_infection_bpsv = efficacy_infection_bpsv, efficacy_disease_bpsv = efficacy_disease_bpsv, efficacy_infection_spec = efficacy_infection_spec,
                              efficacy_disease_spec = efficacy_disease_spec, dur_R = dur_R, dur_bpsv = dur_bpsv, dur_spec = dur_spec, bpsv_protection_delay = bpsv_protection_delay, specific_protection_delay = specific_protection_delay,               
                              coverage_spec = coverage_spec, 
-                             coverage_bpsv = if (approach == "old") coverage_spec else coverage_bpsv, 
+                             coverage_bpsv = coverage_bpsv, 
                              vaccination_rate_bpsv = vaccination_rate_bpsv,
                              vaccination_rate_spec = vaccination_rate_spec,
                              min_age_group_index_priority = min_age_group_index_priority, min_age_group_index_non_priority = min_age_group_index_non_priority,     
