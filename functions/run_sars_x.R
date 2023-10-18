@@ -328,6 +328,9 @@ run_sars_x <- function(## Demographic Parameters
   if (is.null(ICU_bed_capacity)) {
     ICU_bed_capacity <- population_size
   }
+  if (dur_spec >= 1000 * 365) {
+    stop("no waning of disease-specific vaccine possible within current setup - make dur_spec a number >= 1000 * 365")
+  }
   
   ## Country-specific population estimate
   standard_pop <- generate_standard_pop(country = country, population_size = population_size)
@@ -466,7 +469,7 @@ run_sars_x <- function(## Demographic Parameters
                                                        rep(ve_d_elderly_spec_campaign, length(priority_age_groups)) ), ncol = 17)
     
     ### Vaccine protection waning
-    ### Note: the way this is structured, we basically can't have any waning of the disease-specific vaccine, which I don't think is a major problem
+    ### Note: the way this is structured, waning of the disease-specific vaccine is a challenge (I don't think this is a major problem as it comes at the end of the simulation)
     ###       The reason we can't do this is we only push individuals into the primary dose compartment (not secondary) for disease-specific vaccine
     ###       and there's no waning rate associated with that. 
     dur_V <- matrix(data = c(c(rep(dur_spec, min(priority_age_groups) - 1), rep(dur_bpsv, length(priority_age_groups))),    ## duration of primary series protection secondary dose 1 -> secondary dose 2 compartments (bpsv for elderly, specific vaccine for everyone else in this scenario)
@@ -474,6 +477,9 @@ run_sars_x <- function(## Demographic Parameters
                              c(rep(dur_spec, min(priority_age_groups) - 1), rep(dur_spec, length(priority_age_groups))),    ## duration of booster protection (specific for elderly, not used for everyone else)
                              c(rep(dur_spec, min(priority_age_groups) - 1), rep(dur_spec, length(priority_age_groups)))),   ## duration of booster protection (specific for elderly, not used for everyone else)
                     nrow = 4, ncol = 17, byrow = TRUE)
+    ### If this comes up that we need this for a CEPI-related thing, my suggestion would be to add in secondary doses associated with the specific campaign
+    ### to bump folks from primary to secondary compartments, whilst also adding in a time-varying dur_V matrix (dur_bpsv above would change to dur_spec, and that
+    ### would be fine I think as at that point, everyone who had a bpsv will have received a disease-specific vaccine instead - check this but I think it would be fine)
 
     ## Eligibility for Boosters (Elderly Only)
     vaccine_booster_initial_coverage <- c(rep(0, min(priority_age_groups) - 1), rep(1, length(priority_age_groups)))   # note that we set coverage to be 100% as it's already bounded by whatever coverage the 1st/2nd dose coverage got to
