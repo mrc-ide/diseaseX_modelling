@@ -23,9 +23,22 @@ vaccine_milestone_timings <- function(country,
   time_to_coverage_bpsv <- ceiling(elderly_pop_to_vaccinate_bpsv/daily_doses_bpsv) + 1 ## might need to remove the +1s, TBD
   
   # Calculating time to disease-specific coverage for the elderly population
-  daily_doses_spec <- vaccination_rate_spec * population_size / 7
-  elderly_pop_to_vaccinate_spec <- ceiling(sum(standard_pop[priority_age_groups]) * coverage_spec)
-  time_to_coverage_spec <- ceiling(elderly_pop_to_vaccinate_spec/daily_doses_spec) + 1 ## might need to remove the +1s, TBD
+  # - Note that tis done separately for the elderly population who DID and DID NOT get the BPSV - with daily doses allocated proportionally 
+  #   between these groups (i.e. not prioritising a particular elderly sub-group with the disease-specific vaccine)
+
+  ## For the elderly who DID receive the BPSV initially (i.e. up to the limit allowed by the size of the stockpile)
+  daily_doses_spec_received_bpsv <- (vaccination_rate_spec * population_size / 7) * coverage_bpsv
+  elderly_pop_to_vaccinate_spec_received_bpsv <- ceiling(sum(standard_pop[priority_age_groups]) * coverage_bpsv)
+  time_to_coverage_spec_received_bpsv <- ceiling(elderly_pop_to_vaccinate_spec_received_bpsv/daily_doses_spec_received_bpsv) + 1 # +1 added to ensure we reach the coverage targets in non-integer instances
+  
+  ## For the elderly who DID NOT receive the BPSV initially (despite wanting to i.e. limited by stockpile size, not general willingness)
+  ### (coverage_spec - coverage_bpsv)  - proportion who would have got bpsv if stockpile had been big enough (i.e. are willing to be vaccinated)
+  daily_doses_spec_no_bpsv <- (vaccination_rate_spec * population_size / 7) * (coverage_spec - coverage_bpsv)
+  elderly_pop_to_vaccinate_spec_no_bpsv <- ceiling(sum(standard_pop[priority_age_groups]) * (coverage_spec - coverage_bpsv))
+  time_to_coverage_spec_no_bpsv <- ifelse(elderly_pop_to_vaccinate_spec_no_bpsv == 0, 0, ceiling(elderly_pop_to_vaccinate_spec_no_bpsv/daily_doses_spec_no_bpsv) + 1) # +1 added to ensure we reach the coverage targets in non-integer instances
+  ## TO DO: FOR REASONS LAID OUT IN CREATE_DOSE_SERIES, NOT SURE THIS IS *QUITE* RIGHT JUST YET
+  ##        AS NEED TO ACCOUNT PRIMARY VS BOOSTER DISEASE-SPEC GROUPS FINISHING FIRST (AND HENCE THE EXTRA DOSES BEING AVAILABLE FOR THE OTHER GROUP, THUS SPEEDING UP COMPLETION)
+  ## OR MAYBE NONE OF THIS MATTERS BECAUSE IT'S ALL RATIOS AND PROPORTIONAL TO THE POPULATION???
 
   # Generate and return dataframe of model parameters and associated key vaccination milestone timings
   vaccine_milestone_timings_df <- data.frame(country = country,
@@ -39,7 +52,7 @@ vaccine_milestone_timings <- function(country,
                                              coverage_spec = coverage_spec,
                                              min_age_group_index_priority = min_age_group_index_priority,
                                              time_to_coverage_bpsv = time_to_coverage_bpsv,
-                                             time_to_coverage_spec = time_to_coverage_spec)
+                                             time_to_coverage_spec = max(c(time_to_coverage_spec_received_bpsv, time_to_coverage_spec_no_bpsv))) # whichever is later is when all elderly are vaccinated with disease-specific vaccine
   return(vaccine_milestone_timings_df)
 }
 
@@ -65,7 +78,7 @@ create_vaccination_dose_series <- function(country,
   if (!vaccine_scenario %in% c("specific_only", "both_vaccines")) {
     stop("parameter vaccine_scenario must be either 'specific_only' or 'both_vaccines'")
   }
-  if (coverage_spec <= coverage_bpsv) {
+  if (coverage_spec < coverage_bpsv) {
     step("coverage with the disease-specific vaccine cannot be lower than coverage with the BPSV vaccine - adjust model inputs accordingly")
   }
   
@@ -122,7 +135,7 @@ create_vaccination_dose_series <- function(country,
     ### (coverage_spec - coverage_bpsv)  - proportion who would have got bpsv if stockpile had been big enough (i.e. are willing to be vaccinated)
     daily_doses_spec_no_bpsv <- (vaccination_rate_spec * population_size / 7) * (coverage_spec - coverage_bpsv)
     elderly_pop_to_vaccinate_spec_no_bpsv <- ceiling(sum(standard_pop[priority_age_groups]) * (coverage_spec - coverage_bpsv))
-    time_to_coverage_spec_no_bpsv <- ceiling(elderly_pop_to_vaccinate_spec_no_bpsv/daily_doses_spec_no_bpsv) + 1                   # +1 added to ensure we reach the coverage targets in non-integer instances
+    time_to_coverage_spec_no_bpsv <- ifelse(elderly_pop_to_vaccinate_spec_no_bpsv == 0, 0, ceiling(elderly_pop_to_vaccinate_spec_no_bpsv/daily_doses_spec_no_bpsv) + 1) # +1 added to ensure we reach the coverage targets in non-integer instances
     
     # Checking there isn't any temporal overlap in the BPSV and disease-specific vaccination campaigns
     # - We want to avoid BPSV elderly and disease-specific everyone else campaigns happening concurrently (as they're the same series in the model)
@@ -148,7 +161,18 @@ create_vaccination_dose_series <- function(country,
         rep(0, specific_protection_delay),                               ## time between initiation of specific vaccine campaign for elderly and them being protected by that vaccine
         rep(daily_doses_spec_no_bpsv, time_to_coverage_spec_no_bpsv),    ## no specific vaccine for non-elderly whilst that vaccination campaign is ongoing
         rep(daily_doses_spec, runtime - time_to_coverage_spec_no_bpsv - specific_protection_delay - specific_vaccine_start - detection_time)) # specific vaccination of all other ages until end of runtime
-
+    ## still not quite sure this is right
+    ## time_to_coverage_spec_no_bpsv = 0 won't feature in the vector due to nature of how rep works, so that's fine
+    ## but would that not mean the non-elderly disease-specific vaccine starts too soon?
+    ## does time_to_coverage_spec_no_bpsv need to be time_to_coverage_spec_received_bpsv or like max(time_to_coverage_spec_no_bpsv, time_to_coverage_spec_no_bpsv) or something?
+    ## unclear currently. Need to check.
+    ### yeah, think we're still doing more doses than we should be currently
+    ### I think it needs to be something like do daily_doses_spec_no_bpsv initially, and then if this finishes early, do daily_doses_spec in the booster elderly population for the remaining
+    ### (time_to_coverage_spec_received_bpsv - time_to_coverage_spec_no_bpsv) days (and vice versa). And only then do you start the non-elderly population campaign.
+    ### Try implementing this when you're back from your break.
+    ## OR MAYBE NONE OF THIS MATTERS BECAUSE IT'S ALL RATIOS AND PROPORTIONAL TO THE POPULATION??? AND SO THEY SHOULD ALWAYS FINISH AT THE SAME TIME ???
+    ## YEAH I THINK TIME TO COVERAGE SHOULD BE IDENTICAL, SO time_to_coverage_spec_no_bpsv = time_to_coverage_spec_received_bpsv which means the above is right (I think).
+    
     # Second Doses (Only elderly who got BPSV vaccination receive second doses, and they are always the BPSV within the modelling framework)
     # - We model full protection as arising the moment you've had the first dose (in the model) and incorporate protection delays outside the model, as in the above and the below.
     #   The role of the second doses is to transfer BPSV vaccinated elderly into the second dose compartments, to free up the first dose compartments to switch over to being the disease-specific
@@ -182,9 +206,7 @@ create_vaccination_dose_series <- function(country,
     
   }
   
-  return(list(primary_doses = primary_doses,
-              second_doses = second_doses,
-              booster_doses = booster_doses))
+  return(list(primary_doses = primary_doses, second_doses = second_doses, booster_doses = booster_doses))
 }
 
 ## Generate default NPI scenarios based on model arguments (vaccination rate, detection time, vaccination start times etc)
