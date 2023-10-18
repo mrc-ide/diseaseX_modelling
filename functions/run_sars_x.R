@@ -46,8 +46,6 @@ vaccine_milestone_timings <- function(country,
 ## Create vaccination dose series
 ### For elderly, when bpsv is available primary is bpsv during bpsv campaign and spec during spec campaign, secondary is always bpsv, and booster is always spec
 ### Note: This supersedes the old version in old_run_sars_x.R, which didn't have the ability to vary the coverage of the bpsv (a proxy for stockpile size)
-### TO DO: We're now splitting disease-specific vaccination across primary and booster doses - need to (somehow) adjust the doses to reflect this
-###        or else you'll be in effect vaccinating "too fast" by applying same vaccination rate on primary and booster
 create_vaccination_dose_series <- function(country, 
                                            population_size, 
                                            detection_time, 
@@ -63,9 +61,12 @@ create_vaccination_dose_series <- function(country,
                                            min_age_group_index_priority,
                                            runtime) {
   
-  # Checking that the vaccine scenario is correctly specified
+  # Checking that the vaccine scenario and coverage targets arecorrectly specified
   if (!vaccine_scenario %in% c("specific_only", "both_vaccines")) {
     stop("parameter vaccine_scenario must be either 'specific_only' or 'both_vaccines'")
+  }
+  if (coverage_spec <= coverage_bpsv) {
+    step("coverage with the disease-specific vaccine cannot be lower than coverage with the BPSV vaccine - adjust model inputs accordingly")
   }
   
   # If the vaccine scenario only involves the disease-specific vaccine, then primary doses are the disease-specific vaccine for everyone
@@ -105,37 +106,55 @@ create_vaccination_dose_series <- function(country,
     elderly_pop_to_vaccinate_bpsv <- ceiling(sum(standard_pop[priority_age_groups]) * coverage_bpsv)
     time_to_coverage_bpsv <- ceiling(elderly_pop_to_vaccinate_bpsv/daily_doses_bpsv) + 1 # +1 added to ensure we reach the coverage targets in non-integer instances 
     
-    # Daily number of disease-specific doses available and associated time to vaccine elderly population  
-    daily_doses_spec <- vaccination_rate_spec * population_size / 7
-    elderly_pop_to_vaccinate_spec <- ceiling(sum(standard_pop[priority_age_groups]) * coverage_spec)
-    time_to_coverage_spec <- ceiling(elderly_pop_to_vaccinate_spec/daily_doses_spec) + 1 # +1 added to ensure we reach the coverage targets in non-integer instances
+    # Daily number of disease-specific doses available and associated time to vaccine elderly population
+    # - Note that tis done separately for the elderly population who DID and DID NOT get the BPSV - with daily doses allocated proportionally 
+    #   between these groups (i.e. not prioritising a particular elderly sub-group with the disease-specific vaccine)
+    daily_doses_spec <- vaccination_rate_spec * population_size / 7 ## to general population
     
-    ## Checking there's no overlap in vaccination campaigns
-    ## I think technically we want to avoid BPSV elderly and spec everyone else campaigns (as they're the same series in the model)
-    ## so I *think* saying BPSV elderly has to be complete before spec elderly (which is before spec everyone else)
-    ## is a conservative estimate
-    ## think even more conservative because not counting spec delay in protection development
-    minimum_spec_development_time_allowed <- (time_to_coverage_bpsv + bpsv_protection_delay)
-    if (minimum_spec_development_time_allowed > (specific_vaccine_start - bpsv_start)) {
-      stop("Virus-specific vaccine developed too soon given speed of vaccination campaign")
+    ## To those elderly who DID receive the BPSV initially (i.e. up to the limit allowed by the size of the stockpile)
+    daily_doses_spec_received_bpsv <- (vaccination_rate_spec * population_size / 7) * coverage_bpsv
+    elderly_pop_to_vaccinate_spec_received_bpsv <- ceiling(sum(standard_pop[priority_age_groups]) * coverage_bpsv)
+    time_to_coverage_spec_received_bpsv <- ceiling(elderly_pop_to_vaccinate_spec_received_bpsv/daily_doses_spec_received_bpsv) + 1 # +1 added to ensure we reach the coverage targets in non-integer instances
+
+    ## To those elderly who DID NOT receive the BPSV initially (despite wanting to i.e. limited by stockpile size, not general willingness)
+    ### coverage_bpsv                    - proportion receiving bpsv 
+    ### (1 - coverage_bpsv)              - proportion not receiving bpsv
+    ### (coverage_spec - coverage_bpsv)  - proportion who would have got bpsv if stockpile had been big enough (i.e. are willing to be vaccinated)
+    daily_doses_spec_no_bpsv <- (vaccination_rate_spec * population_size / 7) * (coverage_spec - coverage_bpsv)
+    elderly_pop_to_vaccinate_spec_no_bpsv <- ceiling(sum(standard_pop[priority_age_groups]) * (coverage_spec - coverage_bpsv))
+    time_to_coverage_spec_no_bpsv <- ceiling(elderly_pop_to_vaccinate_spec_no_bpsv/daily_doses_spec_no_bpsv) + 1                   # +1 added to ensure we reach the coverage targets in non-integer instances
+    
+    # Checking there isn't any temporal overlap in the BPSV and disease-specific vaccination campaigns
+    # - We want to avoid BPSV elderly and disease-specific everyone else campaigns happening concurrently (as they're the same series in the model)
+    #   and because we switch what the "primary doses" are (BPSV -> disease-specific) for elderly during the model runs. Making sure the BPSV campaign 
+    #   has to be complete before disease-specific campaign begins (which is before the disease-specific campaign for everyone else) I think achieves this.
+    minimum_spec_development_time_allowed <- (bpsv_start + time_to_coverage_bpsv + bpsv_protection_delay)
+    if (minimum_spec_development_time_allowed > specific_vaccine_start + specific_protection_delay + 7) { # +7 in there just to make it extra conservative and ensure no overlap
+      stop("Disease-specific vaccine developed too soon given timing of BPSV campaign and speed of vaccination campaign - adjust model inputs accordingly")
     }
     
-    ## Primary Doses (initial campaign is BPSV for elderly, then specific for everyone who isn't elderly)
-    ### Note that we need to check whether another "+1" is needed somewhere to make sure we always vaccinate all the elderly
+    # Primary Doses (These are BPSV for elderly during the BPSV campaign, then disease-specific for everyone during the disease-specific vaccination campaign)
+    # - Note that we that for the disease-specific vaccine series, we initially use daily_doses_spec_no_bpsv (to reflect doses being split across this elderly group
+    #   and the elderly group receiving the disease-specific vaccine as a booster); and then switch over to daily_doses_spec (to reflect the fact that elderly population
+    #   vaccinated with disease specific is completed; and now the full daily_doses_spec is available for just the disease-specific vaccine population receiving it as a primary dose
+    #   (i.e. all the younger people who didn't receive a BPSV).
+    # - TO DO: Check whether +1 is needed to be added to time_to_coverage_bpsv to sure elderly vaccination targets are achieved
     primary_doses <- 
-      c(rep(0, detection_time),                     ## time between epidemic start and detection
-        rep(0, bpsv_start),                         ## time between detection and initiation of BPSV campaign
-        rep(0, bpsv_protection_delay),              ## time between initiation of BPSV campaign and people first being protected by that first dose
-        rep(daily_doses_bpsv, time_to_coverage_bpsv),    ## protection (if any) emerges in BPSV-vaccinated primary vaccinated folks
-        rep(0, specific_vaccine_start - time_to_coverage_bpsv - bpsv_protection_delay - bpsv_start), # specific vaccine campaign starts specific_vaccine_start days after detection
-        rep(0, time_to_coverage_spec),              ## no specific vaccine for non-elderly whilst that vaccination campaign is ongoing
-        rep(0, specific_protection_delay),          ## time between initiation of specific vaccine campaign and people first being protected by that first dose
-        rep(daily_doses_spec, runtime - specific_protection_delay - time_to_coverage_spec - specific_vaccine_start - detection_time)) # specific vaccination of all other ages until end of runtime
-    
-    ## Second Doses
-    ## We model full protection as arising the moment you've had the first dose, so second dose is 
-    ## redundant given the vaccine-specific protection_delays. We arbitrarily set it to 1 here and therefore stagger
-    ## second doses to be a day after primary doses.
+      c(rep(0, detection_time),                         ## time between epidemic start and detection
+        rep(0, bpsv_start),                             ## time between detection and initiation of BPSV campaign
+        rep(0, bpsv_protection_delay),                  ## time between initiation of BPSV campaign and people first being protected by that first dose
+        rep(daily_doses_bpsv, time_to_coverage_bpsv),   ## protection (if any) emerges in BPSV-vaccinated primary vaccinated folks
+        rep(0, specific_vaccine_start - time_to_coverage_bpsv - bpsv_protection_delay - bpsv_start), # specific vaccine becomes available specific_vaccine_start days after detection
+        rep(0, specific_protection_delay),                               ## time between initiation of specific vaccine campaign for elderly and them being protected by that vaccine
+        rep(daily_doses_spec_no_bpsv, time_to_coverage_spec_no_bpsv),    ## no specific vaccine for non-elderly whilst that vaccination campaign is ongoing
+        rep(daily_doses_spec, runtime - time_to_coverage_spec_no_bpsv - specific_protection_delay - specific_vaccine_start - detection_time)) # specific vaccination of all other ages until end of runtime
+
+    # Second Doses (Only elderly who got BPSV vaccination receive second doses, and they are always the BPSV within the modelling framework)
+    # - We model full protection as arising the moment you've had the first dose (in the model) and incorporate protection delays outside the model, as in the above and the below.
+    #   The role of the second doses is to transfer BPSV vaccinated elderly into the second dose compartments, to free up the first dose compartments to switch over to being the disease-specific
+    #   vaccine for the elderly (required to handle different BPSV and disease-spcific coverage targets; and to make those who did receive the BPSV eligible for a booster, which will be the 
+    #   disease-specific vaccine for them). Given this, the second dose timing does not affect model outputs and we therefore arbitrarily set it to 1 here and therefore stagger
+    #   second doses to be a day after primary doses.
     second_doses <- 
       c(rep(0, 1),                                  ## arbitrary two day delay between primary and secondary doses
         rep(0, detection_time),                     ## time between epidemic start and detection
@@ -143,9 +162,9 @@ create_vaccination_dose_series <- function(country,
         rep(0, bpsv_protection_delay),              ## time between initiation of BPSV campaign and people first being protected by that first dose
         rep(daily_doses_bpsv, time_to_coverage_bpsv),    ## protection (if any) emerges in BPSV-vaccinated primary vaccinated folks
         rep(0, specific_vaccine_start - time_to_coverage_bpsv - bpsv_protection_delay - bpsv_start), # specific vaccine campaign starts specific_vaccine_start days after detection
-        rep(0, time_to_coverage_spec),              ## no specific vaccine for non-elderly whilst that vaccination campaign is ongoing
         rep(0, specific_protection_delay),          ## time between initiation of specific vaccine campaign and people first being protected by that first dose
-        rep(0, runtime - specific_protection_delay - time_to_coverage_spec - specific_vaccine_start - detection_time)) ## no secondary doses in disease-specific regime (primary doses are treated as the complete course)
+        rep(0, time_to_coverage_spec_no_bpsv),    ## no specific vaccine for non-elderly whilst that vaccination campaign is ongoing
+        rep(0, runtime - time_to_coverage_spec_no_bpsv - specific_protection_delay - specific_vaccine_start - detection_time)) # specific vaccination of all other ages until end of runtime
     second_doses <- second_doses[1:length(primary_doses)]
     second_doses[(detection_time+bpsv_start+bpsv_protection_delay+time_to_coverage_bpsv+1+1)] <- daily_doses_bpsv # extra secondary doses to make sure everyone receiving primary goes to secondary
     second_doses[(detection_time+bpsv_start+bpsv_protection_delay+time_to_coverage_bpsv+1+2)] <- daily_doses_bpsv # we're modelling no additional impact of secondary dose (i.e. you're protected)
@@ -153,21 +172,19 @@ create_vaccination_dose_series <- function(country,
                                                                                                                   # elderly folks in the secondary dose compartments when the specific vaccine comes
                                                                                                                   # round, so we can switch the primary to be the specific vaccine (rather than bpsv as it is initially)
 
-    ## Booster Doses (only for elderly, this is the disease specific vaccine)
-    ## because we now have booster coverage eligibility indicator in, we don't have to worry
-    ## about stopping the booster doses - only elderly will ever get it
+    # Booster Doses (only for the elderly population who were vaccinated with the BPSV, this is the disease-specific vaccine)
+    # - Because we now have booster coverage eligibility indicator in, we don't have to worry about stopping the booster doses - only elderly will ever get it
     booster_doses <- 
       c(rep(0, detection_time),
         rep(0, specific_vaccine_start),
         rep(0, specific_protection_delay),
-        rep(daily_doses_spec, runtime - specific_protection_delay - specific_vaccine_start - detection_time))
+        rep(daily_doses_spec_received_bpsv, runtime - specific_protection_delay - specific_vaccine_start - detection_time))
     
   }
   
   return(list(primary_doses = primary_doses,
               second_doses = second_doses,
               booster_doses = booster_doses))
-  
 }
 
 ## Generate default NPI scenarios based on model arguments (vaccination rate, detection time, vaccination start times etc)
