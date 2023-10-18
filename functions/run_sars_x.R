@@ -1,9 +1,3 @@
-##### IMPORTANT NOTE
-##### BECAUSE WE'RE NOW SPLITTING VACCINATION OF ELDERLY ACROSS PRIMARY DOSES AND BOOSTER DOSES,
-##### WE NEED TO ADJUST THE VACCINATION RATES ACCORDINGLY - OR ELSE IT'LL IN EFFECT BE TOO QUICK ALL ROUND
-##### I THINK IN GENERAL, WE PROBABLY NEED AN OVERALL VACCINATION RATE AND THEN DIVIDE IT AMONGST THE 
-##### DIFFERENT VACCINES (PRIMARY, SECOND OR BOOSTER) THAT NEED TO BE DELIVERED? IMPORTANT POINT, NEED TO CHECK AND SORT.
-
 ## Generate vaccination milestone timings based on parameter combinations
 ### For elderly, primary is bpsv during bpsv campaign and spec during spec campaign, secondary is always bpsv, and booster is always spec
 ### Note: This supersedes the old version in old_run_sars_x.R, which didn't have the ability to vary the coverage of the bpsv (a proxy for stockpile size)
@@ -18,37 +12,42 @@ vaccine_milestone_timings <- function(country,
                                       coverage_spec,
                                       min_age_group_index_priority) {
   
-  # Calculating time to coverage (defined as vaccination of the elderly/vulnerable population) from parameter inputs
+  # Calculating time to coverage
+  ## Note: This is used in the NPI function where we define coverage (for purpose of lifting NPIs) as based on elderly population so this is what is calculated
   standard_pop <- generate_standard_pop(country = country, population_size = population_size)
   priority_age_groups <- min_age_group_index_priority:17       
   
+  # Calculating time to BPSV coverage for the elderly population
   daily_doses_bpsv <- vaccination_rate_bpsv * population_size / 7
   elderly_pop_to_vaccinate_bpsv <- ceiling(sum(standard_pop[priority_age_groups]) * coverage_bpsv) 
   time_to_coverage_bpsv <- ceiling(elderly_pop_to_vaccinate_bpsv/daily_doses_bpsv) + 1 ## might need to remove the +1s, TBD
   
+  # Calculating time to disease-specific coverage for the elderly population
   daily_doses_spec <- vaccination_rate_spec * population_size / 7
   elderly_pop_to_vaccinate_spec <- ceiling(sum(standard_pop[priority_age_groups]) * coverage_spec)
   time_to_coverage_spec <- ceiling(elderly_pop_to_vaccinate_spec/daily_doses_spec) + 1 ## might need to remove the +1s, TBD
 
-  # Returning dataframe of parameters and key vaccination milestone timings
-  temp <- data.frame(country = country,
-                     population_size = population_size,
-                     detection_time = detection_time,
-                     bpsv_start = bpsv_start,
-                     specific_vaccine_start = specific_vaccine_start,
-                     vaccination_rate_bpsv = vaccination_rate_bpsv, 
-                     vaccination_rate_spec = vaccination_rate_spec, 
-                     coverage_bpsv = coverage_bpsv,
-                     coverage_spec = coverage_spec,
-                     min_age_group_index_priority = min_age_group_index_priority,
-                     time_to_coverage_bpsv = time_to_coverage_bpsv,
-                     time_to_coverage_spec = time_to_coverage_spec)
-  return(temp)
+  # Generate and return dataframe of model parameters and associated key vaccination milestone timings
+  vaccine_milestone_timings_df <- data.frame(country = country,
+                                             population_size = population_size,
+                                             detection_time = detection_time,
+                                             bpsv_start = bpsv_start,
+                                             specific_vaccine_start = specific_vaccine_start,
+                                             vaccination_rate_bpsv = vaccination_rate_bpsv, 
+                                             vaccination_rate_spec = vaccination_rate_spec, 
+                                             coverage_bpsv = coverage_bpsv,
+                                             coverage_spec = coverage_spec,
+                                             min_age_group_index_priority = min_age_group_index_priority,
+                                             time_to_coverage_bpsv = time_to_coverage_bpsv,
+                                             time_to_coverage_spec = time_to_coverage_spec)
+  return(vaccine_milestone_timings_df)
 }
 
 ## Create vaccination dose series
-### For elderly, primary is bpsv during bpsv campaign and spec during spec campaign, secondary is always bpsv, and booster is always spec
+### For elderly, when bpsv is available primary is bpsv during bpsv campaign and spec during spec campaign, secondary is always bpsv, and booster is always spec
 ### Note: This supersedes the old version in old_run_sars_x.R, which didn't have the ability to vary the coverage of the bpsv (a proxy for stockpile size)
+### TO DO: We're now splitting disease-specific vaccination across primary and booster doses - need to (somehow) adjust the doses to reflect this
+###        or else you'll be in effect vaccinating "too fast" by applying same vaccination rate on primary and booster
 create_vaccination_dose_series <- function(country, 
                                            population_size, 
                                            detection_time, 
@@ -64,14 +63,17 @@ create_vaccination_dose_series <- function(country,
                                            min_age_group_index_priority,
                                            runtime) {
   
-  ## Setting Up Vaccination Stuff
+  # Checking that the vaccine scenario is correctly specified
   if (!vaccine_scenario %in% c("specific_only", "both_vaccines")) {
     stop("parameter vaccine_scenario must be either 'specific_only' or 'both_vaccines'")
   }
   
+  # If the vaccine scenario only involves the disease-specific vaccine, then primary doses are the disease-specific vaccine for everyone
   if (vaccine_scenario == "specific_only") {
     
-    standard_pop <- generate_standard_pop(country = country, population_size = population_size)
+    # Primary Doses - Calculating daily number of doses available given a vaccination rate and population size
+    ## Disease-specific vaccine becomes available specific_vaccine_start days after pathogen detected - we bake in the specific_protection_delay
+    ## directly into the delivery of doses (in contrast to prior approaches where this was in squire.page as a parameter)
     daily_doses_spec <- vaccination_rate_spec * population_size / 7    # rate of vaccination with primary series
     primary_doses <- 
       c(rep(0, detection_time),
@@ -79,28 +81,34 @@ create_vaccination_dose_series <- function(country,
         rep(0, specific_protection_delay),        
         rep(daily_doses_spec, runtime - detection_time - specific_vaccine_start - specific_protection_delay))
     
-    ## Second Doses
-    ## We model full protection as arising the moment you've had the first dose, so second dose is 
-    ## redundant given the vaccine-specific protection_delays. We arbitrarily set it to 1 here and therefore stagger
-    ## second doses to be a day after primary doses.
+    # Second Doses
+    ## We model full protection as arising the moment you've had the first dose, so second dose is redundant. 
+    ## We arbitrarily set it to 1 here and therefore stagger ## second doses to be a day after primary doses.
     second_doses <- c(0, primary_doses[1:(length(primary_doses) - 1)]) # second dose 1 day after first
     
-    ## Booster Doses (only for elderly, this is the disease specific vaccine)
+    ## Booster Doses (none here as the disease-specific vaccine is the only one available; and the primary doses are the disease-specific vaccine in this scenario)
     booster_doses <- rep(0, runtime)
-    
+  
+  # If the vaccine scenario involves both vaccines, 60+s receive BPSV and disease-specific; under 60s receive just disease-specific
+  # - In the model structure, for 60+ age-groups, primary is BPSV initially (during BPSV campaign) and then primary becomes disease-specific (during disease-specific campaign).
+  #   Secondary doses are always BPSV and we only have them in BPSV campaign (to get BPSV-vaxxed elderly into second dose compartments), and then when
+  #   disease-specific campaign occurs, we distribute it via primary doses (to those who didn't get BPSV-vaxxed) AND booster doses (to those who did).
+  #   This is all for 60+; for all other age-groups (who don't get BPSV), primary doses are the disease-specific vaccine.
   } else {
     
-    # Calculating time to coverage from parameter inputs
+    # Calculating daily number of doses available for both vaccines, and the associated time to coverage (of elderly population) from parameter inputs
     standard_pop <- generate_standard_pop(country = country, population_size = population_size)
     priority_age_groups <- min_age_group_index_priority:17       
     
+    # Daily number of bpsv doses available and associated time to vaccine elderly population  
     daily_doses_bpsv <- vaccination_rate_bpsv * population_size / 7
-    elderly_pop_to_vaccinate_bpsv <- ceiling(sum(standard_pop[priority_age_groups]) * coverage_bpsv) # 60+s receive primary (BNPCV) and booster (diseaseX-specific); under 60s receive just primary (diseaseX-specific)
-    time_to_coverage_bpsv <- ceiling(elderly_pop_to_vaccinate_bpsv/daily_doses_bpsv) + 1 ## might need to remove the +1s, TBD
+    elderly_pop_to_vaccinate_bpsv <- ceiling(sum(standard_pop[priority_age_groups]) * coverage_bpsv)
+    time_to_coverage_bpsv <- ceiling(elderly_pop_to_vaccinate_bpsv/daily_doses_bpsv) + 1 # +1 added to ensure we reach the coverage targets in non-integer instances 
     
+    # Daily number of disease-specific doses available and associated time to vaccine elderly population  
     daily_doses_spec <- vaccination_rate_spec * population_size / 7
     elderly_pop_to_vaccinate_spec <- ceiling(sum(standard_pop[priority_age_groups]) * coverage_spec)
-    time_to_coverage_spec <- ceiling(elderly_pop_to_vaccinate_spec/daily_doses_spec) + 1 ## might need to remove the +1s, TBD
+    time_to_coverage_spec <- ceiling(elderly_pop_to_vaccinate_spec/daily_doses_spec) + 1 # +1 added to ensure we reach the coverage targets in non-integer instances
     
     ## Checking there's no overlap in vaccination campaigns
     ## I think technically we want to avoid BPSV elderly and spec everyone else campaigns (as they're the same series in the model)
@@ -546,11 +554,12 @@ run_sars_x <- function(## Demographic Parameters
   }
 }
 
-### need to come back to this and figure out how this should work when:
-#### 1) runtime is < the final tt_Rt value
-#### 2) you don't finish up with R0 at the end
 ## Consider changing summary metrics to accommodate not finishing with same R0
 ## Be wary of when runtime is shorter than some of the numbers automatically spat out when creating tt_Rt 
+## Calculate summary metrics (deaths and time under NPIs) for individual model runs
+### Note: Breaks when runtime < final tt_Rt value.
+### TO DO: Check how this works with secondary country where NPIs might be implemented before the pathogen arrives (i.e. first value in Rt vector < R0)
+### TO DO: Check if it works when last value in Rt vector < R0 as well.
 calc_summary_metrics <- function(model_output) { # summary metrics = total deaths, time under any NPIs, composite NPI function, 
   
   ## Calculating Deaths
@@ -559,16 +568,16 @@ calc_summary_metrics <- function(model_output) { # summary metrics = total death
   deaths <- sum(check$value)
   
   ## Time Under NPIs
+  R0 <- max(model_output$parameters$R0) # changed from model_output$parameters$R0[1] - check whether this is alright
+  which_NPI <-  which(model_output$parameters$R0 < R0)
+  NPI_times <- model_output$parameters$tt_R0[c(which_NPI, max(which_NPI) + 1)]
   if (length(model_output$parameters$R0) == 1) {
     time_under_NPIs <- 0
   } else {
-    R0 <- max(model_output$parameters$R0) # changed from model_output$parameters$R0[1] - check whether this is alright
-    which_NPI <-  which(model_output$parameters$R0 < R0)
-    NPI_times <- model_output$parameters$tt_R0[c(which_NPI, max(which_NPI) + 1)]
     time_under_NPIs <- max(NPI_times) - min(NPI_times)
   }
 
-  ## Composite of Stringency and Time
+  ## Composite Measure of NPI Stringency and Time
   if (length(model_output$parameters$R0) == 1) {
     composite <- 0
   } else {
