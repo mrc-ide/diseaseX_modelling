@@ -250,28 +250,76 @@ chain_sim_susc_ring_vacc <- function(offspring = c("pois", "nbinom"), mn_offspri
 # mean(offspring_fun(n = 5000, susc = pop))
 
 ## Multiple simulations
-# iterations <- 10
-# R0_scan <- c(0.75, 1, 1.25, 1.5, 2, 3, 4, 5)
-# storage <- matrix(nrow = iterations, ncol = length(R0_scan))
-# for (i in 1:length(R0_scan)) {
-#   for (j in 1:iterations) {
-#     
-#     test <- chain_sim_susc_ring_vacc(offspring = "pois", 
-#                                      mn_offspring = R0_scan[i], 
-#                                      generation_time = generation_time,
-#                                      t0 = 0, tf = Inf, pop = 10^8, check_final_size = 1000, initial_immune = 0, 
-#                                      seeding_cases = 5, prop_asymptomatic = 0, 
-#                                      infection_to_onset = infection_to_onset, 
-#                                      vaccine_start = 5, vaccine_coverage = 1, 
-#                                      vaccine_efficacy_infection = 0.85, 
-#                                      vaccine_efficacy_transmission = 0.85, 
-#                                      vaccine_logistical_delay = 1, 
-#                                      vaccine_protection_delay = 1) 
-#     storage[j, i] <- nrow(test)
-#   }
-#   print(i)
-# }
-# apply(storage, 2, mean)
+generation_time <- function(n) { rgamma(n, shape = 12, rate = 2) } 
+infection_to_onset <- function(n) { rgamma(n, shape = 3, rate = 2) }
+iterations <- 25
+R0_scan <- c(0.75, 1, 1.25, 1.5, 1.75, 2, 3)
+storage <- matrix(nrow = iterations, ncol = length(R0_scan))
+storage_vacc <- matrix(nrow = iterations, ncol = length(R0_scan))
+storage_vacc_realistic <- matrix(nrow = iterations, ncol = length(R0_scan))
+
+for (i in 1:length(R0_scan)) {
+  for (j in 1:iterations) {
+
+    test_vacc <- chain_sim_susc_ring_vacc(offspring = "pois",
+                                          mn_offspring = R0_scan[i],
+                                          generation_time = generation_time,
+                                          t0 = 0, tf = Inf, pop = 10^8, check_final_size = 1000, initial_immune = 0,
+                                          seeding_cases = 5, prop_asymptomatic = 0,
+                                          infection_to_onset = infection_to_onset,
+                                          vaccine_start = 5, vaccine_coverage = 0.8,
+                                          vaccine_efficacy_infection = 0.95,
+                                          vaccine_efficacy_transmission = 0.85,
+                                          vaccine_logistical_delay = 1,
+                                          vaccine_protection_delay = 1)
+    storage_vacc[j, i] <- nrow(test_vacc)
+    
+    test_vacc_realistic <- chain_sim_susc_ring_vacc(offspring = "pois",
+                                                    mn_offspring = R0_scan[i],
+                                                    generation_time = generation_time,
+                                                    t0 = 0, tf = Inf, pop = 10^8, check_final_size = 1000, initial_immune = 0,
+                                                    seeding_cases = 5, prop_asymptomatic = 0,
+                                                    infection_to_onset = infection_to_onset,
+                                                    vaccine_start = 5, vaccine_coverage = 0.8,
+                                                    vaccine_efficacy_infection = 0.75,
+                                                    vaccine_efficacy_transmission = 0.55,
+                                                    vaccine_logistical_delay = 2,
+                                                    vaccine_protection_delay = 2)
+    storage_vacc_realistic[j, i] <- nrow(test_vacc_realistic)
+    
+    test <- chain_sim_susc_ring_vacc(offspring = "pois",
+                                     mn_offspring = R0_scan[i],
+                                     generation_time = generation_time,
+                                     t0 = 0, tf = Inf, pop = 10^8, check_final_size = 1000, initial_immune = 0,
+                                     seeding_cases = 5, prop_asymptomatic = 0,
+                                     infection_to_onset = infection_to_onset,
+                                     vaccine_start = 5, vaccine_coverage = 0,
+                                     vaccine_efficacy_infection = 0,
+                                     vaccine_efficacy_transmission = 0,
+                                     vaccine_logistical_delay = 1,
+                                     vaccine_protection_delay = 1)
+    storage[j, i] <- nrow(test)
+  }
+  print(i)
+}
+
+plot(R0_scan, apply(storage, 2, mean), type = "l", xlab = "R0", ylab = "Final Epidemic Size (Capped at 1,000)")
+lines(R0_scan, apply(storage_vacc, 2, mean), col = "blue")
+lines(R0_scan, apply(storage_vacc_realistic, 2, mean), col = "red")
+
+no_vacc <- data.frame(iteration = 1:25, scenario = "no_vaccination", storage)
+colnames(no_vacc) <- c("iteration", "scenario", paste0("R0=", R0_scan))
+vacc_realistic <- data.frame(iteration = 1:25, scenario = "realistic_vaccination", storage_vacc_realistic)
+colnames(vacc_realistic) <- c("iteration", "scenario", paste0("R0=", R0_scan))
+vacc <- data.frame(iteration = 1:25, scenario = "unrealistic_vaccination", storage_vacc)
+colnames(vacc) <- c("iteration", "scenario", paste0("R0=", R0_scan))
+
+overall_bp_df <- rbind(no_vacc, vacc_realistic, vacc) %>%
+  pivot_longer(cols = starts_with("R0"), names_to = "R0", values_to = "Epidemic Size") %>%
+  mutate(actualR0 = as.numeric(gsub("R0=", "", R0)))
+ggplot(overall_bp_df) +
+  geom_boxplot(aes(x = actualR0, y = `Epidemic Size`, group = actualR0, col = scenario)) +
+  facet_wrap(scenario ~ .)
 
 ## Tracking IDs of infected individuals in sub-trees
 # traverse_tree <- function(check_id, df, counted) {
