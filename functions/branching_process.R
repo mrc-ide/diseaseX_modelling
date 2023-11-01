@@ -3,6 +3,8 @@
 ### NOTE: Still potentially need to add:
 ###     1) Probability of a contact not being identified (similar to Kucharski et al' Ebola paper in EID)
 ###     2) vaccine_start being derived based on cumulative number of cases detected
+###     3) Explicit distinction between individuals who are vaccinated after infection and those who are unvaccinated (not distinguished currently as we assume)
+###        same outcome for both of them - no benefit of vaccination
 ###
 ### Function Arguments:
 ###   offspring = offspring distribution 
@@ -23,6 +25,24 @@
 ###   vaccine_efficacy_transmission = vaccine efficacy against onwards transmission in vaccinated individuals who are infected
 ###   vaccine_logistical_delay = delay between vaccine becoming available and people being vaccinated
 ###   vaccine_protection_delay = delay between receiving vaccination and becoming protected
+# offspring <- "pois"
+# mn_offspring <- 10
+# generation_time <- function(n) { rgamma(n, shape = 13.5, rate = 2) } # 6.75 day generation time Gamam distributed (as per Walker et al, Science, 2020)
+# infection_to_onset <- function(n) { rgamma(n, shape = 6.75, rate = 2) } # ~50% of transmission presymptomatic (per SARS-CoV-2, see https://bmjopen.bmj.com/content/11/6/e041240)
+# pop <- 10^7
+# check_final_size <- 2000
+# initial_immune <- 0
+# seeding_cases <- 1
+# prop_asymptomatic <- 0.15
+# vaccine_start <- 1
+# vaccine_coverage <- 0.8
+# vaccine_efficacy_infection <- 0.8
+# vaccine_efficacy_transmission <- 0.8
+# vaccine_logistical_delay <- 1
+# vaccine_protection_delay <- 1
+# t0 <- 0
+# tf <- 1000
+
 chain_sim_susc_ring_vacc <- function(offspring = c("pois", "nbinom"), mn_offspring, disp_offspring, 
                                      generation_time, t0 = 0, tf = Inf, pop, check_final_size, initial_immune = 0,
                                      seeding_cases, prop_asymptomatic, infection_to_onset,                                 
@@ -57,10 +77,17 @@ chain_sim_susc_ring_vacc <- function(offspring = c("pois", "nbinom"), mn_offspri
                     time_infection = t0 + seq(from = 0, to = 0.01, length.out = seeding_cases),   # Time of infection (note the small seq() added is to avoid non-unique infection times for starting infections)
                     offspring_generated = FALSE,                                                  # Dummy variable indicating whether secondary infections have been generated for this infection
                     time_onset = NA,                                                              # Symptom onset time relative to time of infection
-                    vaccinated_before_infection = 0,                                              # Whether or not the individual receives a vaccination before they are infected by their index case
+                    vaccinated = 0,                                                               # Whether or not the individual is vaccinated
                     time_vaccinated = NA,                                                         # The time at which the individual is vaccinated (NA if doesn't get vaccination)
+                    vaccinated_before_infection = NA,                                             # The individual receives a vaccination BEFORE they are infected by their index case
+                    vaccinated_after_infection = NA,                                              # The individual receives a vaccination AFTER they are infected by their index case - note for all individuals retained in linelist this is necessarily 0 as we wrap those people in with the unvaccinated as outcomes are the same
+                                                                                                  # - ignore this column for now basically, just have it in in case we need to differentiate between unvaccinated and vaccinated too late individuals later on.
                     time_protected = NA,                                                          # The time at which the individual receives protection from the vaccination
-                    asymptomatic = 0)                                                             # Whether or not the individual's infection is asymptomatic or not
+                    protected_before_infection = NA,                                              # The individual is protected by the vaccine BEFORE they are infected by their index case
+                    protected_after_infection = NA,                                               # The individual is protected by the vaccine AFTER they are infected by their index case
+                    asymptomatic = 0,                                                             # Whether or not the individual's infection is asymptomatic or not
+                    n_offspring = NA,
+                    n_offspring_new = NA)
                     ## note that currently time_onset is relative to time of infection (time) currently; all other times are relative to start of the outbreak 
   
   ## Setting up the simulation initial conditions (initial time, initial size of susceptible population etc)
@@ -91,18 +118,22 @@ chain_sim_susc_ring_vacc <- function(offspring = c("pois", "nbinom"), mn_offspri
     
     ## Generating number of people infected by the index case (the "parent")
     n_offspring <- offspring_fun(1, susc) 
+    tdf$n_offspring[idx] <- n_offspring
     
     ### Note: We modify and reduce transmissibility of the index case, if they were vaccinated and protection has arisen
-    ###       by the time they got infected (i.e. vaccine protection was insufficient but it had developed).
+    ###       by the time they got infected (i.e. vaccine protection against infection was insufficient but it had developed).
     ###       We make assumption that you only get this reduction in transmission (mediated by vaccine_efficacy_transmission) if
-    ###       you were protected by the time you were infected (and protection failed). If you had been vaccinated and then were
+    ###       you were protected by the time you were infected (and protection failed). If you had been vaccinated but were
     ###       infected before protection developing, we assume no impact on transmission (i.e. you derived no benefit from the vaccine).
-    if (index_vaccinated == 1 & (time_protected < time_infection_index)) {  
-      n_offspring <- sum(rbinom(n = n_offspring, size = 1, prob = 1 - vaccine_efficacy_transmission))
+    if (index_vaccinated == 1) {
+      if (time_protected < time_infection_index) {
+        n_offspring <- sum(rbinom(n = n_offspring, size = 1, prob = 1 - vaccine_efficacy_transmission))
+      }
     }
     if (n_offspring %% 1 > 0) { # Checking offspring function is correctly returning integers
       stop("Offspring distribution must return integers")
     }
+    tdf$n_offspring_new[idx] <- n_offspring
     tdf$offspring_generated[idx] <- TRUE
     
     ## Assigning times of these infections
@@ -128,9 +159,10 @@ chain_sim_susc_ring_vacc <- function(offspring = c("pois", "nbinom"), mn_offspri
       ###
       ### Note: By definition, those included in the generated dataframe (transmission tree) are ONLY those infected, and specifically will be either:
       ###   i) those unvaccinated
-      ###  ii) those who would have got vaccinated but it happened too late (i.e. they were infected before, therefore no benefit of vaccination);
-      ### iii) those who got vaccinated but it failed to protect (in which case, reduction in transmission due to vaccination is relevant and taken care of above)
-      
+      ###  ii) those who would have got vaccinated but it happened too late (i.e. they were infected before vaccination, therefore no benefit of vaccination); (note that we wrap i) and ii) into a single unvaccinated class)
+      ### iii) those who got vaccinated but were infected before protection arose (i.e. they were infected after vaccination but before protection arose) - no benefit of vaccination
+      ###  iv) those who got vaccinated and protected before infection, but vaccination failed to protect them (in which case, reduction in transmission due to vaccination is relevant and taken care of above)
+
       ## If the vaccine isn't yet available, no-one gets vaccinated and all new infections are added into the tree
       if (time_infection_index < vaccine_start) {
         asymptomatic <- rbinom(n = n_offspring, size = 1, prob = prop_asymptomatic)
@@ -140,12 +172,18 @@ chain_sim_susc_ring_vacc <- function(offspring = c("pois", "nbinom"), mn_offspri
                              time_infection = new_times + t_parent, 
                              offspring_generated = FALSE,
                              time_onset = NA,
-                             vaccinated_before_infection = 0,
+                             vaccinated = 0,
                              time_vaccinated = NA,
+                             vaccinated_before_infection = NA,
+                             vaccinated_after_infection = NA,
                              time_protected = NA,
-                             asymptomatic = asymptomatic)
+                             protected_before_infection = NA,
+                             protected_after_infection = NA,
+                             asymptomatic = asymptomatic,
+                             n_offspring = NA,
+                             n_offspring_new = NA)
         tdf <- rbind(tdf, new_df)
-        
+
       ## If the vaccine is available
       } else {
         
@@ -158,10 +196,16 @@ chain_sim_susc_ring_vacc <- function(offspring = c("pois", "nbinom"), mn_offspri
                                time_infection = new_times + t_parent, 
                                offspring_generated = FALSE,
                                time_onset = NA,
-                               vaccinated_before_infection = 0,
+                               vaccinated = 0,
                                time_vaccinated = NA,
+                               vaccinated_before_infection = NA,
+                               vaccinated_after_infection = NA,
                                time_protected = NA,
-                               asymptomatic = asymptomatic)
+                               protected_before_infection = NA,
+                               protected_after_infection = NA,
+                               asymptomatic = asymptomatic,
+                               n_offspring = NA,
+                               n_offspring_new = NA)
           tdf <- rbind(tdf, new_df)
           
         ## If index case is symptomatic, then the contacts are vaccinated and the potential secondary infections get ring vaccinated
@@ -170,6 +214,7 @@ chain_sim_susc_ring_vacc <- function(offspring = c("pois", "nbinom"), mn_offspri
         } else {
           
           are_they_vaccinated <- vector(mode = "integer", length = n_offspring) ## vector of whether secondary infections get vaccinated
+          did_they_have_potential_protection <- vector(mode = "integer", length = n_offspring)
           infection_retained <- vector(mode = "integer", length = n_offspring)  ## vector of whether secondary infections get retained (i.e. not prevented by ring vaccination)
           infection_retained[1:length(infection_retained)] <- 1                 ## default to infections being retained; and then flow through below to see if they get removed
           
@@ -179,21 +224,29 @@ chain_sim_susc_ring_vacc <- function(offspring = c("pois", "nbinom"), mn_offspri
           
           ## Checking whether vaccination occurs before or after the secondary cases have been generated; and if so, whether or not the infection is prevented by the vaccine
           for (i in 1:n_offspring) {
-            if (time_to_secondary_vaccination <= new_times[i]) {
+            if (time_to_secondary_vaccination <= new_times[i]) { # if infection occurs AFTER (potential) vaccination
               are_they_vaccinated[i] <- rbinom(n = 1, size = 1, prob = vaccine_coverage)
-              did_they_have_potential_protection <- ifelse(time_to_secondary_vaccination_protection <= new_times[i], 1, 0)
-              were_they_protected <- rbinom(n = 1, size = 1, prob = vaccine_efficacy_infection * did_they_have_potential_protection)
+              did_they_have_potential_protection[i] <- ifelse(time_to_secondary_vaccination_protection <= new_times[i], 1, 0)
+              were_they_protected <- rbinom(n = 1, size = 1, prob = vaccine_efficacy_infection * did_they_have_potential_protection[i])
               infection_retained[i] <- ifelse(are_they_vaccinated[i] == 1 & were_they_protected == 1, 0, 1)
-            } else {
-              infection_retained[i] <- 1
+            } else { # if infection occurs BEFORE vaccination
+              are_they_vaccinated[i] <- 0 ## eliding together "unvaccinated" and "vaccinated after infection occurs"
+              infection_retained[i] <- 1 ## note that implicitly here we're implicitly "saying" these folks aren't vaccinated.
+                                         ## within current setup, this doesn't matter as we make the assumption that if they get
+                                         ## get vaccinated after they've been infected, there's no impact of the vaccine.
+                                         ## But might need to change this later on if we change the above assumption.
             }
           }
           
           ## Calculating number of infections which actually occur despite vaccination, and creating relevant inputs to dataframe for these successful secondary infections
           new_n_offspring <- sum(infection_retained)
           new_new_times <- new_times[which(infection_retained == 1)]
-          time_vaccinated <- ifelse(are_they_vaccinated == 1, time_to_secondary_vaccination, NA)
-          time_protected <- ifelse(are_they_vaccinated == 1, time_to_secondary_vaccination_protection, NA)
+          vaccinated <- ifelse(are_they_vaccinated[which(infection_retained == 1)] == 0, 0, 1)                                            # of the retained infections, which are vaccinated
+          time_vaccinated <- ifelse(are_they_vaccinated == 1, time_to_secondary_vaccination, NA)[which(infection_retained == 1)]           # of the retained infections, when are they vaccinated (relative to infection time of index)
+          vaccinated_before_infection <- ifelse(are_they_vaccinated[which(infection_retained == 1)] == 0, NA, 1)                           # (currently we combine all individuals not vaccinated and vaccinated after infection into "unvaccinated", so all vaccinated individuals necessarily got vaccinated before infection)
+          time_protected <- ifelse(are_they_vaccinated == 1, time_to_secondary_vaccination_protection, NA)[which(infection_retained == 1)] # of the retained infections, when are they protected (relative to infection time of index)
+          protected_before_infection <- ifelse(is.na(time_protected), NA, ifelse(time_protected <= new_new_times, 1, 0))
+          protected_after_infection <- ifelse(is.na(time_protected), NA, ifelse(time_protected > new_new_times, 1, 0))
           asymptomatic <- rbinom(n = new_n_offspring, size = 1, prob = prop_asymptomatic)
           
           ## Checking whether there are any infections to add to the table
@@ -204,10 +257,17 @@ chain_sim_susc_ring_vacc <- function(offspring = c("pois", "nbinom"), mn_offspri
                                  time_infection = new_new_times + t_parent, 
                                  offspring_generated = FALSE,
                                  time_onset = NA,
-                                 vaccinated_before_infection = are_they_vaccinated[which(infection_retained == 1)],
-                                 time_vaccinated = time_vaccinated[which(infection_retained == 1)] + t_parent,
-                                 time_protected = time_protected[which(infection_retained == 1)] + t_parent,
-                                 asymptomatic = asymptomatic)
+                                 vaccinated = vaccinated,
+                                 time_vaccinated = time_vaccinated + t_parent,
+                                 vaccinated_before_infection = vaccinated_before_infection,
+                                 vaccinated_after_infection =  ifelse(is.na(vaccinated_before_infection), NA, 0), # NA for unvaccinated, 0 otherwise as in this framework, unvaccinated and those vaccinated after infection are binned into "unvaccinated"
+                                 time_protected = time_protected + t_parent,
+                                 protected_before_infection = protected_before_infection,
+                                 protected_after_infection = protected_after_infection,
+                                 asymptomatic = asymptomatic,
+                                 n_offspring = NA,
+                                 n_offspring_new = NA)
+
             tdf <- rbind(tdf, new_df)
           }
         }
@@ -250,76 +310,76 @@ chain_sim_susc_ring_vacc <- function(offspring = c("pois", "nbinom"), mn_offspri
 # mean(offspring_fun(n = 5000, susc = pop))
 
 ## Multiple simulations
-generation_time <- function(n) { rgamma(n, shape = 12, rate = 2) } 
-infection_to_onset <- function(n) { rgamma(n, shape = 3, rate = 2) }
-iterations <- 25
-R0_scan <- c(0.75, 1, 1.25, 1.5, 1.75, 2, 3)
-storage <- matrix(nrow = iterations, ncol = length(R0_scan))
-storage_vacc <- matrix(nrow = iterations, ncol = length(R0_scan))
-storage_vacc_realistic <- matrix(nrow = iterations, ncol = length(R0_scan))
-
-for (i in 1:length(R0_scan)) {
-  for (j in 1:iterations) {
-
-    test_vacc <- chain_sim_susc_ring_vacc(offspring = "pois",
-                                          mn_offspring = R0_scan[i],
-                                          generation_time = generation_time,
-                                          t0 = 0, tf = Inf, pop = 10^8, check_final_size = 1000, initial_immune = 0,
-                                          seeding_cases = 5, prop_asymptomatic = 0,
-                                          infection_to_onset = infection_to_onset,
-                                          vaccine_start = 5, vaccine_coverage = 0.8,
-                                          vaccine_efficacy_infection = 0.95,
-                                          vaccine_efficacy_transmission = 0.85,
-                                          vaccine_logistical_delay = 1,
-                                          vaccine_protection_delay = 1)
-    storage_vacc[j, i] <- nrow(test_vacc)
-    
-    test_vacc_realistic <- chain_sim_susc_ring_vacc(offspring = "pois",
-                                                    mn_offspring = R0_scan[i],
-                                                    generation_time = generation_time,
-                                                    t0 = 0, tf = Inf, pop = 10^8, check_final_size = 1000, initial_immune = 0,
-                                                    seeding_cases = 5, prop_asymptomatic = 0,
-                                                    infection_to_onset = infection_to_onset,
-                                                    vaccine_start = 5, vaccine_coverage = 0.8,
-                                                    vaccine_efficacy_infection = 0.75,
-                                                    vaccine_efficacy_transmission = 0.55,
-                                                    vaccine_logistical_delay = 2,
-                                                    vaccine_protection_delay = 2)
-    storage_vacc_realistic[j, i] <- nrow(test_vacc_realistic)
-    
-    test <- chain_sim_susc_ring_vacc(offspring = "pois",
-                                     mn_offspring = R0_scan[i],
-                                     generation_time = generation_time,
-                                     t0 = 0, tf = Inf, pop = 10^8, check_final_size = 1000, initial_immune = 0,
-                                     seeding_cases = 5, prop_asymptomatic = 0,
-                                     infection_to_onset = infection_to_onset,
-                                     vaccine_start = 5, vaccine_coverage = 0,
-                                     vaccine_efficacy_infection = 0,
-                                     vaccine_efficacy_transmission = 0,
-                                     vaccine_logistical_delay = 1,
-                                     vaccine_protection_delay = 1)
-    storage[j, i] <- nrow(test)
-  }
-  print(i)
-}
-
-plot(R0_scan, apply(storage, 2, mean), type = "l", xlab = "R0", ylab = "Final Epidemic Size (Capped at 1,000)")
-lines(R0_scan, apply(storage_vacc, 2, mean), col = "blue")
-lines(R0_scan, apply(storage_vacc_realistic, 2, mean), col = "red")
-
-no_vacc <- data.frame(iteration = 1:25, scenario = "no_vaccination", storage)
-colnames(no_vacc) <- c("iteration", "scenario", paste0("R0=", R0_scan))
-vacc_realistic <- data.frame(iteration = 1:25, scenario = "realistic_vaccination", storage_vacc_realistic)
-colnames(vacc_realistic) <- c("iteration", "scenario", paste0("R0=", R0_scan))
-vacc <- data.frame(iteration = 1:25, scenario = "unrealistic_vaccination", storage_vacc)
-colnames(vacc) <- c("iteration", "scenario", paste0("R0=", R0_scan))
-
-overall_bp_df <- rbind(no_vacc, vacc_realistic, vacc) %>%
-  pivot_longer(cols = starts_with("R0"), names_to = "R0", values_to = "Epidemic Size") %>%
-  mutate(actualR0 = as.numeric(gsub("R0=", "", R0)))
-ggplot(overall_bp_df) +
-  geom_boxplot(aes(x = actualR0, y = `Epidemic Size`, group = actualR0, col = scenario)) +
-  facet_wrap(scenario ~ .)
+# generation_time <- function(n) { rgamma(n, shape = 12, rate = 2) } 
+# infection_to_onset <- function(n) { rgamma(n, shape = 3, rate = 2) }
+# iterations <- 25
+# R0_scan <- c(0.75, 1, 1.25, 1.5, 1.75, 2, 3)
+# storage <- matrix(nrow = iterations, ncol = length(R0_scan))
+# storage_vacc <- matrix(nrow = iterations, ncol = length(R0_scan))
+# storage_vacc_realistic <- matrix(nrow = iterations, ncol = length(R0_scan))
+# 
+# for (i in 1:length(R0_scan)) {
+#   for (j in 1:iterations) {
+# 
+#     test_vacc <- chain_sim_susc_ring_vacc(offspring = "pois",
+#                                           mn_offspring = R0_scan[i],
+#                                           generation_time = generation_time,
+#                                           t0 = 0, tf = Inf, pop = 10^8, check_final_size = 1000, initial_immune = 0,
+#                                           seeding_cases = 5, prop_asymptomatic = 0,
+#                                           infection_to_onset = infection_to_onset,
+#                                           vaccine_start = 5, vaccine_coverage = 0.8,
+#                                           vaccine_efficacy_infection = 0.95,
+#                                           vaccine_efficacy_transmission = 0.85,
+#                                           vaccine_logistical_delay = 1,
+#                                           vaccine_protection_delay = 1)
+#     storage_vacc[j, i] <- nrow(test_vacc)
+#     
+#     test_vacc_realistic <- chain_sim_susc_ring_vacc(offspring = "pois",
+#                                                     mn_offspring = R0_scan[i],
+#                                                     generation_time = generation_time,
+#                                                     t0 = 0, tf = Inf, pop = 10^8, check_final_size = 1000, initial_immune = 0,
+#                                                     seeding_cases = 5, prop_asymptomatic = 0,
+#                                                     infection_to_onset = infection_to_onset,
+#                                                     vaccine_start = 5, vaccine_coverage = 0.8,
+#                                                     vaccine_efficacy_infection = 0.75,
+#                                                     vaccine_efficacy_transmission = 0.55,
+#                                                     vaccine_logistical_delay = 2,
+#                                                     vaccine_protection_delay = 2)
+#     storage_vacc_realistic[j, i] <- nrow(test_vacc_realistic)
+#     
+#     test <- chain_sim_susc_ring_vacc(offspring = "pois",
+#                                      mn_offspring = R0_scan[i],
+#                                      generation_time = generation_time,
+#                                      t0 = 0, tf = Inf, pop = 10^8, check_final_size = 1000, initial_immune = 0,
+#                                      seeding_cases = 5, prop_asymptomatic = 0,
+#                                      infection_to_onset = infection_to_onset,
+#                                      vaccine_start = 5, vaccine_coverage = 0,
+#                                      vaccine_efficacy_infection = 0,
+#                                      vaccine_efficacy_transmission = 0,
+#                                      vaccine_logistical_delay = 1,
+#                                      vaccine_protection_delay = 1)
+#     storage[j, i] <- nrow(test)
+#   }
+#   print(i)
+# }
+# 
+# plot(R0_scan, apply(storage, 2, mean), type = "l", xlab = "R0", ylab = "Final Epidemic Size (Capped at 1,000)")
+# lines(R0_scan, apply(storage_vacc, 2, mean), col = "blue")
+# lines(R0_scan, apply(storage_vacc_realistic, 2, mean), col = "red")
+# 
+# no_vacc <- data.frame(iteration = 1:25, scenario = "no_vaccination", storage)
+# colnames(no_vacc) <- c("iteration", "scenario", paste0("R0=", R0_scan))
+# vacc_realistic <- data.frame(iteration = 1:25, scenario = "realistic_vaccination", storage_vacc_realistic)
+# colnames(vacc_realistic) <- c("iteration", "scenario", paste0("R0=", R0_scan))
+# vacc <- data.frame(iteration = 1:25, scenario = "unrealistic_vaccination", storage_vacc)
+# colnames(vacc) <- c("iteration", "scenario", paste0("R0=", R0_scan))
+# 
+# overall_bp_df <- rbind(no_vacc, vacc_realistic, vacc) %>%
+#   pivot_longer(cols = starts_with("R0"), names_to = "R0", values_to = "Epidemic Size") %>%
+#   mutate(actualR0 = as.numeric(gsub("R0=", "", R0)))
+# ggplot(overall_bp_df) +
+#   geom_boxplot(aes(x = actualR0, y = `Epidemic Size`, group = actualR0, col = scenario)) +
+#   facet_wrap(scenario ~ .)
 
 ## Tracking IDs of infected individuals in sub-trees
 # traverse_tree <- function(check_id, df, counted) {
