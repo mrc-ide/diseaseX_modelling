@@ -28,6 +28,7 @@ library(magick)
 library(pdftools)
 library(cowplot)
 library(ggnewscale)
+library(viridis)
 
 # colours
 

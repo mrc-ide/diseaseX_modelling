@@ -9,8 +9,11 @@ chain_sim_susc_ring_vacc2 <- function(offspring = c("pois", "nbinom"), mn_offspr
     if (!missing(disp_offspring)) {
       warning("argument disp_offspring not used for\n poisson offspring distribution.")
     }
+    # offspring_fun <- function(n, susc) {
+    #   truncdist::rtrunc(n, spec = "pois", lambda = mn_offspring * susc/pop, b = susc)
+    # }
     offspring_fun <- function(n, susc) {
-      truncdist::rtrunc(n, spec = "pois", lambda = mn_offspring * susc/pop, b = susc)
+      rpois(n, lambda = mn_offspring)
     }
   }
   else if (offspring == "nbinom") {
