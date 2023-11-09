@@ -271,8 +271,8 @@ ggsave(file = "figures/Figure_1_BranchingProcess/Figure_1E_preSymp_Sensitivity_A
        plot = R0_preSymp_plot, width = 3, height = 3)
 
 legend <- R0_preSymp_plot +
-  theme(legend.position = "right")
-ggsave(file = "figures/Figure_1_BranchingProcess/heatmap_legends", plot = legend, width = 3, height = 3)
+  theme(legend.position = "bottom")
+ggsave(file = "figures/Figure_1_BranchingProcess/heatmap_legends.pdf", plot = legend, width = 3, height = 3)
 
 
 #####
