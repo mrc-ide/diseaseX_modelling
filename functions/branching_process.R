@@ -1,10 +1,11 @@
 ## Branching process simulation with ring vaccination
 ### Modified version of chain_sim_susc from bpmodels (https://github.com/epiverse-trace/bpmodels) to include ring vaccination.
 ### NOTE: Still potentially need to add:
-###     1) Probability of a contact not being identified (similar to Kucharski et al' Ebola paper in EID)
-###     2) vaccine_start being derived based on cumulative number of cases detected
+###     1) Probability of a contact not being identified (similar to Kucharski et al' Ebola paper in EID) (don't worry)
+###     2) vaccine_start being derived based on cumulative number of cases detected (work backwards)
 ###     3) Explicit distinction between individuals who are vaccinated after infection and those who are unvaccinated (not distinguished currently as we assume)
 ###        same outcome for both of them - no benefit of vaccination
+###     4) Waning of vaccine/monoclonal protection (don't worry)
 ###
 ### Function Arguments:
 ###   offspring = offspring distribution 
@@ -27,7 +28,7 @@
 ###   vaccine_protection_delay = delay between receiving vaccination and becoming protected
 # offspring <- "pois"
 # mn_offspring <- 10
-# generation_time <- function(n) { rgamma(n, shape = 13.5, rate = 2) } # 6.75 day generation time Gamam distributed (as per Walker et al, Science, 2020)
+# generation_time <- function(n) { rgamma(n, shape = 13.5, rate = 2) } # 6.75 day generation time Gamma distributed (as per Walker et al, Science, 2020)
 # infection_to_onset <- function(n) { rgamma(n, shape = 6.75, rate = 2) } # ~50% of transmission presymptomatic (per SARS-CoV-2, see https://bmjopen.bmj.com/content/11/6/e041240)
 # pop <- 10^7
 # check_final_size <- 2000
