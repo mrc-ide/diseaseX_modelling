@@ -152,9 +152,9 @@ if (fresh_run_R0_sensitivity_analysis) {
   overall_bp_df <- rbind(no_vacc, vacc_2weeks, vacc_1week, vacc_Halfweek, vacc_2days, monoclonal) %>%
     pivot_longer(cols = starts_with("R0"), names_to = "R0", values_to = "Epidemic Size") %>%
     mutate(actualR0 = as.numeric(gsub("R0=", "", R0)))
-  saveRDS(object = overall_bp_df, file = "outputs/branching_process_outputs/branchingProcess_R0_Scan.rds")
+  saveRDS(object = overall_bp_df, file = "outputs/Figure1_branchingProcess_Containment/branchingProcess_R0_Scan.rds")
 } else {
-  overall_bp_df <- readRDS("outputs/branching_process_outputs/branchingProcess_R0_Scan.rds")
+  overall_bp_df <- readRDS("outputs/Figure1_branchingProcess_Containment/branchingProcess_R0_Scan.rds")
 }
 
 ## Plotting Figure 1B
@@ -233,7 +233,7 @@ if (fresh_run_vaccination_heatmaps) {
     mutate(contained = ifelse(final_size < (0.9 * check_final_size), 1, 0)) %>%
     group_by(R0, TgRatio) %>%
     summarise(proportion_contained = sum(contained) / n())
-  saveRDS(object = storage_R0_TgRatio_df, file = "outputs/branching_process_outputs/branchingProcess_R0_TgRatio_scan.rds")
+  saveRDS(object = storage_R0_TgRatio_df, file = "outputs/Figure1_branchingProcess_Containment/branchingProcess_R0_TgRatio_scan.rds")
   
   ## Sensitivity Analysis - R0 vs Vaccine Efficacy
   Tg_ratio_fixed <- 2.5
@@ -271,7 +271,7 @@ if (fresh_run_vaccination_heatmaps) {
     mutate(contained = ifelse(final_size < (0.9 * check_final_size), 1, 0)) %>%
     group_by(R0, vaccine_efficacy) %>%
     summarise(proportion_contained = sum(contained) / n())
-  saveRDS(object = storage_R0_efficacy_df, file = "outputs/branching_process_outputs/branchingProcess_R0_Efficacy_scan.rds")
+  saveRDS(object = storage_R0_efficacy_df, file = "outputs/Figure1_branchingProcess_Containment/branchingProcess_R0_Efficacy_scan.rds")
   
   ## Sensitivity Analysis - R0 vs Presymptomatic Transmission Proportion
   Tg_ratio_fixed <- 2.5
@@ -309,12 +309,12 @@ if (fresh_run_vaccination_heatmaps) {
     mutate(contained = ifelse(final_size < (0.9 * check_final_size), 1, 0)) %>%
     group_by(R0, prop_preSymp) %>%
     summarise(proportion_contained = sum(contained) / n())
-  saveRDS(object = storage_R0_preSymp_df, file = "outputs/branching_process_outputs/branchingProcess_R0_preSymp_scan.rds")
+  saveRDS(object = storage_R0_preSymp_df, file = "outputs/Figure1_branchingProcess_Containment/branchingProcess_R0_preSymp_scan.rds")
   
 } else {
-  storage_R0_TgRatio_df <- readRDS("outputs/branching_process_outputs/branchingProcess_R0_TgRatio_scan.rds")
-  storage_R0_efficacy_df <- readRDS("outputs/branching_process_outputs/branchingProcess_R0_Efficacy_scan.rds")
-  storage_R0_preSymp_df <- readRDS("outputs/branching_process_outputs/branchingProcess_R0_preSymp_scan.rds")
+  storage_R0_TgRatio_df <- readRDS("outputs/Figure1_branchingProcess_Containment/branchingProcess_R0_TgRatio_scan.rds")
+  storage_R0_efficacy_df <- readRDS("outputs/Figure1_branchingProcess_Containment/branchingProcess_R0_Efficacy_scan.rds")
+  storage_R0_preSymp_df <- readRDS("outputs/Figure1_branchingProcess_Containment/branchingProcess_R0_preSymp_scan.rds")
 }
 
 ## Creating Vaccination-Related Heatmaps
@@ -372,6 +372,8 @@ ggsave(filename = "figures/Figure_1_BranchingProcess/Figure_1E_preSymp_Sensitivi
 legend <- R0_TgRatio_plot + theme(legend.position = "bottom")
 ggsave(file = "figures/Figure_1_BranchingProcess/Legend_vaccinationHeatmap.pdf", plot = legend, width = 2.4, height = 2.4)
 
+
+############################ COME BACK TO THIS #######################
 
 ## Sensitivity Analysis - R0 vs Vaccine Efficacy MONOCLONAL
 R0_seq <- R0_scan[-c(1, 2)]
