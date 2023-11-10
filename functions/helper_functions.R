@@ -46,10 +46,10 @@ scale_IFR <- function(country, population_size, target_IFR) {
 }
 
 # Generate scenarios with different parameter combinations to run many simulations at once
-create_scenarios <- function(population_size = 1e9,
+create_scenarios <- function(population_size = 1e10,
                              country = "Argentina",
-                             hosp_bed_capacity = 1e9,                                         
-                             ICU_bed_capacity = 1e9,
+                             hosp_bed_capacity = 1e10,                                         
+                             ICU_bed_capacity = 1e10,
                              R0 = c(1.5, 2, 3), 
                              Tg = 7,
                              IFR = c(0.5, 1.5),

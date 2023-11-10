@@ -23,6 +23,7 @@ source(here::here("main.R"))
 
 # Load required functions
 source(here::here("functions/run_sars_x.R"))
+source(here::here("functions/helper_functions.R"))
 
 # Loading in bp based detection and calculating detection times for the the different R0 values
 bp_df_long <- readRDS("outputs/Figure1_bp_detection_times.rds")
