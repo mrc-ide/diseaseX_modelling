@@ -3,6 +3,7 @@ source(here::here("main.R"))
 
 # Load required functions
 source(here::here("functions/run_sars_x.R"))
+source(here::here("functions/helper_functions.R"))
 
 # Getting the detection time
 R0_subset <- c(1.5, 2.5, 3.5)
@@ -18,9 +19,12 @@ bp_subset <- bp_df_long %>%
 time_to_detection <- round(bp_subset$time_to_detection)
 
 # Generate parameter combinations for model running (note Rt and tt_Rt has a placeholder)
+population_size <- 10^10
 raw_baseline_scenarios <- create_scenarios(R0 = R0_subset,                                # Basic reproduction number
                                            IFR = 1,                                       # IFR
-                                           population_size = 10^10,                       # population size
+                                           population_size = population_size,                       # population size
+                                           hosp_bed_capacity = population_size,
+                                           ICU_bed_capacity = population_size,
                                            Tg = 6.7,                                      # Tg
                                            detection_time = 1,                            # detection time PLACEHOLDER FOR NOW
                                            bpsv_start = 7,                                # BPSV distribution start (time after detection time)
@@ -34,10 +38,12 @@ raw_baseline_scenarios <- create_scenarios(R0 = R0_subset,                      
                                            dur_R = 365000000,                             # duration of infection-induced immunity
                                            dur_bpsv = 365000000,                          # duration of BPSV vaccine immunity
                                            dur_spec = 365000000,                          # duration of disease-specific vaccine immunity
-                                           coverage = 0.8,                                # proportion of the population vaccinated
-                                           vaccination_rate = 0.035,                      # vaccination rate per week as percentage of population
+                                           coverage_bpsv = 0.8,                           # proportion of the population vaccinated
+                                           coverage_spec = 0.8,                           # proportion of the population vaccinated
+                                           vaccination_rate_bpsv = 0.035,                 # vaccination rate per week as percentage of population
+                                           vaccination_rate_spec = 0.035,                 # vaccination rate per week as percentage of population
                                            min_age_group_index_priority = 13,             # index of the youngest age group given priority w.r.t vaccines (13 = 60+)
-                                           min_age_group_index_non_priority = 4,           # index of the youngest age group that *receives* vaccines (4 = 15+)
+                                           min_age_group_index_non_priority = 4,          # index of the youngest age group that *receives* vaccines (4 = 15+)
                                            seeding_cases = 1)
 
 # Linking these scenarios with the R0-specific detection times for a given threshold
@@ -53,9 +59,9 @@ NPIs <- default_NPI_scenarios(lockdown_Rt = lockdown_Rt, minimal_mandate_reducti
                               NPI_scenarios = 1:9, scenarios = baseline_scenarios)
 scenarios_NPIs <- baseline_scenarios %>%
   full_join(NPIs, by = c("R0", "country", "population_size", "detection_time", "bpsv_start",    # joining by all columns which influence NPI scenarios
-                         "specific_vaccine_start", "vaccination_rate", "coverage", "min_age_group_index_priority"),
+                         "specific_vaccine_start", "vaccination_rate_bpsv", "vaccination_rate_spec",
+                         "coverage_bpsv", "coverage_spec", "min_age_group_index_priority"),
             multiple = "all")
-
 # Filtering the above to only select R0 and detection time pairs that actually occurred (function above produces all pairwise combos of them)
 R0_detection_time_pairs <- bp_subset %>%
   mutate(detection_time = round(time_to_detection, digits = 0)) %>%
@@ -63,6 +69,8 @@ R0_detection_time_pairs <- bp_subset %>%
   select(R0, detection_time)
 baseline_scenarios_reduced <- scenarios_NPIs %>%
   semi_join(R0_detection_time_pairs, by = c("R0", "detection_time"))
+# R0 * NPI * spec start * 3 detection time scenarios
+2 * 9 * 3 * 3
 
 ## Creating index for output
 vars_for_index <- c(variable_columns(baseline_scenarios_reduced), "NPI_int")
@@ -77,9 +85,9 @@ if (fresh_run) {
   plan(multisession, workers = 4) # multicore does nothing on windows as multicore isn't supported
   system.time({out <- future_pmap(scenarios, run_sars_x, .progress = TRUE, .options = furrr_options(seed = 123))})
   model_outputs <- format_multirun_output(output_list = out, parallel = TRUE, cores = 2)
-  saveRDS(model_outputs, "outputs/Figure2_NPI_Exploration_Outputs.rds")
+  saveRDS(model_outputs, "outputs/Figure2_NPI_Exploration/Figure2_NPI_Exploration_Outputs.rds")
 } else {
-  model_outputs <- readRDS("outputs/Figure2_NPI_Exploration_Outputs.rds")
+  model_outputs <- readRDS("outputs/Figure2_NPI_Exploration/Figure2_NPI_Exploration_Outputs.rds")
 }
 
 ## Plotting the NPI Scenarios
@@ -99,7 +107,7 @@ NPI_df <- NPIs %>%
 overplot_factor <- 1
 
 NPI_composite_df <- data.frame(NPI_int = 1:9, 
-                               composite = model_outputs2$composite_NPI_bpsv[model_outputs2$specific_vaccine_start == 100 & model_outputs2$R0 == 2.5],
+                               composite = model_outputs$composite_NPI_bpsv[model_outputs$specific_vaccine_start == 100 & model_outputs$R0 == 2.5],
                                scenario = unique(NPI_df$scenario))
 NPI_df$NPI_int <- factor(NPI_df$NPI_int, levels = NPI_composite_df$NPI_int[order(NPI_composite_df$composite)])
 NPI_df$scenario <- factor(NPI_df$scenario, levels = NPI_composite_df$scenario[order(NPI_composite_df$composite)])
@@ -138,7 +146,6 @@ model_outputs2 <- model_outputs %>%
   mutate(specific_vaccine_start = factor(specific_vaccine_start),
          detection_time = factor(detection_time),
          NPI_int = factor(NPI_int))
-
 absolute_deaths_plot <- ggplot() +
   geom_segment(data = subset(model_outputs2, R0 == 2.5 & specific_vaccine_start %in% c(100, 220)), 
                aes(x = composite_NPI_spec, xend = composite_NPI_spec, 
@@ -162,8 +169,7 @@ absolute_deaths_plot <- ggplot() +
         strip.background = element_rect(fill="white")) +
   guides(fill = guide_legend(title = "Scenario"))
 
-model_outputs2$NPI_int2 <- factor(model_outputs2$NPI_int, 
-                                  levels = NPI_composite_df$NPI_int[order(NPI_composite_df$composite)])
+model_outputs2$NPI_int2 <- factor(model_outputs2$NPI_int, levels = NPI_composite_df$NPI_int[order(NPI_composite_df$composite)])
 deaths_averted_100_plot <- ggplot() +
   geom_bar(data = subset(model_outputs2, R0 == 2.5 & specific_vaccine_start %in% c(100)), 
            aes(x = factor(NPI_int2), y = bpsv_deaths_averted * 1000 / population_size, fill = factor(NPI_int)), stat = "identity") +
@@ -178,11 +184,11 @@ deaths_averted_100_plot <- ggplot() +
         plot.background = element_rect(colour = "black"))
 
 NPI_composite_df2 <- data.frame(NPI_int = 1:9, 
-                                composite = model_outputs2$composite_NPI_bpsv[model_outputs2$specific_vaccine_start == 200 & model_outputs2$R0 == 2.5],
+                                composite = model_outputs2$composite_NPI_bpsv[model_outputs2$specific_vaccine_start == 220 & model_outputs2$R0 == 2.5],
                                 scenario = unique(NPI_df$scenario))
 model_outputs2$NPI_int3 <- factor(model_outputs2$NPI_int, levels = NPI_composite_df2$NPI_int[order(NPI_composite_df2$composite)])
 deaths_averted_200_plot <- ggplot() +
-  geom_bar(data = subset(model_outputs2, R0 == 2.5 & specific_vaccine_start %in% c(200)), 
+  geom_bar(data = subset(model_outputs2, R0 == 2.5 & specific_vaccine_start %in% c(220)), 
            aes(x = factor(NPI_int3), y = bpsv_deaths_averted * 1000 / population_size, fill = factor(NPI_int)), stat = "identity") +
   labs(x = "BPSV Deaths Averted\nPer 1000 Pop", y = "Deaths Averted") +
   scale_fill_manual(values = colour_func) +
@@ -200,7 +206,7 @@ deaths_averted_plot <- absolute_deaths_plot +
              ((ggplot_build(absolute_deaths_plot)$layout$panel_params[[1]]$x.range[2] -
                  ggplot_build(absolute_deaths_plot)$layout$panel_params[[1]]$x.range[1]) / 1.5), xmax = Inf, 
            ymin = ggplot_build(absolute_deaths_plot)$layout$panel_params[[1]]$y.range[2] / 3, ymax = Inf) +
-  gg_inset(ggplot2::ggplotGrob(deaths_averted_200_plot), data = data.frame(specific_vaccine_start = 200),
+  gg_inset(ggplot2::ggplotGrob(deaths_averted_200_plot), data = data.frame(specific_vaccine_start = 220),
            xmin = ggplot_build(absolute_deaths_plot)$layout$panel_params[[2]]$x.range[1] +
              ((ggplot_build(absolute_deaths_plot)$layout$panel_params[[2]]$x.range[2] -
                  ggplot_build(absolute_deaths_plot)$layout$panel_params[[2]]$x.range[1]) / 1.5), xmax = Inf, 
@@ -209,4 +215,4 @@ deaths_averted_plot <- absolute_deaths_plot +
 Figure2 <- cowplot::plot_grid(NPI_plot, deaths_averted_plot,
                               nrow = 1, rel_widths = c(1, 1.4),
                               labels = c("B", "C"))
-ggsave(filename = "figures/Figure2BC_NPI_Plot.pdf", plot = Figure2, width = 9.25, height = 7.5)
+ggsave(filename = "figures/Figure_2_FrameworkIntro/Figure2BC_NPI_Plot.pdf", plot = Figure2, width = 9.25, height = 7.5)
