@@ -27,7 +27,7 @@ R0_scan <- c(0.75, 1, 1.25, 1.5, 1.75, 2, 2.25, 2.5)
 iterations <- 250
 
 ## R0 sensitivity analysis (Figure 1B)
-fresh_run_R0_sensitivity_analysis <- TRUE
+fresh_run_R0_sensitivity_analysis <- FALSE
 if (fresh_run_R0_sensitivity_analysis) {
   
   ## Simulation parameters 
@@ -193,7 +193,7 @@ ggsave(filename = "figures/zExtra_SGP_Figures/B_SGP_ContainmentPlot.pdf", plot =
 #########################################################
 ## Vaccination-Related Sensitivity Analyses Heatmaps
 #########################################################
-fresh_run_vaccination_heatmaps <- TRUE
+fresh_run_vaccination_heatmaps <- FALSE
 generation_time <- function(n) { rgamma(n, shape = 13.5, rate = 2) } # 6.75 day generation time Gamam distributed (as per Walker et al, Science, 2020)
 infection_to_onset <- function(n) { rgamma(n, shape = 13.5/3, rate = 2) } # keeping proportion of presymptomatic transmission constant as Tg varies
 if (fresh_run_vaccination_heatmaps) {
@@ -373,7 +373,7 @@ ggsave(file = "figures/zExtra_SGP_Figures/Legend_vaccinationHeatmap.pdf", plot =
 #########################################################
 ## Monoclonal-Related Sensitivity Analyses Heatmaps
 #########################################################
-fresh_run_monoclonal_heatmaps <- TRUE
+fresh_run_monoclonal_heatmaps <- FALSE
 generation_time <- function(n) { rgamma(n, shape = 13.5, rate = 2) } # 6.75 day generation time Gamam distributed (as per Walker et al, Science, 2020)
 infection_to_onset <- function(n) { rgamma(n, shape = 13.5/3, rate = 2) } # keeping proportion of presymptomatic transmission constant as Tg varies
 if (fresh_run_monoclonal_heatmaps) {
@@ -475,7 +475,7 @@ R0_monoclonal_efficacy_plot <- ggplot(storage_R0_monoclonal_efficacy_df, aes(x =
         legend.position = "none",
         panel.border = element_rect(linetype = "solid", color = "black", fill = NA, linewidth = 0.5)) +  # Add black border
   coord_cartesian(expand = FALSE)
-ggsave(filename = "figures/zExtra_SGP_Figures/F_SGP_monoclonal_R0_Efficacy_plot.pdf", plot = R0_vaccine_efficacy_plot, width = 2.4, height = 2.4)
+ggsave(filename = "figures/zExtra_SGP_Figures/F_SGP_monoclonal_R0_Efficacy_plot.pdf", plot = R0_monoclonal_efficacy_plot, width = 2.4, height = 2.4)
 
 ### Proportion of Presymptomatic Transmission
 R0_monoclonal_preSymp_plot <- ggplot(storage_R0_preSymp_monoclonal_df, aes(x = R0, y = 100 * prop_preSymp, fill = proportion_contained)) +
@@ -492,8 +492,7 @@ R0_monoclonal_preSymp_plot <- ggplot(storage_R0_preSymp_monoclonal_df, aes(x = R
         legend.position = "none",
         panel.border = element_rect(linetype = "solid", fill = NA, linewidth = 0.5)) +  # Add black border
   coord_cartesian(expand = FALSE)
-ggsave(filename = "figures/zExtra_SGP_Figures/G_SGP_monoclonal_R0_preSymp_plot.pdf", 
-       plot = R0_preSymp_plot, width = 2.4, height = 2.4)
+ggsave(filename = "figures/zExtra_SGP_Figures/G_SGP_monoclonal_R0_preSymp_plot.pdf", plot = R0_monoclonal_preSymp_plot, width = 2.4, height = 2.4)
 
 ## Heatmaps legend
 monoclonal_legend <- R0_monoclonal_preSymp_plot + theme(legend.position = "right")
