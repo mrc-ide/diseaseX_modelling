@@ -1,3 +1,36 @@
+## Define default params
+define_default_params <- function() {
+  default_params <- list(R0 = 2.5,
+                         IFR = 1,
+                         population_size = 10^10,
+                         hosp_bed_capacity = 10^10,
+                         ICU_bed_capacity = 10^10, 
+                         Tg = 6.7,                                     
+                         detection_time = 1,                           
+                         bpsv_start = 7,                               
+                         bpsv_protection_delay = 7,                    
+                         specific_vaccine_start = 220,    
+                         specific_protection_delay = 7,                
+                         efficacy_infection_bpsv = 0.35,               
+                         efficacy_disease_bpsv = 0.75,                 
+                         efficacy_infection_spec = 0.55,               
+                         efficacy_disease_spec = 0.9,                  
+                         dur_R = 365000000,                            
+                         dur_bpsv = 365000000,                         
+                         dur_spec = 365000000,                         
+                         coverage_bpsv = 0.8,                          
+                         coverage_spec = 0.8,                          
+                         vaccination_rate_bpsv = 0.035,                
+                         vaccination_rate_spec = 0.035,                
+                         min_age_group_index_priority = 13,
+                         min_age_group_index_non_priority = 4,         
+                         seeding_cases = 1,
+                         lockdown_Rt = 0.9,
+                         minimal_mandate_reduction = 0.25,
+                         runtime = 730)
+  return(default_params)
+}
+
 ## Identify number of columns with >1 unique values in a dataframe
 variable_columns <- function(df) {
   result <- sapply(df, FUN = function(x) {
@@ -46,35 +79,120 @@ scale_IFR <- function(country, population_size, target_IFR) {
 }
 
 # Generate scenarios with different parameter combinations to run many simulations at once
-create_scenarios <- function(population_size = 1e10,
-                             country = "Argentina",
-                             hosp_bed_capacity = 1e10,                                         
-                             ICU_bed_capacity = 1e10,
-                             R0 = c(1.5, 2, 3), 
-                             Tg = 7,
-                             IFR = c(0.5, 1.5),
+create_scenarios <- function(country,
+                             R0, 
+                             IFR,
+                             Tg,
+                             population_size,
+                             hosp_bed_capacity,                                         
+                             ICU_bed_capacity,
                              vaccine_scenario = c("specific_only", "both_vaccines"),
-                             detection_time = 14, 
-                             bpsv_start = 14,
-                             bpsv_protection_delay = 7,
-                             specific_vaccine_start = 100,
-                             specific_protection_delay = 7,
-                             efficacy_infection_bpsv = 0.35,
-                             efficacy_disease_bpsv = 0.8, 
-                             efficacy_infection_spec = 0.55, 
-                             efficacy_disease_spec = 0.9,
-                             dur_R = 365000, 
-                             dur_bpsv = 365000, 
-                             dur_spec = 365000,
-                             coverage_bpsv = 0.75,
-                             coverage_spec = 0.75,
-                             vaccination_rate_bpsv = 0.035, 
-                             vaccination_rate_spec = 0.035,
-                             min_age_group_index_priority = 13,
-                             min_age_group_index_non_priority = 4,
-                             runtime = 730,
-                             seeding_cases = 2) {
+                             detection_time, 
+                             bpsv_start,
+                             bpsv_protection_delay,
+                             specific_vaccine_start,
+                             specific_protection_delay,
+                             efficacy_infection_bpsv,
+                             efficacy_disease_bpsv, 
+                             efficacy_infection_spec, 
+                             efficacy_disease_spec,
+                             dur_R, 
+                             dur_bpsv, 
+                             dur_spec,
+                             coverage_bpsv,
+                             coverage_spec,
+                             vaccination_rate_bpsv, 
+                             vaccination_rate_spec,
+                             min_age_group_index_priority,
+                             min_age_group_index_non_priority,
+                             runtime,
+                             seeding_cases) {
   
+  
+  default <- define_default_params()
+  
+  if (missing(country)) {
+    country <- "Argentina"
+  }
+  if (missing(R0)) {
+    R0 <- default$R0
+  } 
+  if (missing(IFR)) {
+    IFR <- default$IFR
+  }
+  if (missing(Tg)) {
+    Tg <- default$Tg
+  }
+  if (missing(population_size)) {
+    population_size <- default$population_size
+  }
+  if (missing(hosp_bed_capacity)) {
+    hosp_bed_capacity <- default$hosp_bed_capacity
+  }
+  if (missing(ICU_bed_capacity)) {
+    ICU_bed_capacity <- default$ICU_bed_capacity
+  }
+  if (missing(detection_time)) {
+    detection_time <- default$detection_time
+  }
+  if (missing(bpsv_start)) {
+    bpsv_start <- default$bpsv_start
+  }
+  if (missing(bpsv_protection_delay)) {
+    bpsv_protection_delay <- default$bpsv_protection_delay
+  }
+  if (missing(specific_vaccine_start)) {
+    specific_vaccine_start <- default$specific_vaccine_start
+  }
+  if (missing(specific_protection_delay)) {
+    specific_protection_delay <- default$specific_protection_delay
+  }
+  if (missing(efficacy_infection_bpsv)) {
+    efficacy_infection_bpsv <- default$efficacy_infection_bpsv
+  }
+  if (missing(efficacy_disease_bpsv)) {
+    efficacy_disease_bpsv <- default$efficacy_disease_bpsv
+  }
+  if (missing(efficacy_infection_spec)) {
+    efficacy_infection_spec <- default$efficacy_infection_spec
+  }
+  if (missing(efficacy_disease_spec)) {
+    efficacy_disease_spec <- default$efficacy_disease_spec
+  }
+  if (missing(dur_R)) {
+    dur_R <- default$dur_R
+  }
+  if (missing(dur_bpsv)) {
+    dur_bpsv <- default$dur_bpsv
+  }
+  if (missing(dur_spec)) {
+    dur_spec <- default$dur_spec
+  }
+  if (missing(coverage_bpsv)) {
+    coverage_bpsv <- default$coverage_bpsv
+  }
+  if (missing(coverage_spec)) {
+    coverage_spec <- default$coverage_spec
+  }
+  if (missing(vaccination_rate_bpsv)) {
+    vaccination_rate_bpsv <- default$vaccination_rate_bpsv
+  }
+  if (missing(vaccination_rate_spec)) {
+    vaccination_rate_spec <- default$vaccination_rate_spec
+  }
+  if (missing(min_age_group_index_priority)) {
+    min_age_group_index_priority <- default$min_age_group_index_priority
+  }
+  if (missing(min_age_group_index_non_priority)) {
+    min_age_group_index_non_priority <- default$min_age_group_index_non_priority
+  }
+  if (missing(runtime)) {
+    runtime <- default$runtime
+  }
+  if (missing(seeding_cases)) {
+    seeding_cases <- default$seeding_cases
+  }
+
   baseline_scenarios <- expand_grid(population_size = population_size,
                                     country = country,
                                     hosp_bed_capacity = hosp_bed_capacity,                                         

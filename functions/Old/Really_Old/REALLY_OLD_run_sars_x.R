@@ -141,7 +141,7 @@ default_NPI_scenarios <- function(lockdown_Rt = 0.9,
                                   scenarios) { 
   
   # Unpack the unique parameter combinations in the scenarios dataframe and calculate vaccination milestone timings
-  timings <- expand_grid(country =  unique(scenarios$country),
+  timings <- expand_grid(country = unique(scenarios$country),
                          population_size = unique(scenarios$population_size), 
                          detection_time = unique(scenarios$detection_time),
                          bpsv_start = unique(scenarios$bpsv_start), 

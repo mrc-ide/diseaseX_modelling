@@ -16,7 +16,6 @@
 ### Collecting intuition on bits of behaviour
 # 1) Only people who can get 2nd dose can be boostered. But in both-vaccines scenario, some of the BPSV'd elderly will die
 #    leaving <coverage % of them left for receipt of the specific vaccine.
-# 2) Some of the folks 
 
 # Load required libraries
 source(here::here("main.R"))
@@ -40,33 +39,38 @@ bp_df_mean_subset <- bp_df_long %>%
   group_by(R0, detection, metric) %>%
   summarise(mean = mean(value)) 
 
-# NPI Relevant Parameters
-lockdown_Rt <- 0.9                   # Rt achieved under lockdown
-minimal_mandate_reduction <- 0.25    # Fold-reduction in R0 achieved under minimal mandate restrictions
+## Generating default parameters
+default <- define_default_params()
 
 # Generate parameter combinations for model running
 
 ### BPSV Efficacy Against Disease
 
 #### Generate initial sets of scenarios (note placeholder for detection time)
+#### STILL NEED TO WORK ON THIS!!!!! #####
 raw_bpsv_efficacy_scenarios <- create_scenarios(R0 = c(1.5, 2.5, 3.5),                         # Basic reproduction number
-                                                IFR = 1,                                       # IFR
-                                                population_size = 10^10,
-                                                hosp_bed_capacity = 10^10,
-                                                ICU_bed_capacity = 10^10,
-                                                Tg = 6.7,                                      # Tg
+                                                efficacy_disease_bpsv = seq(0.05, 1, 0.05))    # vaccine efficacy against disease - BPSV
+length(c(1.5, 2.5, 3.5)) * length(seq(0.05, 1, 0.05)) * 2                                            
+
+
+raw_bpsv_efficacy_scenarios <- create_scenarios(R0 = c(1.5, 2.5, 3.5),                         # Basic reproduction number
+                                                IFR = default$IFR,                                       # IFR
+                                                population_size = default$population_size,
+                                                hosp_bed_capacity = default$hosp_bed_capacity,
+                                                ICU_bed_capacity = default$ICU_bed_capacity,
+                                                Tg = default$Tg,                                      # Tg
                                                 detection_time = 1,                            # PLACEHOLDER FOR NOW
-                                                bpsv_start = 7,                                # BPSV distribution start (time after detection time)
-                                                bpsv_protection_delay = 7,                     # delay between receipt of BPSV dose and protection
-                                                specific_vaccine_start = 220,                  # specific vaccine distribution start (time after detection time)
-                                                specific_protection_delay = 7,                 # delay between receipt of specific dose and protection
-                                                efficacy_infection_bpsv = 0.35,                # vaccine efficacy against infection - BPSV
+                                                bpsv_start = default$bpsv_start,                                # BPSV distribution start (time after detection time)
+                                                bpsv_protection_delay = default$bpsv_protection_delay,                     # delay between receipt of BPSV dose and protection
+                                                specific_vaccine_start = default$specific_vaccine_start,                  # specific vaccine distribution start (time after detection time)
+                                                specific_protection_delay = default$specific_protection_delay,                 # delay between receipt of specific dose and protection
+                                                efficacy_infection_bpsv = default$efficacy_infection_bpsv,                # vaccine efficacy against infection - BPSV
                                                 efficacy_disease_bpsv = seq(0.05, 1, 0.05),    # vaccine efficacy against disease - BPSV
-                                                efficacy_infection_spec = 0.55,                # vaccine efficacy against infection - specific vaccine
-                                                efficacy_disease_spec = 0.9,                   # vaccine efficacy against disease - specific vaccine
-                                                dur_R = 365000000,                             # duration of infection-induced immunity
-                                                dur_bpsv = 365000000,                          # duration of BPSV vaccine immunity
-                                                dur_spec = 365000000,                          # duration of disease-specific vaccine immunity
+                                                efficacy_infection_spec = default$efficacy_infection_spec,                # vaccine efficacy against infection - specific vaccine
+                                                efficacy_disease_spec = default$efficacy_disease_spec,                   # vaccine efficacy against disease - specific vaccine
+                                                dur_R = default$dur_R,                             # duration of infection-induced immunity
+                                                dur_bpsv = default$dur_bpsv,                          # duration of BPSV vaccine immunity
+                                                dur_spec = default$dur_spec,                          # duration of disease-specific vaccine immunity
                                                 coverage_bpsv = 0.8,                           # proportion of the population vaccinated
                                                 coverage_spec = 0.8,                           # proportion of the population vaccinated
                                                 vaccination_rate_bpsv = 0.035,                 # vaccination rate per week as percentage of population
