@@ -27,7 +27,7 @@ source(here::here("functions/helper_functions.R"))
 
 # Loading in bp based detection and calculating detection times for the the different R0 values
 bp_df_long <- readRDS("outputs/Figure1_bp_detection_times.rds")
-prob_hosp <- squire.page:::probs_booster$prob_hosp
+prob_hosp <- squire.page.sarsX:::probs_booster$prob_hosp
 arg_pop <- squire::get_population("Argentina")
 IHR <- sum(prob_hosp * arg_pop$n / sum(arg_pop$n)) 
 num_hosp <- 1:20

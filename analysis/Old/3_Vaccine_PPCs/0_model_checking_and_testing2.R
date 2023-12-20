@@ -9,7 +9,7 @@ source(here::here("CEPI_DiseaseX_Modelling/R/functions_multivaccine.R"))
 
 ## Notes of things to do:
 #### make sure Azra's IFR rescaling calc still works even though she's using a contact matrix for each of these countries
-#### squire.page:::probs_booster$rel_infectiousness_vaccinated is making some pretty big assumptions about impact on transmission (I think)
+#### squire.page.sarsX:::probs_booster$rel_infectiousness_vaccinated is making some pretty big assumptions about impact on transmission (I think)
 
 # Defining Parameters for Model Runs
 

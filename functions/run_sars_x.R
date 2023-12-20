@@ -498,7 +498,7 @@ run_sars_x <- function(## Demographic Parameters
 
   ## Running the Model 
   mm <- squire::get_mixing_matrix(country = country)    
-  rel_infectiousness_vaccinated <- squire.page:::probs_booster$rel_infectiousness_vaccinated
+  rel_infectiousness_vaccinated <- squire.page.sarsX:::probs_booster$rel_infectiousness_vaccinated
   rel_infectiousness_vaccinated[rel_infectiousness_vaccinated < 1] <- 1
   
   if (vaccine_scenario == "specific_only") {

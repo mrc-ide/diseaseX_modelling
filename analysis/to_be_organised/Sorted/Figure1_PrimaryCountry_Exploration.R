@@ -5,7 +5,7 @@ source(here::here("main.R"))
 source(here::here("functions/run_sars_x.R"))
 
 ## Calculate rough IHR (similar value to Knock et al which had about 2% for London)
-prob_hosp <- squire.page:::probs_booster$prob_hosp
+prob_hosp <- squire.page.sarsX:::probs_booster$prob_hosp
 arg_pop <- squire::get_population("Argentina")
 IHR <- sum(prob_hosp * arg_pop$n / sum(arg_pop$n)) 
 
