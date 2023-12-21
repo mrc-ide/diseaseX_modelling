@@ -44,7 +44,7 @@ variable_columns <- function(df) {
 ## Generate standardised population size from raw demography
 generate_standard_pop <- function(country = "Argentina", population_size = 1e9) {
   raw_pop <- squire::get_population(country = country)$n                   
-  standard_pop <- round(raw_pop * population_size / sum(raw_pop)) 
+  standard_pop <- round((population_size / sum(raw_pop)) * raw_pop) 
   return(standard_pop)
 }
 
