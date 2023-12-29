@@ -54,8 +54,8 @@ scale_generation_time <- function(target_Tg) {
   current_Tg_case <- squire.page.sarsX:::durs_booster$dur_E + squire.page.sarsX:::durs_booster$dur_ICase
   overall_Tg <- 0.98 * current_Tg_mild + 0.02 * current_Tg_case # (assumed approx 2% IHR - might need changing, though won't make much diff in practice as IMild dominates)
   Tg_ratio <- target_Tg / overall_Tg
-  TgVary_dur_IMild <- Tg_ratio * squire.page:::durs_booster$dur_IMild
-  TgVary_dur_ICase <- Tg_ratio * squire.page:::durs_booster$dur_ICase
+  TgVary_dur_IMild <- Tg_ratio * squire.page.sarsX:::durs_booster$dur_IMild
+  TgVary_dur_ICase <- Tg_ratio * squire.page.sarsX:::durs_booster$dur_ICase
   return(list(dur_IMild = TgVary_dur_IMild, dur_ICase = TgVary_dur_ICase))
 }
 

@@ -502,7 +502,7 @@ run_sars_x <- function(## Demographic Parameters
   rel_infectiousness_vaccinated[rel_infectiousness_vaccinated < 1] <- 1
   
   if (vaccine_scenario == "specific_only") {
-    mod_run <- run_booster(time_period = runtime,
+    mod_run <- squire.page.sarsX::run_booster(time_period = runtime,
                            population = standard_pop,                                                 
                            contact_matrix_set = mm,                                                   
                            R0 = Rt,     
@@ -525,7 +525,7 @@ run_sars_x <- function(## Demographic Parameters
                            vaccine_booster_follow_up_coverage = vaccine_booster_follow_up_coverage,
                            vaccine_booster_initial_coverage = vaccine_booster_initial_coverage)
   } else if (vaccine_scenario == "both_vaccines") {
-    mod_run <- run_booster(time_period = runtime,
+    mod_run <- squire.page.sarsX::run_booster(time_period = runtime,
                            population = standard_pop,                                                 
                            contact_matrix_set = mm,                                                   
                            R0 = Rt,     
