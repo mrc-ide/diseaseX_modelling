@@ -9,7 +9,7 @@ define_default_params <- function() {
                          detection_time = 1,                           
                          bpsv_start = 7,                               
                          bpsv_protection_delay = 7,                    
-                         specific_vaccine_start = 220,    
+                         specific_vaccine_start = 250,    
                          specific_protection_delay = 7,                
                          efficacy_infection_bpsv = 0.35,               
                          efficacy_disease_bpsv = 0.75,                 

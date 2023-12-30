@@ -2,7 +2,7 @@
 library(rstudioapi)
 library(squire)
 library(nimue)
-library(squire.page) 
+library(squire.page.sarsX) 
 library(data.table)
 library(ggplot2)
 library(parallel)
