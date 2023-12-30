@@ -1,14 +1,10 @@
 # Load required libraries
-# library(conflicted); # try conflict_prefer("filter", "dplyr")
-library(tidyverse); 
-library(squire.page.sarsX);
-library(squire.page)
+library(tidyverse); library(squire.page)
 source("functions/extract_process_generate_fits.R")
 source("functions/run_sars_x.R")
 source("functions/helper_functions.R")
 
-# Defining function
-evaluate_country_impact <- function(country_iso = "IRN") {
+get_country_draws <- function(country_iso = "IRN") {
   
   # Getting fits for country with excess deaths and extracting the Rt
   excess <- grab_fit(country_iso, TRUE, TRUE)
@@ -19,9 +15,14 @@ evaluate_country_impact <- function(country_iso = "IRN") {
     group_by(date)
   
   # Results generation for each of the 100 draws
-  temp_list <- vector(mode = "list", length = 100L)
-  for (i in 1:100) {
+  temp_list <- vector(mode = "list", length = length(out$samples))
+  for (i in 1:length(out$samples)) {
+    
     index <- i
+    if (is.null(out$samples[[index]]$prob_severe_multiplier)) {
+      out$samples[[index]]$prob_severe_multiplier <- rep(1, length(out$samples[[index]]$tt_prob_hosp_multiplier))
+      out$samples[[index]]$tt_prob_severe_multiplier <- out$samples[[index]]$tt_prob_hosp_multiplier
+    }
     tt_Rt <- out$samples[[index]]$tt_R0
     tt_R0 <- tt_Rt + 1
     check1 <- squire.page:::run_booster(time_period = max(out$samples[[index]]$tt_R0),
@@ -61,7 +62,34 @@ evaluate_country_impact <- function(country_iso = "IRN") {
       mutate(index = i)
     temp_list[[i]] <- check1d
   }
+  
+  rep_summary <- bind_rows(temp_list) %>%
+    group_by(replicate) %>%
+    arrange(t) %>%
+    group_by(t)  %>%
+    summarise(
+      across(c(value), ~median(.x, na.rm=TRUE), .names = "no_bpsv_deaths_med"),
+      across(c(value), ~quantile(.x, 0.025, na.rm=TRUE), .names = "no_bpsv_deaths_025"),
+      across(c(value), ~quantile(.x, 0.975, na.rm=TRUE), .names = "no_bpsv_deaths_975"),
+      .groups = "drop") 
+  
+  return(list(country_iso = country_iso,
+              model_fit = rep_summary,
+              daily = daily,
+              out = list(samples = out$samples, 
+                         parameters = out$parameters, 
+                         inputs = out$inputs)))
+  
+}
 
+# Defining function
+evaluate_country_impact <- function(original_fit, country_iso = "IRN") {
+  
+  excess <- grab_fit(country_iso, TRUE, TRUE)
+  out <- original_fit$out
+  rep_summary <- original_fit$model_fit
+  daily <- original_fit$daily
+  
   ### Generating the counterfactual impact of a BPSV
   temp <- create_scenarios(R0 = 3, specific_vaccine_start = 500) %>%
     filter(vaccine_scenario == "both_vaccines")
@@ -132,7 +160,7 @@ evaluate_country_impact <- function(country_iso = "IRN") {
   vaccine_booster_follow_up_coverage <- rep(0, 17)
   
   temp_list_BPSV <- vector(mode = "list", length = 100L)
-  for (i in 1:100) {
+  for (i in 1:length(out$samples)) {
     index <- i
     tt_Rt <- out$samples[[index]]$tt_R0
     tt_R0 <- tt_Rt + 1
@@ -181,16 +209,6 @@ evaluate_country_impact <- function(country_iso = "IRN") {
     temp_list_BPSV[[i]] <- check_BPSV
   }
   
-  rep_summary <- bind_rows(temp_list) %>%
-    group_by(replicate) %>%
-    arrange(t) %>%
-    group_by(t)  %>%
-    summarise(
-      across(c(value), ~median(.x, na.rm=TRUE), .names = "no_bpsv_deaths_med"),
-      across(c(value), ~quantile(.x, 0.025, na.rm=TRUE), .names = "no_bpsv_deaths_025"),
-      across(c(value), ~quantile(.x, 0.975, na.rm=TRUE), .names = "no_bpsv_deaths_975"),
-      .groups = "drop") 
-  
   rep_bpsv <- bind_rows(temp_list_BPSV) %>%
     group_by(replicate) %>%
     arrange(t) %>%
@@ -227,90 +245,107 @@ evaluate_country_impact <- function(country_iso = "IRN") {
   return(overall) 
 }
 
-# Loading country ISOs
-country_ISOs <- unique(squire::population$iso3c)
-
-for (i in 1:2) { #length(country_ISOs)) {
-  
-  # Load squire.page again
-  library(squire.page)
-  
-  # Selecting specific country ISO
-  temp_ISO <- country_ISOs[i]
-  
-  # Evaluating country-level impact
-  temp_overall <- evaluate_country_impact(temp_ISO)
-  
-  # Saving output
-  saveRDS(object = temp_overall, file = paste0("outputs/Figure3_SC2_Counterfactual_Impact/" , temp_ISO, "_BPSV_counterfactual_impact.rds"))
-  
-  unloadNamespace("squire.page.sarsX")
-  
-  print(paste0("i = ", i, ", ISO = ", temp_ISO))
-  
+# Loading country ISOs and extracting squire.page fits
+fresh_run_fits <- FALSE
+if (fresh_run_fits) {
+  country_ISOs <- unique(squire::population$iso3c)
+  for (i in 199:length(country_ISOs)) {
+    # Load squire.page again
+    library(squire.page)
+    
+    # Selecting specific country ISO
+    temp_ISO <- country_ISOs[i]
+    
+    # Getting squire.page country fit draws 
+    temp <- get_country_draws(country_iso = temp_ISO)
+    
+    # Saving output
+    saveRDS(object = temp, file = paste0("outputs/Figure3_SC2_Counterfactual_Impact/raw/raw_" , temp_ISO, "_fit.rds"))
+    print(paste0("i = ", i, ", ISO = ", temp_ISO))
+  }
 }
-  
-overall_ITA <- evaluate_country_impact("ITA")
-saveRDS(object = overall_ITA, file = "ITA_BPSV_counterfactual_impact.rds")
-overall_IRN <- evaluate_country_impact("IRN")
-saveRDS(object = overall_IRN, file = "IRN_BPSV_counterfactual_impact.rds")
 
-overall_ITA <- readRDS("ITA_BPSV_counterfactual_impact.rds")
-overall_IRN <- readRDS("IRN_BPSV_counterfactual_impact.rds")
+## Generating BPSV impact
+iso_list <- substr(list.files(path = "outputs/Figure3_SC2_Counterfactual_Impact/raw/"), 5, 7)
+deaths_df <- data.frame(iso = rep(NA_character_, length(iso_list)), 
+                        empirical_deaths = rep(NA_real_, length(iso_list)), 
+                        deaths_BPSV = rep(NA_real_, length(iso_list)))
+for (i in 1:length(iso_list)) {
+  temp <- readRDS(paste0("outputs/Figure3_SC2_Counterfactual_Impact/raw/raw_", iso_list[i], "_fit.rds"))
+  temp_overall <- evaluate_country_impact(original_fit = temp, country_iso = iso_list[i])
+  saveRDS(object = temp_overall, file = paste0("outputs/Figure3_SC2_Counterfactual_Impact/BPSV_counterfactual/BPSV_counterfactual_", iso_list[i], "_fit.rds"))
+  deaths <- temp_overall %>%
+    group_by(scenario) %>%
+    summarise(med = sum(med)) %>%
+    pivot_wider(names_from = scenario, values_from = med)
+  deaths_df$iso[i] <- iso_list[i]
+  deaths_df$empirical_deaths[i] <- deaths$no_bpsv_deaths
+  deaths_df$deaths_BPSV[i] <- deaths$bpsv_deaths
+  print(i)
+}
 
-ita_time_plot <- ggplot(data = overall_ITA) +
-  geom_point(aes(x = date, y = reported_deaths), col = "grey") +
-  geom_ribbon(aes(x = date, ymin = `025`, ymax = `975`, fill = scenario), alpha = 0.2) +
-  geom_line(aes(x = date, y = med, col = scenario)) +
-  theme_bw() +
-  scale_colour_manual(values = c("#E67552", "#001A23")) +
-  scale_fill_manual(values = c("#E67552", "#001A23")) +
-  labs(x = "Date", y = "COVID-19 Deaths Per Day") +
-  theme(legend.position = "none")
-
-deaths_ITA <- overall_ITA %>%
-  group_by(scenario) %>%
-  summarise(med = sum(med),
-            `025` = sum(`025`),
-            `975` = sum(`975`))
-
-ita_deaths_plot <- ggplot(deaths_ITA) +
-  geom_bar(aes(x = scenario, y = med, fill = scenario), stat = "identity") +
-  geom_errorbar(aes(x = scenario, ymin = `025`, ymax = `975`, group = scenario), width = 0.3) +
-  labs(x = "", y = "COVID-19 Deaths") +
-  scale_x_discrete(labels = c("Deaths with\nBPSV", "Actual\nDeaths")) +
-  scale_fill_manual(values = c("#E67552", "#001A23")) +
-  theme_bw() +
-  theme(legend.position = "none")
-
-irn_time_plot <- ggplot(data = overall_IRN) +
-  geom_point(aes(x = date, y = reported_deaths), col = "grey") +
-  geom_ribbon(aes(x = date, ymin = `025`, ymax = `975`, fill = scenario), alpha = 0.2) +
-  geom_line(aes(x = date, y = med, col = scenario)) +
-  theme_bw() +
-  scale_colour_manual(values = c("#E67552", "#001A23")) +
-  scale_fill_manual(values = c("#E67552", "#001A23")) +
-  labs(x = "Date", y = "COVID-19 Deaths Per Day") +
-  theme(legend.position = "none")
-
-deaths_IRN <- overall_IRN %>%
-  group_by(scenario) %>%
-  summarise(med = sum(med),
-            `025` = sum(`025`),
-            `975` = sum(`975`))
-
-irn_deaths_plot <- ggplot(deaths_IRN) +
-  geom_bar(aes(x = scenario, y = med, fill = scenario), stat = "identity") +
-  geom_errorbar(aes(x = scenario, ymin = `025`, ymax = `975`, group = scenario), width = 0.3) +
-  labs(x = "", y = "COVID-19 Deaths") +
-  scale_x_discrete(labels = c("Deaths with\nBPSV", "Actual\nDeaths")) +
-  scale_fill_manual(values = c("#E67552", "#001A23")) +
-  theme_bw() +
-  theme(legend.position = "none")
-
-italy <- cowplot::plot_grid(ita_time_plot, ita_deaths_plot, 
-                            rel_widths = c(2.5, 1), labels = c("A", "B"))
-iran <- cowplot::plot_grid(irn_time_plot, irn_deaths_plot, 
-                           rel_widths = c(2.5, 1), labels = c("C", "D"))
-
-cowplot::plot_grid(italy, iran, nrow = 2)
+### SCRAP CODE ###
+# overall_ITA <- evaluate_country_impact("ITA")
+# saveRDS(object = overall_ITA, file = "ITA_BPSV_counterfactual_impact.rds")
+# overall_IRN <- evaluate_country_impact("IRN")
+# saveRDS(object = overall_IRN, file = "IRN_BPSV_counterfactual_impact.rds")
+# 
+# overall_ITA <- readRDS("ITA_BPSV_counterfactual_impact.rds")
+# overall_IRN <- readRDS("IRN_BPSV_counterfactual_impact.rds")
+# 
+# ita_time_plot <- ggplot(data = overall_ITA) +
+#   geom_point(aes(x = date, y = reported_deaths), col = "grey") +
+#   geom_ribbon(aes(x = date, ymin = `025`, ymax = `975`, fill = scenario), alpha = 0.2) +
+#   geom_line(aes(x = date, y = med, col = scenario)) +
+#   theme_bw() +
+#   scale_colour_manual(values = c("#E67552", "#001A23")) +
+#   scale_fill_manual(values = c("#E67552", "#001A23")) +
+#   labs(x = "Date", y = "COVID-19 Deaths Per Day") +
+#   theme(legend.position = "none")
+# 
+# deaths_ITA <- overall_ITA %>%
+#   group_by(scenario) %>%
+#   summarise(med = sum(med),
+#             `025` = sum(`025`),
+#             `975` = sum(`975`))
+# 
+# ita_deaths_plot <- ggplot(deaths_ITA) +
+#   geom_bar(aes(x = scenario, y = med, fill = scenario), stat = "identity") +
+#   geom_errorbar(aes(x = scenario, ymin = `025`, ymax = `975`, group = scenario), width = 0.3) +
+#   labs(x = "", y = "COVID-19 Deaths") +
+#   scale_x_discrete(labels = c("Deaths with\nBPSV", "Actual\nDeaths")) +
+#   scale_fill_manual(values = c("#E67552", "#001A23")) +
+#   theme_bw() +
+#   theme(legend.position = "none")
+# 
+# irn_time_plot <- ggplot(data = overall_IRN) +
+#   geom_point(aes(x = date, y = reported_deaths), col = "grey") +
+#   geom_ribbon(aes(x = date, ymin = `025`, ymax = `975`, fill = scenario), alpha = 0.2) +
+#   geom_line(aes(x = date, y = med, col = scenario)) +
+#   theme_bw() +
+#   scale_colour_manual(values = c("#E67552", "#001A23")) +
+#   scale_fill_manual(values = c("#E67552", "#001A23")) +
+#   labs(x = "Date", y = "COVID-19 Deaths Per Day") +
+#   theme(legend.position = "none")
+# 
+# deaths_IRN <- overall_IRN %>%
+#   group_by(scenario) %>%
+#   summarise(med = sum(med),
+#             `025` = sum(`025`),
+#             `975` = sum(`975`))
+# 
+# irn_deaths_plot <- ggplot(deaths_IRN) +
+#   geom_bar(aes(x = scenario, y = med, fill = scenario), stat = "identity") +
+#   geom_errorbar(aes(x = scenario, ymin = `025`, ymax = `975`, group = scenario), width = 0.3) +
+#   labs(x = "", y = "COVID-19 Deaths") +
+#   scale_x_discrete(labels = c("Deaths with\nBPSV", "Actual\nDeaths")) +
+#   scale_fill_manual(values = c("#E67552", "#001A23")) +
+#   theme_bw() +
+#   theme(legend.position = "none")
+# 
+# italy <- cowplot::plot_grid(ita_time_plot, ita_deaths_plot, 
+#                             rel_widths = c(2.5, 1), labels = c("A", "B"))
+# iran <- cowplot::plot_grid(irn_time_plot, irn_deaths_plot, 
+#                            rel_widths = c(2.5, 1), labels = c("C", "D"))
+# 
+# cowplot::plot_grid(italy, iran, nrow = 2)

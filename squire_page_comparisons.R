@@ -2,10 +2,11 @@
 library(tidyverse); library(squire.page)
 
 # Sourcing required functions
-source("Q_Drive_Copy2/Active_Research_Projects/diseaseX_modelling/functions/extract_process_generate_fits.R")
+source("functions/extract_process_generate_fits.R")
+# source("Q_Drive_Copy2/Active_Research_Projects/diseaseX_modelling/functions/extract_process_generate_fits.R")
 
 # Getting fits for Iran with excess deaths and extracting the Rt
-excess <- grab_fit("ITA", TRUE, TRUE)
+excess <- grab_fit("IRN", TRUE, TRUE)
 out <- squire.page:::generate_draws.rt_optimised(excess)
 daily <- get_deaths_infections_hosps_time(out) %>%
   group_by(replicate) %>%
@@ -88,17 +89,17 @@ rep_summary <- bind_rows(temp_list) %>%
     .groups = "drop")
 
 ## Comparing outputs 
-sum(rep_summary$value_med[1:365]) # my re-running using squire.page - seeding cases not fixed to match how you do it
+sum(rep_summary$deaths_med[1:365]) # my re-running using squire.page - seeding cases not fixed to match how you do it
 sum(daily_summary$deaths_med[1:365]) # the original deaths curve (or at least, the median)
 
 ## Graphical comparison
 plot(daily_summary$deaths_med[1:365], type = "l", col = "red")
-lines(rep_summary$t[1:365], rep_summary$value_med[1:365], type = "l")
+lines(rep_summary$t[1:365], rep_summary$deaths_med[1:365], type = "l")
 
 ### Generating the counterfactual impact of a BPSV
-source("Q_Drive_Copy2/Active_Research_Projects/diseaseX_modelling/main.R")
-source("Q_Drive_Copy2/Active_Research_Projects/diseaseX_modelling/functions/run_sars_x.R")
-source("Q_Drive_Copy2/Active_Research_Projects/diseaseX_modelling/functions/helper_functions.R")
+source("main.R")
+source("functions/run_sars_x.R")
+source("functions/helper_functions.R")
 
 temp <- create_scenarios(R0 = 3, specific_vaccine_start = 500) %>%
   filter(vaccine_scenario == "both_vaccines")
