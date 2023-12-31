@@ -34,7 +34,7 @@ lockdown_Rt <- default$lockdown_Rt                                # Rt achieved 
 minimal_mandate_reduction <- default$minimal_mandate_reduction    # Fold-reduction in R0 achieved under minimal mandate restrictions
 
 ## Figure 5 - Varying Disease-Specific Vaccine Development Time (and associated access)
-raw_vacc_delay_scenarios <- create_scenarios(R0 = c(1.5, 2.5, 3.5), specific_vaccine_start = 100 + seq(0, 720, 5))
+raw_vacc_delay_scenarios <- create_scenarios(R0 = c(1.5, 2.5, 3.5), specific_vaccine_start = 100 + seq(0, 720, 5), runtime = 1000)
 raw_vacc_delay_scenarios2 <- expand_grid(raw_vacc_delay_scenarios, detection_threshold = unique(bp_df_mean_subset$detection)) %>%
   left_join(bp_df_mean_subset, by = c("R0" = "R0", "detection_threshold" = "detection")) %>%
   mutate(detection_time = round(mean, digits = 0)) %>%
@@ -58,8 +58,8 @@ final_vacc_delay_scenarios2 <- final_vacc_delay_scenarios %>%
   mutate(scenario_index = 1:n())
 
 ## Running the model and summarising the output
-cores <- parallel::detectCores() - 5
-fresh_run <- FALSE
+cores <- parallel::detectCores() - 2
+fresh_run <- TRUE
 if (fresh_run) {
   plan(multisession, workers = cores) # multicore does nothing on windows as multicore isn't supported
   system.time({out <- future_pmap(final_vacc_delay_scenarios2, run_sars_x, .progress = TRUE, .options = furrr_options(seed = 123))})
@@ -90,6 +90,32 @@ model_outputs2 <- model_outputs %>%
   filter(metric == "Daily Incidence") 
 labeller_lookup <- c(`4` = "Minimal NPIs", `7` = "Intermediate NPIs", `8` = "Stringent NPIs")
 
+## Specific Vaccine Development Time Plotting
+NPI_colours <- c("#C64191", "#F0803C", "#0D84A9")
+
+spec_dev_plotting <- model_outputs2 %>%
+  filter(specific_vaccine_start <= 365) %>%
+  group_by(R0, specific_vaccine_start, NPI_int, detection_threshold_hosp) %>%
+  summarise(min_deaths_averted = min(bpsv_deaths_averted) * 1000 / population_size,
+            max_deaths_averted = max(bpsv_deaths_averted) * 1000 / population_size,
+            central_deaths_averted = bpsv_deaths_averted * 1000 / population_size,
+            perc_deaths_averted = 100 * bpsv_deaths_averted / deaths_spec,
+            total_deaths_spec = deaths_spec * 1000 / population_size,
+            total_deaths_bpsv = deaths_bpsv * 1000 / population_size,
+            time_under_NPIs_bpsv = time_under_NPIs_bpsv,
+            composite_NPI_bpsv = composite_NPI_bpsv)
+
+spec_dev_plot <- ggplot(subset(spec_dev_plotting, R0 == 2.5 & detection_threshold_hosp == 5)) +
+  geom_line(aes(x = specific_vaccine_start, y = central_deaths_averted, col = factor(NPI_int)), size = 1) +
+  geom_point(aes(x = specific_vaccine_start, y = central_deaths_averted, fill = factor(NPI_int)), 
+             size = 2, pch = 21, col = "black") + 
+  scale_colour_manual(values = NPI_colours)  +
+  scale_fill_manual(values = NPI_colours)  +
+  theme_bw() +
+  lims(y = c(0, max(subset(spec_dev_plotting, R0 == 2.5)$central_deaths_averted))) +
+  labs(x = "Time to Specific Vaccine Development (Days)", y = "Deaths Averted By BPSV Per 1000") +
+  guides(fill = guide_legend("NPI\nScenario"), colour = "none") +
+  theme(legend.position = "none")
 
 #### Figure Delay to Access
 
