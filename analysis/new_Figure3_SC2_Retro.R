@@ -249,7 +249,7 @@ evaluate_country_impact <- function(original_fit, country_iso = "IRN") {
 fresh_run_fits <- FALSE
 if (fresh_run_fits) {
   country_ISOs <- unique(squire::population$iso3c)
-  for (i in 199:length(country_ISOs)) {
+  for (i in 1:length(country_ISOs)) {
     # Load squire.page again
     library(squire.page)
     
@@ -265,7 +265,8 @@ if (fresh_run_fits) {
   }
 }
 
-## Generating BPSV impact
+## Generating BPSV impact (need to go back and figure out when I'm implicitly deploying the BPSV and
+##                         make a PDF to check everything looks reasonable)
 iso_list <- substr(list.files(path = "outputs/Figure3_SC2_Counterfactual_Impact/raw/"), 5, 7)
 deaths_df <- data.frame(iso = rep(NA_character_, length(iso_list)), 
                         empirical_deaths = rep(NA_real_, length(iso_list)), 
@@ -283,6 +284,96 @@ for (i in 159:length(iso_list)) {
   deaths_df$deaths_BPSV[i] <- deaths$bpsv_deaths
   print(i)
 }
+
+data_list <- vector(mode = "list", length = length(iso_list))
+for (i in 1:length(iso_list)) {
+  # temp <- readRDS(paste0("outputs/Figure3_SC2_Counterfactual_Impact/raw/raw_", iso_list[i], "_fit.rds"))
+  # data_list[[i]] <- temp$out$inputs$data
+  bpsv <- readRDS(paste0("outputs/Figure3_SC2_Counterfactual_Impact/BPSV_counterfactual/BPSV_counterfactual_", iso_list[i], "_fit.rds")) %>%
+    mutate(iso = iso_list[i])
+  data_list[[i]] <- bpsv
+}
+impact_deaths_df <- bind_rows(data_list)
+
+italy <- impact_deaths_df %>%
+  filter(date < as.Date("2021-01-01")) %>%
+  group_by(date) %>%
+  filter(iso == "ABW")
+
+plot(italy$date[italy$scenario == "no_bpsv_deaths"], italy$med[italy$scenario == "no_bpsv_deaths"])
+lines(italy$date[italy$scenario == "bpsv_deaths"], italy$med[italy$scenario == "bpsv_deaths"])
+
+## check whether this number of deaths seems reasonable
+overall_impact_deaths <- impact_deaths_df %>%
+  group_by(scenario, date) %>%
+  filter(date < as.Date("2021-01-01")) %>%
+  dplyr::summarise(total_deaths = sum(med, na.rm = TRUE), 
+                   total_low = sum(`025`, na.rm = TRUE),
+                   total_high = sum(`975`, na.rm = TRUE)) %>%
+  mutate(cumulative = cumsum(total_deaths),
+         cumulative_low = cumsum(total_low),
+         cumulative_high = cumsum(total_high)) %>%
+  pivot_wider(names_from = "scenario",
+              values_from = c("total_deaths", "total_low", "total_high", "cumulative", "cumulative_low", "cumulative_high"))
+
+ggplot(overall_impact_deaths) +
+  geom_line(aes(x = date, y = cumulative_no_bpsv_deaths)) +
+  geom_ribbon(aes(x = date, ymin = cumulative_low_no_bpsv_deaths, ymax = cumulative_high_no_bpsv_deaths ), alpha = 0.2) +
+  geom_line(aes(x = date, y = cumulative_bpsv_deaths)) +
+  geom_ribbon(aes(x = date, ymin = cumulative_low_bpsv_deaths, ymax = cumulative_high_bpsv_deaths ), alpha = 0.2) +
+  labs(x = "", y = "COVID-19 Deaths") +
+  theme_bw() +
+  scale_y_continuous(labels = c("1M", "2M", "3M", "4M", "5M", "6M"),
+                     breaks = c(1e6, 2e6, 3e6, 4e6, 5e6, 6e6))
+
+ggplot(overall_impact_deaths) +
+  geom_line(aes(x = date, y = cumulative_no_bpsv_deaths)) +
+  geom_ribbon(aes(x = date, ymin = cumulative_low_no_bpsv_deaths, ymax = cumulative_high_no_bpsv_deaths ), alpha = 0.2) 
+  geom_line(aes(x = date, y = cumulative_bpsv_deaths)) +
+  geom_ribbon(aes(x = date, ymin = cumulative_bpsv_deaths, ymax = cumulative_no_bpsv_deaths), alpha = 0.2) +
+  labs(x = "", y = "COVID-19 Deaths") +
+  theme_bw() +
+  scale_y_continuous(labels = c("1M", "2M", "3M", "4M", "5M", "6M"),
+                     breaks = c(1e6, 2e6, 3e6, 4e6, 5e6, 6e6))
+
+library(scales)
+scales::demo_continuous(c(-1e6, 1e6), labels = label_number())
+scales::demo_continuous(c(-1e6, 1e6), labels = label_comma())
+demo_continuous(c(0, 1e-6), labels = label_number(scale = 1e6))
+demo_continuous(c(-1e3, 1e3), labels = label_number(
+  style_positive = "plus",
+  style_negative = "minus"
+))
+demo_continuous(c(-1e3, 1e3), labels = scales::label_number(scales::cut_si("M")))
+
+
+sum(overall_impact_deaths$total_deaths_bpsv_deaths)
+sum(overall_impact_deaths$total_deaths_no_bpsv_deaths)
+
+plot(overall_impact_deaths$date, overall_impact_deaths$cumulative_no_bpsv_deaths, type = "l")
+lines(overall_impact_deaths$date, overall_impact_deaths$cumulative_bpsv_deaths, type = "l")
+
+sum(overall_impact_deaths$total_no_bpsv_deaths)
+
+max(overall_impact_deaths$cumulative_no_bpsv)
+max(overall_impact_deaths$cumulative_bpsv)
+
+plot(overall_impact_deaths$date, overall_impact_deaths$cumulative_no_bpsv)
+plot(overall_impact_deaths$date, overall_impact_deaths$cumulative_bpsv)
+
+
+table(overall_empirical_deaths$date_start)
+
+
+## TO DO: Make big PDF of all the runs and double check they are correct AND the BPSV results also make sense
+overall_ITA <- readRDS("outputs/Figure3_SC2_Counterfactual_Impact/BPSV_counterfactual/BPSV_counterfactual_ITA_fit.rds")
+
+
+## Number 159 SYC needs to be rerun
+
+
+hist(1 - deaths_df$deaths_BPSV/deaths_df$empirical_deaths)
+
 
 ### SCRAP CODE ###
 # overall_ITA <- evaluate_country_impact("ITA")
