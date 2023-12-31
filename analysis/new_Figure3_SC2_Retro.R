@@ -121,7 +121,7 @@ evaluate_country_impact <- function(original_fit, country_iso = "IRN") {
                                                   coverage_bpsv = temp$coverage_bpsv,
                                                   coverage_spec = temp$coverage_spec,
                                                   min_age_group_index_priority = temp$min_age_group_index_priority,
-                                                  runtime = max(out$samples[[1]]$tt_R0))
+                                                  runtime = max(out$samples[[1]]$tt_R0) + 200)
   primary_doses <- vaccine_doses$primary_doses
   second_doses <- vaccine_doses$second_doses
   booster_doses <- vaccine_doses$booster_doses
@@ -164,7 +164,7 @@ evaluate_country_impact <- function(original_fit, country_iso = "IRN") {
     index <- i
     tt_Rt <- out$samples[[index]]$tt_R0
     tt_R0 <- tt_Rt + 1
-    BPSV <- squire.page.sarsX:::run_booster(time_period = max(out$samples[[index]]$tt_R0),
+    BPSV <- squire.page.sarsX:::run_booster(time_period = max(out$samples[[index]]$tt_R0) + 200,
                                             population = squire::get_population(country = out$parameters$country)$n,                                                 
                                             contact_matrix_set = squire::get_mixing_matrix(country = out$parameters$country),                                                   
                                             R0 = out$samples[[index]]$R0,     
@@ -270,7 +270,7 @@ iso_list <- substr(list.files(path = "outputs/Figure3_SC2_Counterfactual_Impact/
 deaths_df <- data.frame(iso = rep(NA_character_, length(iso_list)), 
                         empirical_deaths = rep(NA_real_, length(iso_list)), 
                         deaths_BPSV = rep(NA_real_, length(iso_list)))
-for (i in 1:length(iso_list)) {
+for (i in 159:length(iso_list)) {
   temp <- readRDS(paste0("outputs/Figure3_SC2_Counterfactual_Impact/raw/raw_", iso_list[i], "_fit.rds"))
   temp_overall <- evaluate_country_impact(original_fit = temp, country_iso = iso_list[i])
   saveRDS(object = temp_overall, file = paste0("outputs/Figure3_SC2_Counterfactual_Impact/BPSV_counterfactual/BPSV_counterfactual_", iso_list[i], "_fit.rds"))
