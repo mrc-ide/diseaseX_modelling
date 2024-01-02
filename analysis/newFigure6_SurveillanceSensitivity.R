@@ -362,3 +362,7 @@ ggsave(filename = "figures/Figure_7_SecondaryCountry_Exploration/NEW_Figure7_leg
        plot = secondary_legend,
        width = 9.5,
        height = 6)
+
+
+scale_colour_manual(values = c("#B8336A", "#726DA8", "#42A1B6")) +
+  
