@@ -51,7 +51,7 @@ chain_sim_susc_ring_vacc2 <- function(offspring = c("pois", "nbinom"), mn_offspr
   )
   
   # Initialize the dataframe with the seeding cases
-  tdf[1:seeding_cases,] <- data.frame(
+  tdf[1:seeding_cases, ] <- data.frame(
     id = seq_len(seeding_cases),
     ancestor = NA_integer_,
     generation = 1L,
@@ -73,7 +73,12 @@ chain_sim_susc_ring_vacc2 <- function(offspring = c("pois", "nbinom"), mn_offspr
   susc <- pop - initial_immune - 1L
   time_infection_index <- t0
 
-  while (any(tdf$time_infection[!tdf$offspring_generated & !is.na(tdf$time_infection)] <= tf) & nrow(tdf) <= check_final_size & susc > 0) {
+  # while (any(tdf$time_infection[!tdf$offspring_generated & !is.na(tdf$time_infection)] <= tf) & susc > 0) {
+  ### NOTE: check_final_size doesn't really work when you're trying to get incidence over time
+  ###       because at the check_final_size mark you might have lots of infections you haven't generated offspring 
+  ###       for, which in turn will go on to generate offspring that will contribute to the incidence within the
+  ###       timeframe you're simulating. It's incomplete in that regard
+  while (any(tdf$time_infection[!tdf$offspring_generated & !is.na(tdf$time_infection)] <= tf) & susc > 0 & nrow(tdf) <= check_final_size) {
     
     time_infection_index <- min(tdf$time_infection[tdf$offspring_generated == 0 & !is.na(tdf$time_infection)])              # Note: Is not an issue in practice, but I don't think this is currently set up to handle >= 2 infections with same infection time currently
     idx <- which(tdf$time_infection == time_infection_index & !tdf$offspring_generated)[1] # get the id of the earliest unsimulated infection
