@@ -1,0 +1,438 @@
+# Load required libraries
+library(sf); library(ggplot2); library(dplyr); library(rnaturalearth)
+library(ggspatial); library(rgdal)
+source(here::here("main.R"))
+
+# Load required functions
+source(here::here("functions/run_sars_x.R"))
+source(here::here("functions/helper_functions.R"))
+
+# Loading in bp based detection and calculating detection times for the the different R0 values
+bp_df_long <- readRDS("outputs/Figure1_bp_detection_times.rds")
+prob_hosp <- squire.page.sarsX:::probs_booster$prob_hosp
+arg_pop <- squire::get_population("Argentina")
+IHR <- sum(prob_hosp * arg_pop$n / sum(arg_pop$n)) 
+num_hosp <- 1:20
+detection_hosp <- round(num_hosp / IHR, digits = 0)
+num_hosp <- c(1, 5, 10, 20)
+infection_thresholds <- detection_hosp[num_hosp]
+bp_df_mean_subset <- bp_df_long %>%
+  filter(!is.infinite(value),
+         detection %in% infection_thresholds) %>%
+  group_by(R0, detection, metric) %>%
+  summarise(mean = mean(value)) %>%
+  filter(detection == 209) %>%
+  filter(metric == "Daily Incidence")
+R0_detection_time_pairs <- bp_df_mean_subset %>%
+  mutate(detection_time = round(mean, digits = 0)) %>%
+  ungroup() %>%
+  select(R0, detection_time, metric)
+
+# NPI Relevant Parameters
+default <- define_default_params()
+lockdown_Rt <- default$lockdown_Rt                                # Rt achieved under lockdown
+minimal_mandate_reduction <- default$minimal_mandate_reduction    # Fold-reduction in R0 achieved under minimal mandate restrictions
+
+## Figure 5A - BPSV Coverage
+raw_bpsv_coverage_scenarios <- create_scenarios(R0 = c(1.5, 2.5, 3.5), coverage_bpsv = seq(0.1, 0.8, 0.05)) 
+
+raw_bpsv_coverage_scenarios2 <- expand_grid(raw_bpsv_coverage_scenarios, detection_threshold = unique(bp_df_mean_subset$detection)) %>% 
+  left_join(bp_df_mean_subset, by = c("R0" = "R0", "detection_threshold" = "detection")) %>%
+  mutate(detection_time = round(mean, digits = 0)) %>%
+  select(-mean) 
+
+NPIs_bpsv_cov <- default_NPI_scenarios(lockdown_Rt = default$lockdown_Rt, minimal_mandate_reduction = default$minimal_mandate_reduction,
+                                       NPI_scenarios = c(4, 7, 8), scenarios = raw_bpsv_coverage_scenarios2)
+
+bpsv_coverage_scenarios <- raw_bpsv_coverage_scenarios2 %>%
+  full_join(NPIs_bpsv_cov, by = c("R0", "country", "population_size", "detection_time", "bpsv_start", "specific_vaccine_start",
+                                  "vaccination_rate_bpsv", "vaccination_rate_spec", "coverage_bpsv", "coverage_spec", "min_age_group_index_priority"), multiple = "all")
+
+final_bpsv_coverage_scenarios <- bpsv_coverage_scenarios %>% 
+  semi_join(R0_detection_time_pairs, by = c("R0", "detection_time", "metric")) %>%
+  mutate(main_varied = "BPSV_coverage")
+# R0 * vaccine scenarios * detection threshold * efficacy * NPIs = 3 * 2 * 3 * 1 * 15 * 3
+3 * 2 * 1 * 15 * 3
+
+## Figure 5B - BPSV Vaccination Rate
+days_to_bpsv_coverage <- seq(20, 170, 10)
+population_size <- 10^10
+min_age_group_index_priority <- 13
+standard_pop <- generate_standard_pop(country = "Argentina", population_size = population_size)
+coverage_bpsv <- 0.8
+coverage_spec <- 0.8
+elderly_pop_to_vaccinate <- sum(standard_pop[min_age_group_index_priority:17]) * coverage_spec 
+bpsv_vaccination_rate <- elderly_pop_to_vaccinate / (days_to_bpsv_coverage * population_size / 7)
+bpsv_coverage_time_df <- data.frame(days_to_bpsv_coverage  = days_to_bpsv_coverage, vaccination_rate_bpsv = bpsv_vaccination_rate)
+
+raw_bpsv_rate_scenarios <- create_scenarios(R0 = c(1.5, 2.5, 3.5), vaccination_rate_bpsv = bpsv_vaccination_rate) 
+
+raw_bpsv_rate_scenarios2 <- expand_grid(raw_bpsv_rate_scenarios, detection_threshold = unique(bp_df_mean_subset$detection)) %>% 
+  left_join(bp_df_mean_subset, by = c("R0" = "R0", "detection_threshold" = "detection")) %>%
+  mutate(detection_time = round(mean, digits = 0)) %>%
+  select(-mean) 
+
+NPIs_bpsv_rate <- default_NPI_scenarios(lockdown_Rt = default$lockdown_Rt, minimal_mandate_reduction = default$minimal_mandate_reduction,
+                                        NPI_scenarios = c(4, 7, 8), scenarios = raw_bpsv_rate_scenarios2)
+
+bpsv_rate_scenarios <- raw_bpsv_rate_scenarios2 %>%
+  full_join(NPIs_bpsv_rate, by = c("R0", "country", "population_size", "detection_time", "bpsv_start", "specific_vaccine_start",
+                                   "vaccination_rate_bpsv", "vaccination_rate_spec", "coverage_bpsv", "coverage_spec", "min_age_group_index_priority"), multiple = "all")
+
+final_bpsv_rate_scenarios <- bpsv_rate_scenarios %>% 
+  semi_join(R0_detection_time_pairs, by = c("R0", "detection_time", "metric")) %>%
+  mutate(main_varied = "BPSV_vaccination_rate")
+# R0 * vaccine scenarios * detection threshold * efficacy * NPIs = 3 * 2 * 3 * 1 * 16 * 3
+
+## Creating overall output and index for output (important as it orders dataframe so that pairs of identical scenarios save for BPSV Y/N are next to each other)
+bpsv_implementation_scenarios <- rbind(final_bpsv_coverage_scenarios,
+                                       final_bpsv_rate_scenarios)
+
+vars_for_index <- c(variable_columns(bpsv_implementation_scenarios), "NPI_int")
+bpsv_implementation_scenarios <- bpsv_implementation_scenarios %>%
+  group_by(vaccine_scenario) %>%
+  arrange_at(vars_for_index) %>%
+  mutate(scenario_index = 1:n())
+
+## Running the model and summarising the output
+cores <- parallel::detectCores() - 2
+fresh_run <- TRUE
+if (fresh_run) {
+  plan(multisession, workers = cores) # multicore does nothing on windows as multicore isn't supported
+  system.time({out <- future_pmap(bpsv_implementation_scenarios, run_sars_x, .progress = TRUE, .options = furrr_options(seed = 123))})
+  model_outputs <- format_multirun_output(output_list = out, parallel = TRUE, cores = cores)
+  saveRDS(model_outputs, "outputs/Figure_5_DiseaseSpecific_Dev_Access/updated_NEW_Figure_5_vax_implementation_scenarios.rds")
+} else {
+  model_outputs <- readRDS("outputs/Figure_5_DiseaseSpecific_Dev_Access/updated_NEW_Figure_5_vax_implementation_scenarios.rds")
+}
+
+## Joining back in the detection metrics
+detection_df <- bpsv_implementation_scenarios %>%
+  select(scenario_index, detection_threshold, specific_vaccine_start, all_of(vars_for_index)) %>%
+  filter(vaccine_scenario == "specific_only") %>%
+  ungroup() %>%
+  select(-vaccine_scenario) %>%
+  select(R0, scenario_index, specific_vaccine_start, NPI_int, detection_time, detection_threshold)
+model_outputs2 <- model_outputs %>%
+  left_join(detection_df, by = c("R0", "scenario_index", "specific_vaccine_start", "detection_time", "NPI_int")) %>%
+  mutate(detection_threshold_hosp = round(detection_threshold * IHR)) %>%
+  mutate(detection_timing = case_when(detection_threshold_hosp == 1 ~ "Early",
+                                      detection_threshold_hosp == 5 ~ "Intermediate",
+                                      detection_threshold_hosp == 10 ~ "Late",
+                                      detection_threshold_hosp == 20 ~ "Very Late"))
+
+## Plotting Figure 5A
+NPI_colours <- c("#C64191", "#F0803C", "#0D84A9")
+bpsv_coverage_plotting <- model_outputs2 %>%
+  filter(IFR == 1, 
+         NPI_int %in% c(4, 7, 8), 
+         specific_vaccine_start == 250) %>%
+  filter(map_lgl(varied, ~ setequal(., c("R0", "coverage_bpsv")))) %>%
+  group_by(R0, specific_vaccine_start, coverage_bpsv , NPI_int, detection_threshold_hosp) %>%
+  summarise(min_deaths_averted = min(bpsv_deaths_averted) * 1000 / population_size,
+            max_deaths_averted = max(bpsv_deaths_averted) * 1000 / population_size,
+            central_deaths_averted = bpsv_deaths_averted * 1000 / population_size,
+            perc_deaths_averted = 100 * bpsv_deaths_averted / deaths_spec,
+            total_deaths_spec = deaths_spec * 1000 / population_size,
+            total_deaths_bpsv = deaths_bpsv * 1000 / population_size,
+            time_under_NPIs_bpsv = time_under_NPIs_bpsv,
+            composite_NPI_bpsv = composite_NPI_bpsv)
+
+bpsv_coverage_plot <- ggplot(subset(bpsv_coverage_plotting, R0 == 2.5 & detection_threshold_hosp == 5)) +
+  geom_line(aes(x = 100 * coverage_bpsv, y = central_deaths_averted, col = factor(NPI_int)), size = 1) +
+  geom_point(aes(x = 100 * coverage_bpsv, y = central_deaths_averted, fill = factor(NPI_int)), 
+             size = 2, pch = 21, col = "black") +
+  scale_colour_manual(values = NPI_colours)  +
+  scale_fill_manual(values = NPI_colours)  +
+  theme_bw() +
+  lims(y = c(0, max(subset(bpsv_coverage_plotting, R0 == 2.5)$central_deaths_averted))) +
+  labs(x = "% Coverage 65+ Population With BPSV", y = "Deaths Averted By BPSV Per 1000") +
+  guides(fill = guide_legend("NPI\nScenario"), colour = "none") +
+  theme(legend.position = "none")
+
+## BPSV Vaccination Rate plot
+bpsv_rate_plotting <- model_outputs2 %>%
+  filter(IFR == 1, 
+         NPI_int %in% c(4, 7, 8), 
+         specific_vaccine_start == 250) %>%
+  filter(map_lgl(varied, ~ setequal(., c("R0", "vaccination_rate_bpsv")))) %>%
+  group_by(R0, specific_vaccine_start, vaccination_rate_bpsv , NPI_int, detection_threshold_hosp) %>%
+  summarise(min_deaths_averted = min(bpsv_deaths_averted) * 1000 / population_size,
+            max_deaths_averted = max(bpsv_deaths_averted) * 1000 / population_size,
+            central_deaths_averted = bpsv_deaths_averted * 1000 / population_size,
+            perc_deaths_averted = 100 * bpsv_deaths_averted / deaths_spec,
+            total_deaths_spec = deaths_spec * 1000 / population_size,
+            total_deaths_bpsv = deaths_bpsv * 1000 / population_size,
+            time_under_NPIs_bpsv = time_under_NPIs_bpsv,
+            composite_NPI_bpsv = composite_NPI_bpsv) %>%
+  left_join(bpsv_coverage_time_df, by = "vaccination_rate_bpsv")
+
+bpsv_rate_plot <- ggplot(subset(bpsv_rate_plotting, R0 == 2.5 & detection_threshold_hosp == 5)) +
+  geom_line(aes(x = days_to_bpsv_coverage, y = central_deaths_averted, col = factor(NPI_int)), size = 1) +
+  geom_point(aes(x = days_to_bpsv_coverage, y = central_deaths_averted, fill = factor(NPI_int)), 
+             size = 2, pch = 21, col = "black") +
+  scale_colour_manual(values = NPI_colours)  +
+  scale_fill_manual(values = NPI_colours)  +
+  theme_bw() +
+  lims(y = c(0, max(subset(bpsv_rate_plotting, R0 == 2.5)$central_deaths_averted))) +
+  labs(x = "Days to Complete BPSV Campaign", y = "Deaths Averted By BPSV Per 1000") +
+  guides(fill = guide_legend("NPI\nScenario"), colour = "none") +
+  theme(legend.position = "none")
+
+#### Figure Delay to Access
+
+# Get high-quality natural earth data
+world <- ne_countries(scale = "medium", returnclass = "sf") %>%
+  filter(region_un != "Antarctica") %>%
+  filter(region_un != "Seven seas (open ocean)") %>%
+  filter(continent != "Seven seas (open ocean)")
+
+data <- data.frame(country = world$geounit, value = runif(n = nrow(world))) ## add in BPSV impact here
+world_robinson <- st_transform(world, crs = "ESRI:54030")
+merged_data <- merge(world_robinson, data, by.x = 'geounit', by.y = 'country')
+
+# Plotting the output 
+world <- ggplot() +
+  geom_sf(data = merged_data, aes(fill = continent), color = NA, border = NA) +
+  coord_sf(crs = st_crs("ESRI:54030")) +
+  theme(panel.grid.major = element_blank(),
+        panel.background = element_rect(fill = "white"),
+        legend.position = "none") +
+  theme_void() +
+  scale_fill_brewer(type = "qual", palette = 2, direction = -1) +
+  guides(fill = "none")
+
+# Figure 4C - Empirical Delays to Access for COVID-19 
+owid_vacc_data <- read.csv("data/owid-covid-data.csv") %>%
+  mutate(date = as.Date(date, format = "%d/%m/%Y")) %>%
+  filter(!is.na(total_vaccinations_per_hundred)) %>%
+  filter(date > as.Date("01/11/2020", format = "%d/%m/%Y"))
+time_to_one <- owid_vacc_data %>%
+  filter(continent != "") %>%
+  mutate(date = as.Date(date, format = "%d/%m/%Y")) %>%
+  group_by(continent, location) %>%
+  filter(!is.na(total_vaccinations_per_hundred) & total_vaccinations_per_hundred >= 1) %>%
+  summarise(time = min(date)) %>%
+  ungroup() %>%
+  mutate(delay = as.numeric(time - min(time)))
+time_to_one$continent <- factor(time_to_one$continent, levels = rev(levels(factor(time_to_one$continent))))
+time_to_one_continent_df <- time_to_one %>%
+  group_by(continent) %>%
+  summarise(median_delay = median(delay))
+
+access_delay_empirical_boxplot <- ggplot(time_to_one, aes(x = continent, y = delay)) + 
+  geom_boxplot(aes(col = continent), position = position_dodge(0.8), outlier.shape = NA, linewidth = 0.75) +
+  geom_jitter(aes(fill = continent), position = position_jitterdodge(1.75), size = 2, pch = 21) +
+  theme_bw() +
+  labs(x = "", y = "Delay to 1% Population Vaccinated (Days)") +
+  coord_flip() +
+  scale_y_continuous(position = "left", limits = c(0, 300)) + 
+  scale_x_discrete(position = "bottom") + 
+  theme(legend.position = "none") +
+  scale_color_brewer(type = "qual", palette = 2) +
+  scale_fill_brewer(type = "qual", palette = 2) 
+
+### Figure 4D Delay to Access Specific Development Time
+raw_vacc_delay_scenarios <- create_scenarios(R0 = c(1.5, 2.5, 3.5), specific_vaccine_start = 100 + seq(0, 720, 5), runtime = 1000)
+raw_vacc_delay_scenarios2 <- expand_grid(raw_vacc_delay_scenarios, detection_threshold = unique(bp_df_mean_subset$detection)) %>%
+  left_join(bp_df_mean_subset, by = c("R0" = "R0", "detection_threshold" = "detection")) %>%
+  mutate(detection_time = round(mean, digits = 0)) %>%
+  select(-mean)
+NPIs_vacc_delay <- default_NPI_scenarios(lockdown_Rt = lockdown_Rt,
+                                         minimal_mandate_reduction = minimal_mandate_reduction,
+                                         NPI_scenarios = c(4, 7, 8),
+                                         scenarios = raw_vacc_delay_scenarios2)
+vacc_delay_scenarios <- raw_vacc_delay_scenarios2 %>%
+  full_join(NPIs_vacc_delay, by = c("R0", "country", "population_size", "detection_time", "bpsv_start",
+                                    "specific_vaccine_start", "vaccination_rate_bpsv", "vaccination_rate_spec",
+                                    "coverage_bpsv", "coverage_spec", "min_age_group_index_priority"), multiple = "all")
+final_vacc_delay_scenarios <- vacc_delay_scenarios %>%
+  semi_join(R0_detection_time_pairs, by = c("R0", "detection_time", "metric")) %>%
+  mutate(main_varied = "specific_development_time")
+
+vars_for_index <- c(variable_columns(vacc_delay_scenarios))
+final_vacc_delay_scenarios2 <- final_vacc_delay_scenarios %>%
+  group_by(vaccine_scenario) %>%
+  arrange_at(vars_for_index) %>%
+  mutate(scenario_index = 1:n())
+
+## Running the model and summarising the output
+cores <- parallel::detectCores() - 2
+fresh_run <- TRUE
+if (fresh_run) {
+  plan(multisession, workers = cores) # multicore does nothing on windows as multicore isn't supported
+  system.time({out <- future_pmap(final_vacc_delay_scenarios2, run_sars_x, .progress = TRUE, .options = furrr_options(seed = 123))})
+  model_outputs <- format_multirun_output(output_list = out, parallel = TRUE, cores = cores)
+  saveRDS(model_outputs, "outputs/Figure_5_DiseaseSpecific_Dev_Access/updated_NEW_Figure_5_vax_implementation_Delayscenarios.rds")
+} else {
+  model_outputs <- readRDS("outputs/Figure_5_DiseaseSpecific_Dev_Access/updated_NEW_Figure_5_vax_implementation_Delayscenarios.rds")
+}
+
+## Downstream here I need to create columns for different access timings based on an assumed development time
+## E.g. if I set specific dev time to 250, then 300 is a delay to access of 50 days
+##      anything below 250 is ignored
+
+## Joining back in the detection metrics
+detection_df <- final_vacc_delay_scenarios2 %>%
+  select(scenario_index, specific_vaccine_start, detection_threshold, all_of(vars_for_index)) %>%
+  filter(vaccine_scenario == "specific_only") %>%
+  ungroup() %>%
+  select(-vaccine_scenario) %>%
+  select(scenario_index, specific_vaccine_start, NPI_int, detection_time, detection_threshold, metric)
+model_outputs2 <- model_outputs %>%
+  left_join(detection_df, by = c("scenario_index", "specific_vaccine_start", "detection_time", "NPI_int")) %>%
+  mutate(detection_threshold_hosp = round(detection_threshold * IHR)) %>%
+  mutate(detection_timing = case_when(detection_threshold_hosp == 1 ~ "Early",
+                                      detection_threshold_hosp == 5 ~ "Intermediate",
+                                      detection_threshold_hosp == 10 ~ "Late",
+                                      detection_threshold_hosp == 20 ~ "Very Late")) %>%
+  filter(metric == "Daily Incidence")
+
+delay_df <- time_to_one_continent_df %>%
+  mutate(delay = 5 * round(median_delay / 5))
+
+delay_plotting <- model_outputs2 %>%
+  mutate(delay = specific_vaccine_start - 250) %>%
+  filter(delay <= 250 & delay >= 0 & NPI_int == 7) %>%
+  left_join(delay_df, by = "delay") %>%
+  filter(!is.na(continent))
+  
+continent_delay_plot <- ggplot(data = subset(delay_plotting, NPI_int == 7)) +
+  geom_bar(aes(x = factor(R0), y = bpsv_deaths_averted * 1000 / unique(model_outputs2$population_size), 
+               fill = continent), position = "dodge", stat = "identity", width = 0.5) +
+  scale_fill_manual(values = RColorBrewer::brewer.pal(6, "Dark2")) +
+  guides(fill = guide_legend(title = "Continent", reverse = TRUE)) +
+  theme_bw() +
+  lims(y = c(0, 6)) +
+  theme(legend.position = "none") +
+  labs(x = "Basic Reproduction Number (R0)", y = "BPSV Deaths Averted Per 1,000 Population") + 
+  annotation_custom(
+    ggplotGrob(world),
+    xmin = 0.25, xmax = 2.1, ymin = 4.2, ymax = 6.5)
+
+access_plot <- cowplot::plot_grid(access_delay_empirical_boxplot, continent_delay_plot, labels = c("C", "D"),
+                                  nrow = 2, rel_heights = c(1, 2), align = "v", axis = "l")
+bpsv_implementation_plots <- cowplot::plot_grid(bpsv_coverage_plot, bpsv_rate_plot, labels = c("A", "B"),
+                                                nrow = 2)
+fig5 <- cowplot::plot_grid(bpsv_implementation_plots, access_plot,
+                           ncol = 2, rel_widths = c(0.6, 1))
+ggsave(filename = "figures/Figure_5_DiseaseSpecific_Dev_Access/NEW_Figure5_SpecVac_DevTime_Access.pdf",
+       plot = fig5,
+       height = 6.25,
+       width = 8.25)
+
+
+
+##### Scrap ##### 
+# access_plot2 <- cowplot::plot_grid(access_delay_empirical_boxplot, continent_delay_plot,
+#                                    ncol = 2, rel_widths = c(1, 2), labels = c("B", "C"))
+# cowplot::plot_grid(delay_R0, access_plot2, labels = c("A", NULL), nrow = 2, align = "v", axis = "l")
+
+## Barplots for development time
+# development_times <- unique(model_outputs2$specific_vaccine_start)
+# 
+# delay_100day_development <- unique(model_outputs2$specific_vaccine_start)[sapply(time_to_one_continent_df$median_delay, function(x) {
+#   differences <- abs(development_times - (x + 100))
+#   return(which.min(differences))
+# })]
+# time_to_one_continent_df$delay_100 <- delay_100day_development
+# 
+# delay_220day_development <- unique(model_outputs2$specific_vaccine_start)[sapply(time_to_one_continent_df$median_delay, function(x) {
+#   differences <- abs(development_times - (x + 220))
+#   return(which.min(differences))
+# })]
+# time_to_one_continent_df$delay_220 <- delay_220day_development
+# time_to_one_continent_df2 <- time_to_one_continent_df %>%
+#   pivot_longer(cols = delay_100:delay_220, names_to = "scenario", values_to = "specific_vaccine_start")
+# 
+# model_outputs_delay <- model_outputs2 %>%
+#   filter(specific_vaccine_start %in% unique(c(delay_100day_development, delay_220day_development))) %>%
+#   left_join(time_to_one_continent_df2, by = "specific_vaccine_start")
+# 
+# ggplot(data = subset(model_outputs_delay, R0 == 2)) +
+#   geom_bar(aes(x = continent,
+#                y = bpsv_deaths_averted * 1000 / unique(model_outputs2$population_size), fill = factor(R0)), stat = "identity") +
+#   scale_colour_manual(values = c("#F2E9E4",
+#                                  "#C9ADA7",
+#                                  "#9A8C98",
+#                                  "#4A4E69",
+#                                  "#22223B")) +
+#   facet_grid(NPI_int ~ scenario, labeller = labeller(NPI_int = labeller_lookup))
+# 
+# ggplot(data = subset(model_outputs_delay, R0 == 2)) +
+#   geom_point(aes(x = composite_NPI_bpsv,
+#                y = bpsv_deaths_averted * 1000 / unique(model_outputs2$population_size), 
+#                col = scenario), stat = "identity") +
+#   facet_grid(NPI_int ~ ., labeller = labeller(NPI_int = labeller_lookup))
+# 
+# model_outputs_delay2 <- model_outputs_delay %>%
+#   select(continent, scenario, NPI_int, bpsv_deaths_averted, R0) %>%
+#   filter(continent %in% c("Europe", "Africa")) %>%
+#   pivot_wider(names_from = c(continent, scenario), values_from = bpsv_deaths_averted) %>%
+#   mutate(afr_eur_100 = Africa_delay_100 - Europe_delay_100,
+#          afr_eur_220 = Africa_delay_220 - Europe_delay_220) %>%
+#   pivot_longer(cols = afr_eur_100:afr_eur_220, names_to = "scenario", values_to = "difference")
+# 
+# ggplot(data = model_outputs_delay2) +
+#   geom_bar(aes(x = R0,
+#                y = difference * 1000 / unique(model_outputs2$population_size), 
+#                fill = factor(R0)), stat = "identity") +
+#   scale_colour_manual(values = c("#F2E9E4",
+#                                  "#C9ADA7",
+#                                  "#9A8C98",
+#                                  "#4A4E69",
+#                                  "#22223B")) +
+#   facet_grid(NPI_int ~ scenario, labeller = labeller(NPI_int = labeller_lookup))
+
+
+
+
+## Generic Delay to Access Figure
+# spec_dev_plotting <- model_outputs2 %>%
+#   mutate(delay = specific_vaccine_start - 365) %>%
+#   filter(delay <= 365 & delay >= 0) %>%
+#   group_by(R0, delay, specific_vaccine_start, NPI_int, detection_threshold_hosp) %>%
+#   summarise(min_deaths_averted = min(bpsv_deaths_averted) * 1000 / population_size,
+#             max_deaths_averted = max(bpsv_deaths_averted) * 1000 / population_size,
+#             central_deaths_averted = bpsv_deaths_averted * 1000 / population_size,
+#             perc_deaths_averted = 100 * bpsv_deaths_averted / deaths_spec,
+#             total_deaths_spec = deaths_spec * 1000 / population_size,
+#             total_deaths_bpsv = deaths_bpsv * 1000 / population_size,
+#             time_under_NPIs_bpsv = time_under_NPIs_bpsv,
+#             composite_NPI_bpsv = composite_NPI_bpsv)
+# 
+# ggplot(subset(spec_dev_plotting, R0 == 2.5 & detection_threshold_hosp == 5)) +
+#   geom_line(aes(x = delay, y = central_deaths_averted, col = factor(NPI_int)), size = 1) +
+#   geom_point(aes(x = delay, y = central_deaths_averted, fill = factor(NPI_int)), 
+#              size = 2, pch = 21, col = "black") + 
+#   scale_colour_manual(values = NPI_colours)  +
+#   scale_fill_manual(values = NPI_colours)  +
+#   theme_bw() +
+#   lims(y = c(0, max(subset(spec_dev_plotting, R0 == 2.5)$central_deaths_averted))) +
+#   labs(x = "Time to Specific Vaccine Development (Days)", y = "Deaths Averted By BPSV Per 1000") +
+#   guides(fill = guide_legend("NPI\nScenario"), colour = "none") +
+#   theme(legend.position = "none")
+
+# spec_dev_plot <- ggplot(subset(spec_dev_plotting, R0 == 2.5 & detection_threshold_hosp == 5)) +
+#   geom_line(aes(x = specific_vaccine_start, y = central_deaths_averted, col = factor(NPI_int)), size = 1) +
+#   geom_point(aes(x = specific_vaccine_start, y = central_deaths_averted, fill = factor(NPI_int)), 
+#              size = 2, pch = 21, col = "black") + 
+#   scale_colour_manual(values = NPI_colours)  +
+#   scale_fill_manual(values = NPI_colours)  +
+#   theme_bw() +
+#   lims(y = c(0, max(subset(spec_dev_plotting, R0 == 2.5)$central_deaths_averted))) +
+#   labs(x = "Time to Specific Vaccine Development (Days)", y = "Deaths Averted By BPSV Per 1000") +
+#   guides(fill = guide_legend("NPI\nScenario"), colour = "none") +
+#   theme(legend.position = "none")
+
+
+
+
+
+
+
+
+
+
+
+
