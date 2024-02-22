@@ -27,7 +27,7 @@ R0 <- 2.5 # c(1.5, 2.5, 3.5)
 runtime <- 135 # c(140, 70, 55)
 bp_df <- matrix(data = NA, nrow = num_iterations, ncol = length(num_hosp))
 
-new_bp <- TRUE
+new_bp <- FALSE
 if (new_bp) {
   
   set.seed(456)
@@ -109,12 +109,19 @@ bp_df_long_mean <- bp_df_long %>%
   group_by(detection, metric) %>%
   summarise(mean = mean(value)) %>%
   mutate(detection_hosp = round(detection * IHR))
-bp_detection_time_plot <- ggplot(bp_df_long_mean, aes(x = R0, y = mean, col = factor(detection_hosp))) + 
-  geom_line() +
-  facet_grid(.~metric)
-ggplot(bp_df_long_mean, aes(x = detection_hosp, y = mean, col = factor(R0))) + 
-  geom_line() +
-  facet_grid(.~metric)
+
+inset_detection_plot <- ggplot(subset(bp_df_long_mean, metric == "Daily Incidence")) + 
+  geom_line(aes(x = mean, y = detection_hosp, col = factor(R0))) +
+  geom_point(data = subset(bp_df_long_mean, metric == "Daily Incidence" & detection_hosp == 3),
+             aes(x = mean, y = detection_hosp, fill = factor(R0)),
+             pch = 21, size = 4) +
+  guides(col = guide_legend(title = "R0"),
+         fill = "none") +
+  scale_x_continuous(position = "top") +
+  theme_classic() +
+  labs(y = "Hosp. Detection Threshold", x = "Time to Detection (Days)") +
+  theme(strip.background = element_rect(fill="#F5F5F5"),
+        legend.position = "none")
 
 ## Running
 bp_df_long_mean$R0 <- R0
@@ -152,7 +159,7 @@ scenarios <- baseline_scenarios_reduced %>%
   mutate(scenario_index = 1:n())
 
 ## Running the model and summarising the output
-fresh_run <- TRUE
+fresh_run <- FALSE
 if (fresh_run) {
   plan(multisession, workers = 6) # multicore does nothing on windows as multicore isn't supported
   system.time({out <- future_pmap(scenarios, run_sars_x, .progress = TRUE, .options = furrr_options(seed = 123))})
@@ -162,6 +169,7 @@ if (fresh_run) {
   model_outputs <- readRDS("outputs/Figure6_Surveillance_Exploration/NEW_Figure6_PrimaryCountry_Surveillance.rds")
 }
 
+## Plotting the sensitivity analyses for detection threshold
 scenarios2 <- scenarios %>%
   select(scenario_index, detection_hosp) %>%
   group_by(scenario_index) %>%
@@ -176,91 +184,65 @@ model_outputs2 <- model_outputs %>%
   filter(NPI_int %in% c(4, 7, 8)) %>%
   left_join(scenarios2, by = "scenario_index")
 
-check <- model_outputs2 %>%
-  filter(NPI_int == 7, R0 == 2.5, specific_vaccine_start == 100, detection_hosp == 1)
-
-a <- ggplot(subset(bp_df_long_mean, metric == "Daily Incidence"), 
-            aes(x = detection_hosp, y = mean, fill = factor(R0))) + 
-  geom_line(aes(col = factor(R0))) +
-  geom_point(pch = 21, size = 2) +
-  # facet_wrap(.~metric) +
-  guides(col = guide_legend(title = "R0"),
-         fill = "none") +
+model_outputs2$hosp_check <- ifelse(model_outputs2$detection_hosp == 3, "Yes", "No")
+detection_sensitivity_plot <- ggplot(subset(model_outputs2, NPI_int == 7)) +
+  geom_bar(aes(x = factor(detection_hosp), y = 1000 * bpsv_deaths_averted / unique(baseline_scenarios$population_size), 
+               fill = interaction(factor(specific_vaccine_start), factor(hosp_check))), 
+           stat = "identity", size = 1) +
   theme_bw() +
-  labs(x = "Hospitalisation Detection Threshold", y = "Time to Detection (Days)") +
-  theme(strip.background = element_rect(fill="#F5F5F5"),
-        legend.position = "none")
-
-b <- ggplot(model_outputs2) +
-  geom_line(aes(x = detection_hosp, y = 1000 * bpsv_deaths_averted / unique(baseline_scenarios$population_size), 
-                col = factor(R0)), size = 1) +
-  geom_point(aes(x = detection_hosp, y = 1000 * bpsv_deaths_averted / unique(baseline_scenarios$population_size), 
-                fill = factor(R0)), size = 1.5, pch = 21) +
-  theme_bw() +
-  facet_grid(specific_vaccine_start ~ NPI_int,
-             labeller = as_labeller(c(`4`='Minimal NPIs', `7`='Moderate NPIs', `8`='Stringent NPIs', 
-                                      `100` = "Specific Vaccine in 100 Days", `250` = "Specific Vaccine in 250 Days"))) +
+  facet_wrap(specific_vaccine_start ~ ., nrow = 2,
+             labeller = as_labeller(c(`100` = "Specific Vaccine in 100 Days", 
+                                      `250` = "Specific Vaccine in 250 Days"))) +
   labs(x = "Hospitalisation Detection Threshold", y = "Deaths Averted by BPSV\n (Per 1,000 Population)") +
+  scale_fill_manual(values = c("grey", "grey", "#4F96F9", "#D387AB")) +
   guides(col = guide_legend(title = "R0"),
          fill = "none") +
-  theme(strip.background = element_rect(fill="#F5F5F5"),
-        legend.position = "right")
-
-surv_plot <- cowplot::plot_grid(a, b, nrow = 1, rel_widths = c(1, 2),
-                                labels = c("A", "B"))
-ggsave(filename = "figures/Figure_6_Surveillance/NEW_Fig6_Surveillance_sensitivity.pdf",
-       plot = surv_plot,
-       width = 11,
-       height = 4.8)
-
-NPI_colours <- c("#C64191", "#F0803C", "#0D84A9")
-ggplot(subset(model_outputs2, NPI_int %in% c(7))) +
-  geom_line(aes(x = detection_time, y = 1000 * bpsv_deaths_averted / unique(baseline_scenarios$population_size), 
-                col = factor(NPI_int)), size = 1) +
-  geom_point(aes(x = detection_time, y = 1000 * bpsv_deaths_averted / unique(baseline_scenarios$population_size), 
-                 fill = factor(NPI_int)), size = 1.5, pch = 21) +
-  theme_bw() +
-  facet_wrap(specific_vaccine_start ~ ., nrow = 2, scales = "free_y", 
-             labeller = as_labeller(c(`100` = "Specific Vaccine in 100 Days", `250` = "Specific Vaccine in 250 Days"))) +
-  labs(x = "Detection Time (Days)", y = "Additional Deaths Averted By BPSV (Per 1,000 Population)") +
-  guides(col = guide_legend(title = "NPI Scenario"),
-         fill = "none") +
-  scale_colour_manual(values = NPI_colours) +
-  scale_fill_manual(values = NPI_colours) +
-  ylim(c(0, NA)) +
   scale_y_continuous(position = "right") +
   theme(strip.background = element_rect(fill="#F5F5F5"),
-        legend.position = "bottom")
+        legend.position = "right")
 
-
-ggplot(subset(model_outputs2, NPI_int %in% c(4, 7, 8))) +
-  geom_line(aes(x = detection_time, y = 1000 * deaths_spec / unique(baseline_scenarios$population_size), 
-                col = factor(NPI_int)), size = 1) +
-  geom_point(aes(x = detection_time, y = 1000 * deaths_spec / unique(baseline_scenarios$population_size), 
-                 fill = factor(NPI_int)), size = 1.5, pch = 21) +
+detection_sensitivity_plot100 <- ggplot(subset(model_outputs2, NPI_int == 7 & specific_vaccine_start == 100)) +
+  geom_bar(aes(x = factor(detection_hosp), y = 1000 * bpsv_deaths_averted / unique(baseline_scenarios$population_size), 
+               fill = interaction(factor(specific_vaccine_start), factor(hosp_check))), 
+           stat = "identity", size = 1) +
   theme_bw() +
-  facet_grid(specific_vaccine_start ~ ., #scales = "free_y",
-             labeller = as_labeller(c(`100` = "Specific Vaccine in 100 Days", `250` = "Specific Vaccine in 250 Days"))) +
-  labs(x = "Hospitalisation Detection Threshold", y = "Total Deaths (Per 1,000 Population)") +
-  guides(col = guide_legend(title = "NPI Scenario"),
+  facet_wrap(specific_vaccine_start ~ ., nrow = 2,
+             labeller = as_labeller(c(`100` = "Specific Vaccine in 100 Days", 
+                                      `250` = "Specific Vaccine in 250 Days"))) +
+  labs(x = "Hospitalisation Detection Threshold", y = "Deaths Averted by BPSV\n (Per 1,000 Population)") +
+  scale_fill_manual(values = c("grey", "#4F96F9")) +
+  guides(col = guide_legend(title = "R0"),
          fill = "none") +
-  ylim(c(0, NA)) +
+  scale_y_continuous(position = "right") +
   theme(strip.background = element_rect(fill="#F5F5F5"),
         legend.position = "right")
 
-scale_colour_manual(values = c("#B8336A", "#726DA8", "#42A1B6"))
-
+detection_sensitivity_plot250 <- ggplot(subset(model_outputs2, NPI_int == 7 & specific_vaccine_start == 250)) +
+  geom_bar(aes(x = factor(detection_hosp), y = 1000 * bpsv_deaths_averted / unique(baseline_scenarios$population_size), 
+               fill = interaction(factor(specific_vaccine_start), factor(hosp_check))), 
+           stat = "identity", size = 1) +
+  theme_bw() +
+  facet_wrap(specific_vaccine_start ~ ., nrow = 2,
+             labeller = as_labeller(c(`100` = "Specific Vaccine in 100 Days", 
+                                      `250` = "Specific Vaccine in 250 Days"))) +
+  labs(x = "Hospitalisation Detection Threshold", y = "Deaths Averted by BPSV\n (Per 1,000 Population)") +
+  scale_fill_manual(values = c("grey", "#D387AB")) +
+  guides(col = guide_legend(title = "R0"),
+         fill = "none") +
+  scale_y_continuous(position = "right") +
+  theme(strip.background = element_rect(fill="#F5F5F5"),
+        legend.position = "right")
 
 
 ### Running individual simulations
 R0_check <- 2.5
-detection_hosp_check <- 1
+detection_hosp_check <- 3
 cutoff_time <- 300
 NPI_int_check <- 7
 
 ### No vaccines
 nothing <- baseline_scenarios_reduced %>%
-  filter(R0 == R0_check, specific_vaccine_start == 100, NPI_int == NPI_int_check, detection_hosp == detection_hosp_check, vaccine_scenario == "specific_only")
+  filter(R0 == R0_check, specific_vaccine_start == 250, NPI_int == NPI_int_check, detection_hosp == detection_hosp_check, vaccine_scenario == "specific_only")
 nothing$detection_hosp == 5
 
 no_vaccine <- run_sars_x(population_size = nothing$population_size,
@@ -291,7 +273,7 @@ no_vaccine <- run_sars_x(population_size = nothing$population_size,
                          min_age_group_index_priority = 13,        
                          min_age_group_index_non_priority = 4,     
                          runtime = nothing$runtime,
-                         seeding_cases = 5,
+                         seeding_cases = nothing$seeding_cases,
                          output = "full")
 
 nothing_output <- nimue::format(no_vaccine$model_output, 
@@ -324,17 +306,17 @@ spec_vaccine <- run_sars_x(population_size = spec_only$population_size,
                            efficacy_disease_bpsv = 0,              
                            efficacy_infection_spec = spec_only$efficacy_infection_spec,           
                            efficacy_disease_spec = spec_only$efficacy_disease_spec,              
-                           dur_R = 1000 * 365,                       
-                           dur_bpsv = 1000 * 365,                    
-                           dur_spec = 1000 * 365,                    
+                           dur_R = spec_only$dur_R,                       
+                           dur_bpsv = spec_only$dur_bpsv,                    
+                           dur_spec = spec_only$dur_spec,                    
                            coverage_bpsv = 0.01,                     
                            coverage_spec = spec_only$coverage_spec,                     
                            vaccination_rate_bpsv = 0.001,             
                            vaccination_rate_spec = spec_only$vaccination_rate_spec,             
-                           min_age_group_index_priority = 13,        
-                           min_age_group_index_non_priority = 4,     
-                           runtime = nothing$runtime,
-                           seeding_cases = 5,
+                           min_age_group_index_priority = spec_only$min_age_group_index_priority,        
+                           min_age_group_index_non_priority = spec_only$min_age_group_index_non_priority,     
+                           runtime = spec_only$runtime,
+                           seeding_cases = spec_only$seeding_cases,
                            output = "full")
 
 spec_only_output <- nimue::format(spec_vaccine$model_output, 
@@ -367,17 +349,17 @@ both_vaccines <- run_sars_x(population_size = spec_bpsv$population_size,
                            efficacy_disease_bpsv = spec_bpsv$efficacy_disease_bpsv,              
                            efficacy_infection_spec = spec_bpsv$efficacy_infection_spec,           
                            efficacy_disease_spec = spec_bpsv$efficacy_disease_spec,              
-                           dur_R = 1000 * 365,                       
-                           dur_bpsv = 1000 * 365,                    
-                           dur_spec = 1000 * 365,                    
+                           dur_R = spec_bpsv$dur_R,                       
+                           dur_bpsv = spec_bpsv$dur_bpsv,                    
+                           dur_spec = spec_bpsv$dur_spec,                    
                            coverage_bpsv = spec_bpsv$coverage_bpsv,                     
                            coverage_spec = spec_bpsv$coverage_spec,                     
                            vaccination_rate_bpsv = spec_bpsv$vaccination_rate_bpsv,             
                            vaccination_rate_spec = spec_bpsv$vaccination_rate_spec,             
-                           min_age_group_index_priority = 13,        
-                           min_age_group_index_non_priority = 4,     
-                           runtime = nothing$runtime,
-                           seeding_cases = 5,
+                           min_age_group_index_priority = spec_bpsv$min_age_group_index_priority,        
+                           min_age_group_index_non_priority = spec_bpsv$min_age_group_index_non_priority,     
+                           runtime = spec_bpsv$runtime,
+                           seeding_cases = spec_bpsv$seeding_cases,
                            output = "full")
 
 both_output <- nimue::format(both_vaccines$model_output, 
@@ -397,7 +379,8 @@ panel_apt1 <- ggplot(overall, aes(x = t, y = value, col = scenario)) +
                       labels = c("No Vaccines", "Disease-Specific Only", "Disease-Specific + BPSV"),
                       name = "250 Days to\nDisease-Specific Vaccine") +
   theme_bw() +
-  theme(legend.position = "right") +
+  theme(legend.position = "none") +
+  coord_cartesian(xlim = c(40, 300)) +
   labs(x = "Time (Days)", y = "Daily Deaths per 1,000 Population")
 
 overall_deaths <- overall %>%
@@ -421,10 +404,18 @@ first_half <- cowplot::plot_grid(panel_apt1, panel_apt2, nrow = 1,
 first_half <- panel_apt1 + 
   annotation_custom(
     ggplotGrob(panel_apt2), 
-    xmin = 0, xmax = 150, ymin = 0.050, ymax = 0.25)
+    xmin = 230, xmax = 310, ymin = max(overall$value) / 5, ymax = max(overall$value)) +
+  annotation_custom(
+    ggplotGrob(inset_detection_plot), 
+    xmin = 45, xmax = 140, 
+    ymin = max(overall$value) / 2.5, ymax = max(overall$value))
 
+first_half_pt2 <- cowplot::plot_grid(first_half, detection_sensitivity_plot250, nrow = 1, 
+                                     align = "h", axis = "bt", 
+                                     rel_widths = c(2.5, 1))
+# 11.82 x 3.95 dimensions
 
-### Running individual simulations for 250 days
+### Running individual simulations for 100 days
 
 ### No vaccines
 nothing <- baseline_scenarios_reduced %>%
@@ -447,17 +438,17 @@ no_vaccine <- run_sars_x(population_size = nothing$population_size,
                          efficacy_disease_bpsv = 0,              
                          efficacy_infection_spec = 0,           
                          efficacy_disease_spec = 0,              
-                         dur_R = 1000 * 365,                       
-                         dur_bpsv = 1000 * 365,                    
-                         dur_spec = 1000 * 365,                    
+                         dur_R = nothing$dur_R,                       
+                         dur_bpsv = nothing$dur_bpsv,                    
+                         dur_spec = nothing$dur_spec,                    
                          coverage_bpsv = 0.01,                     
                          coverage_spec = 0.01,                     
                          vaccination_rate_bpsv = 0.001,             
                          vaccination_rate_spec = 0.001,             
-                         min_age_group_index_priority = 13,        
-                         min_age_group_index_non_priority = 4,     
+                         min_age_group_index_priority = nothing$min_age_group_index_priority,        
+                         min_age_group_index_non_priority = nothing$min_age_group_index_non_priority,     
                          runtime = nothing$runtime,
-                         seeding_cases = 5,
+                         seeding_cases = nothing$seeding_cases,
                          output = "full")
 
 nothing_output <- nimue::format(no_vaccine$model_output, 
@@ -490,17 +481,17 @@ spec_vaccine <- run_sars_x(population_size = spec_only$population_size,
                            efficacy_disease_bpsv = 0,              
                            efficacy_infection_spec = spec_only$efficacy_infection_spec,           
                            efficacy_disease_spec = spec_only$efficacy_disease_spec,              
-                           dur_R = 1000 * 365,                       
-                           dur_bpsv = 1000 * 365,                    
-                           dur_spec = 1000 * 365,                    
+                           dur_R = spec_only$dur_R,                       
+                           dur_bpsv = spec_only$dur_bpsv,                    
+                           dur_spec = spec_only$dur_spec,                    
                            coverage_bpsv = 0.01,                     
                            coverage_spec = spec_only$coverage_spec,                     
                            vaccination_rate_bpsv = 0.001,             
                            vaccination_rate_spec = spec_only$vaccination_rate_spec,             
-                           min_age_group_index_priority = 13,        
-                           min_age_group_index_non_priority = 4,     
-                           runtime = nothing$runtime,
-                           seeding_cases = 5,
+                           min_age_group_index_priority = spec_only$min_age_group_index_priority,        
+                           min_age_group_index_non_priority = spec_only$min_age_group_index_non_priority,     
+                           runtime = spec_only$runtime,
+                           seeding_cases = spec_only$seeding_cases,
                            output = "full")
 
 spec_only_output <- nimue::format(spec_vaccine$model_output, 
@@ -533,17 +524,17 @@ both_vaccines <- run_sars_x(population_size = spec_bpsv$population_size,
                             efficacy_disease_bpsv = spec_bpsv$efficacy_disease_bpsv,              
                             efficacy_infection_spec = spec_bpsv$efficacy_infection_spec,           
                             efficacy_disease_spec = spec_bpsv$efficacy_disease_spec,              
-                            dur_R = 1000 * 365,                       
-                            dur_bpsv = 1000 * 365,                    
-                            dur_spec = 1000 * 365,                    
+                            dur_R = spec_bpsv$dur_R,                       
+                            dur_bpsv = spec_bpsv$dur_bpsv,                    
+                            dur_spec = spec_bpsv$dur_spec,                    
                             coverage_bpsv = spec_bpsv$coverage_bpsv,                     
                             coverage_spec = spec_bpsv$coverage_spec,                     
                             vaccination_rate_bpsv = spec_bpsv$vaccination_rate_bpsv,             
                             vaccination_rate_spec = spec_bpsv$vaccination_rate_spec,             
-                            min_age_group_index_priority = 13,        
-                            min_age_group_index_non_priority = 4,     
-                            runtime = nothing$runtime,
-                            seeding_cases = 5,
+                            min_age_group_index_priority = spec_bpsv$min_age_group_index_priority,        
+                            min_age_group_index_non_priority = spec_bpsv$min_age_group_index_non_priority,     
+                            runtime = spec_bpsv$runtime,
+                            seeding_cases = spec_bpsv$seeding_cases,
                             output = "full")
 
 both_output <- nimue::format(both_vaccines$model_output, 
@@ -552,7 +543,7 @@ both_output <- nimue::format(both_vaccines$model_output,
   filter(t > 1, compartment == "deaths") %>%
   group_by(replicate, t) %>%
   filter(t < cutoff_time) %>%
-  mutate(value = 1000 * value / nothing$population_size)
+  mutate(value = 1000 * value / spec_bpsv$population_size)
 both_output$scenario <- "cboth"
 
 overall <- rbind(nothing_output, spec_only_output, both_output)
@@ -563,7 +554,8 @@ panel_apt3 <- ggplot(overall, aes(x = t, y = value, col = scenario)) +
                       labels = c("No Vaccines", "Disease-Specific Only", "Disease-Specific + BPSV"),
                       name = "100 Days to\nDisease-Specific Vaccine") +
   theme_bw() +
-  theme(legend.position = "right") +
+  coord_cartesian(xlim = c(40, 300)) +
+  theme(legend.position = "none") +
   labs(x = "Time (Days)", y = "Daily Deaths per 1,000 Population")
 
 overall_deaths <- overall %>%
@@ -587,29 +579,21 @@ second_half <- cowplot::plot_grid(panel_apt3, panel_apt4, nrow = 1,
 second_half <- panel_apt3 + 
   annotation_custom(
     ggplotGrob(panel_apt4), 
-    xmin = 0, xmax = 150, ymin = 0.050, ymax = 0.25)
+    xmin = 230, xmax = 310, ymin = max(overall$value) / 5, ymax = max(overall$value)) + annotation_custom(
+      ggplotGrob(inset_detection_plot), 
+      xmin = 45, xmax = 140, 
+      ymin = max(overall$value) / 2.5, ymax = max(overall$value))
 
-cowplot::plot_grid(first_half, second_half, nrow = 2)
+second_half_pt2 <- cowplot::plot_grid(second_half, detection_sensitivity_plot100, nrow = 1, 
+                                      align = "h", axis = "bt", 
+                                      rel_widths = c(2.5, 1))
 
-## Generating the other types of plots 
+## dimensions = 11.82 x 3.95
 
-scenarios2 <- scenarios %>%
-  select(scenario_index, detection_hosp) %>%
-  group_by(scenario_index) %>%
-  slice_head(n = 1) %>%
-  as.data.frame() %>%
-  ungroup() %>%
-  select(scenario_index, detection_hosp)
 
-model_outputs2 <- model_outputs %>%
-  filter(specific_vaccine_start %in% c(100, 250)) %>%
-  filter(R0 %in% c(2.5)) %>%
-  filter(NPI_int %in% c(8)) %>%
-  left_join(scenarios2, by = "scenario_index") %>%
-  select(R0, specific_vaccine_start, NPI_int, detection_hosp, deaths_bpsv, deaths_spec, bpsv_deaths_averted)
-
-a <- cowplot::plot_grid(first_half, second_half, nrow = 2)
-a
+# epidemic_curves <- cowplot::plot_grid(second_half, first_half, nrow = 2)
+# 
+# cowplot::plot_grid(epidemic_curves, detection_sensitivity_plot, ncol = 2, rel_widths = c(2, 1))
 
 # model_outputs3 <- model_outputs2 %>%
 #   pivot_longer(cols = c(bpsv_deaths_averted, deaths_spec),
@@ -630,5 +614,52 @@ a
 #          fill = "none") +
 #   theme(strip.background = element_rect(fill="#F5F5F5"),
 #         legend.position = "right")
-
+# R0_check <- 2.5
+# detection_hosp_check <- 1
+# cutoff_time <- 300
+# NPI_int_check <- 7
+# 
+# check <- scenarios %>%
+#   filter(NPI_int == NPI_int_check, R0 == R0_check, specific_vaccine_start == 100, 
+#          detection_hosp == detection_hosp_check, vaccine_scenario == "both_vaccines")
+# index <- which(colnames(check2) %in% colnames(spec_bpsv))
+# check_reduced <- check2[, index]
+# 
+# x <- gtools::smartbind(check, spec_bpsv)
+# NPI_colours <- c("#C64191", "#F0803C", "#0D84A9")
+# ggplot(subset(model_outputs2, NPI_int %in% c(7))) +
+#   geom_line(aes(x = detection_time, y = 1000 * bpsv_deaths_averted / unique(baseline_scenarios$population_size), 
+#                 col = factor(NPI_int)), size = 1) +
+#   geom_point(aes(x = detection_time, y = 1000 * bpsv_deaths_averted / unique(baseline_scenarios$population_size), 
+#                  fill = factor(NPI_int)), size = 1.5, pch = 21) +
+#   theme_bw() +
+#   facet_wrap(specific_vaccine_start ~ ., nrow = 2, scales = "free_y", 
+#              labeller = as_labeller(c(`100` = "Specific Vaccine in 100 Days", `250` = "Specific Vaccine in 250 Days"))) +
+#   labs(x = "Detection Time (Days)", y = "Additional Deaths Averted By BPSV (Per 1,000 Population)") +
+#   guides(col = guide_legend(title = "NPI Scenario"),
+#          fill = "none") +
+#   scale_colour_manual(values = NPI_colours) +
+#   scale_fill_manual(values = NPI_colours) +
+#   ylim(c(0, NA)) +
+#   scale_y_continuous(position = "right") +
+#   theme(strip.background = element_rect(fill="#F5F5F5"),
+#         legend.position = "bottom")
+# 
+# 
+# ggplot(subset(model_outputs2, NPI_int %in% c(4, 7, 8))) +
+#   geom_line(aes(x = detection_time, y = 1000 * deaths_spec / unique(baseline_scenarios$population_size), 
+#                 col = factor(NPI_int)), size = 1) +
+#   geom_point(aes(x = detection_time, y = 1000 * deaths_spec / unique(baseline_scenarios$population_size), 
+#                  fill = factor(NPI_int)), size = 1.5, pch = 21) +
+#   theme_bw() +
+#   facet_grid(specific_vaccine_start ~ ., #scales = "free_y",
+#              labeller = as_labeller(c(`100` = "Specific Vaccine in 100 Days", `250` = "Specific Vaccine in 250 Days"))) +
+#   labs(x = "Hospitalisation Detection Threshold", y = "Total Deaths (Per 1,000 Population)") +
+#   guides(col = guide_legend(title = "NPI Scenario"),
+#          fill = "none") +
+#   ylim(c(0, NA)) +
+#   theme(strip.background = element_rect(fill="#F5F5F5"),
+#         legend.position = "right")
+# 
+# scale_colour_manual(values = c("#B8336A", "#726DA8", "#42A1B6"))
   
