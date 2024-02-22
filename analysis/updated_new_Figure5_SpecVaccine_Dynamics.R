@@ -316,7 +316,7 @@ bpsv_implementation_plots <- cowplot::plot_grid(bpsv_coverage_plot, bpsv_rate_pl
                                                 nrow = 2)
 fig5 <- cowplot::plot_grid(bpsv_implementation_plots, access_plot,
                            ncol = 2, rel_widths = c(0.6, 1))
-ggsave(filename = "figures/Figure_5_DiseaseSpecific_Dev_Access/NEW_Figure5_SpecVac_DevTime_Access.pdf",
+ggsave(filename = "figures/Figure_5_DiseaseSpecific_Dev_Access/Updated_NEW_Figure5_ImplementationAccess.pdf",
        plot = fig5,
        height = 6.25,
        width = 8.25)
