@@ -25,7 +25,7 @@ source(here::here("functions/run_sars_x.R"))
 source(here::here("functions/helper_functions.R"))
 
 # Loading in bp based detection and calculating detection times for the the different R0 values
-bp_df_long <- readRDS("outputs/Figure1_bp_detection_times.rds")
+bp_df_long <- readRDS("outputs/Figure1_branchingProcess_Containment/Figure1_bp_detection_times.rds")
 prob_hosp <- squire.page.sarsX:::probs_booster$prob_hosp
 arg_pop <- squire::get_population("Argentina")
 IHR <- sum(prob_hosp * arg_pop$n / sum(arg_pop$n)) 
@@ -146,7 +146,7 @@ vaccine_property_scenarios <- vaccine_property_scenarios %>%
 
 ## Running the model and summarising the output
 cores <- parallel::detectCores() - 2
-fresh_run <- TRUE
+fresh_run <- FALSE
 if (fresh_run) {
   plan(multisession, workers = cores) # multicore does nothing on windows as multicore isn't supported
   system.time({out <- future_pmap(vaccine_property_scenarios, run_sars_x, .progress = TRUE, .options = furrr_options(seed = 123))})
@@ -378,15 +378,9 @@ cowplot::plot_grid(disease_efficacy_plot2, spec_dev_plot, temp, nrow = 1,
                    labels = c("A", "B", NULL), rel_widths = c(2, 2, 1.5))                                                                                          
 
 temp <- cowplot::plot_grid(bpsv_inf_efficacy_plot, dur_protect_plot, nrow = 2, labels = c("B", "C"))
-cowplot::plot_grid(disease_efficacy_plot2, temp, spec_dev_plot, nrow = 1, 
+overall2 <- cowplot::plot_grid(disease_efficacy_plot2, temp, spec_dev_plot, nrow = 1, 
                    labels = c("A", "B", "D"), rel_widths = c(2, 1.5, 2))                                                                                          
-
-temp <- cowplot::plot_grid(bpsv_inf_efficacy_plot, dur_protect_plot, nrow = 2, labels = c("B", "C"))
-cowplot::plot_grid(disease_efficacy_plot2, temp, nrow = 1, 
-                   labels = c("A", "B"), rel_widths = c(2, 1.5))                                                                                          
-
-overall2 <- cowplot::plot_grid(disease_efficacy_plot2, temp2, ncol = 2, rel_widths = c(0.66, 1), labels = c("A", ""))
-ggsave(filename = "figures/Figure_4_BPSVProperties/updated_NEW_Figure4_BPSVProperties_Exploration.pdf",
+ggsave(filename = "figures/Figure_4_VaccineProperties/updated_NEW_Figure4_VaccineProperties_Exploration.pdf",
        plot = overall2,
        height = 7,
        width = 12.5)
