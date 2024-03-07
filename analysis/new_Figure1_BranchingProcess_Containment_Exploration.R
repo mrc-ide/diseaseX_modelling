@@ -29,8 +29,8 @@ check_final_size <- 2000
 initial_immune <- 0
 seeding_cases <- 5
 
-vaccine_efficacy_infection <- 0.75
-vaccine_efficacy_transmission <- 0.55
+vaccine_efficacy_infection <- 0.35 # 0.75
+vaccine_efficacy_transmission <- 0.35 # 0.50
 vaccine_logistical_delay <- 2
 R0_scan <- c(0.75, 1, 1.25, 1.5, 1.75, 2, 2.25, 2.5)
 iterations <- 200
@@ -44,12 +44,14 @@ if (fresh_run_R0_sensitivity_analysis) {
   SC1_storage_vacc_2weeks <- matrix(nrow = iterations, ncol = length(R0_scan))
   SC1_storage_vacc_1week <- matrix(nrow = iterations, ncol = length(R0_scan))
   SC1_storage_vacc_2days <- matrix(nrow = iterations, ncol = length(R0_scan))
+  SC1_storage_vacc_instant <- matrix(nrow = iterations, ncol = length(R0_scan))
   
   SC2_storage_nothing <- matrix(nrow = iterations, ncol = length(R0_scan))
   SC2_storage_vacc_2weeks <- matrix(nrow = iterations, ncol = length(R0_scan))
   SC2_storage_vacc_1week <- matrix(nrow = iterations, ncol = length(R0_scan))
   SC2_storage_vacc_2days <- matrix(nrow = iterations, ncol = length(R0_scan))
-
+  SC2_storage_vacc_instant <- matrix(nrow = iterations, ncol = length(R0_scan))
+  
   for (i in 1:length(R0_scan)) {
     for (j in 1:iterations) {
       
@@ -146,6 +148,36 @@ if (fresh_run_R0_sensitivity_analysis) {
                                                   vaccine_protection_delay = 2)
       SC2_storage_vacc_2days[j, i] <- sum(!is.na(SC2_vacc_2days$time_infection))
       
+      ## Instant
+      SC1_vacc_instant <- chain_sim_susc_ring_vacc2(offspring = "pois",
+                                                    mn_offspring = R0_scan[i],
+                                                    generation_time = SC1_generation_time,
+                                                    t0 = 0, tf = Inf, pop = pop, check_final_size = check_final_size, 
+                                                    initial_immune = initial_immune,
+                                                    seeding_cases = seeding_cases, 
+                                                    prop_asymptomatic = SC1_prop_asymptomatic,
+                                                    infection_to_onset = SC1_infection_to_onset,
+                                                    vaccine_start = vaccine_start, vaccine_coverage = vaccine_coverage,
+                                                    vaccine_efficacy_infection = vaccine_efficacy_infection,
+                                                    vaccine_efficacy_transmission = vaccine_efficacy_transmission,
+                                                    vaccine_logistical_delay = vaccine_logistical_delay,
+                                                    vaccine_protection_delay = 0.01)
+      SC1_storage_vacc_instant[j, i] <- sum(!is.na(SC1_vacc_instant$time_infection))
+      
+      SC2_vacc_instant <- chain_sim_susc_ring_vacc2(offspring = "pois",
+                                                    mn_offspring = R0_scan[i],
+                                                    generation_time = SC2_generation_time,
+                                                    t0 = 0, tf = Inf, pop = pop, check_final_size = check_final_size, 
+                                                    initial_immune = initial_immune,
+                                                    seeding_cases = seeding_cases, 
+                                                    prop_asymptomatic = SC2_prop_asymptomatic,
+                                                    infection_to_onset = SC2_infection_to_onset,
+                                                    vaccine_start = vaccine_start, vaccine_coverage = vaccine_coverage,
+                                                    vaccine_efficacy_infection = vaccine_efficacy_infection,
+                                                    vaccine_efficacy_transmission = vaccine_efficacy_transmission,
+                                                    vaccine_logistical_delay = vaccine_logistical_delay,
+                                                    vaccine_protection_delay = 0.01)
+      SC2_storage_vacc_instant[j, i] <- sum(!is.na(SC2_vacc_instant$time_infection))
       
       ## Nothing
       SC1_no_vacc <- chain_sim_susc_ring_vacc2(offspring = "pois",
@@ -205,10 +237,16 @@ if (fresh_run_R0_sensitivity_analysis) {
   SC2_2days <- data.frame(iteration = 1:iterations, scenario = "2days_delay", pathogen = "SARS-CoV-2", SC2_storage_vacc_2days)
   colnames(SC2_2days) <- c("iteration", "scenario", "pathogen", paste0("R0=", R0_scan))
   
+  SC1_instant <- data.frame(iteration = 1:iterations, scenario = "no_delay", pathogen = "SARS-CoV-1", SC1_storage_vacc_instant)
+  colnames(SC1_instant) <- c("iteration", "scenario", "pathogen", paste0("R0=", R0_scan))
+  SC2_instant <- data.frame(iteration = 1:iterations, scenario = "no_delay", pathogen = "SARS-CoV-2", SC2_storage_vacc_instant)
+  colnames(SC2_instant) <- c("iteration", "scenario", "pathogen", paste0("R0=", R0_scan))
+  
   overall_bp_df <- rbind(SC1_no_vacc, SC2_no_vacc, 
                          SC1_2weeks, SC2_2weeks, 
                          SC1_1week, SC2_1week,
-                         SC1_2days, SC2_2days) %>%
+                         SC1_2days, SC2_2days,
+                         SC1_instant, SC2_instant) %>%
     pivot_longer(cols = starts_with("R0"), names_to = "R0", values_to = "Epidemic Size") %>%
     mutate(actualR0 = as.numeric(gsub("R0=", "", R0)))
   saveRDS(object = overall_bp_df, file = "outputs/Figure1_branchingProcess_Containment/NEW_branchingProcess_R0_Scan.rds")
@@ -225,9 +263,11 @@ containment_df <- overall_bp_df %>%
   mutate(scenario = ifelse(scenario == "no_vaccination", "zno_vaccination", scenario)) %>%
   mutate(scenario = ifelse(scenario == "2days_delay", "bvacc_2days_protectDelay", scenario)) %>%
   mutate(scenario = ifelse(scenario == "1week_delay", "dvacc_1week_protectDelay", scenario)) %>%
-  mutate(scenario = ifelse(scenario == "2weeks_delay", "evacc_2weeks_protectDelay", scenario)) 
+  mutate(scenario = ifelse(scenario == "2weeks_delay", "evacc_2weeks_protectDelay", scenario)) %>%
+  mutate(scenario = ifelse(scenario == "no_delay", "avacc_no_delay", scenario)) 
 containment_df$scenario <- factor(containment_df$scenario, 
-                                  levels = c("bvacc_2days_protectDelay",
+                                  levels = c("avacc_no_delay",
+                                             "bvacc_2days_protectDelay",
                                              "dvacc_1week_protectDelay", 
                                              "evacc_2weeks_protectDelay",
                                              "zno_vaccination"))
@@ -238,8 +278,8 @@ containment_plot <- ggplot(containment_df2, aes(x = actualR0, y = 100 * proporti
   geom_point() +
   theme_bw() +
   facet_grid(.~pathogen) + 
-  scale_colour_manual(values = c("#88C5EE", "#236897", "#13496E", "black"), 
-                      labels = c("2 Days", "1 Week", "2 Weeks", "No Vaccination"),
+  scale_colour_manual(values = c("#CA2E6B", "#88C5EE", "#236897", "#13496E", "black"), 
+                      labels = c("No Delay", "2 Days", "1 Week", "2 Weeks", "No Vaccination"),
                       name = "Vaccine\nProtection\nDelay",
                       guide = guide_legend(reverse = TRUE)) +
   labs(x = "R0", y = "% Outbreaks Contained") +

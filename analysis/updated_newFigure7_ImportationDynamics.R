@@ -184,12 +184,12 @@ model_outputs2 <- model_outputs2 %>%
            -days_source_detection_is_ahead_arrival_secondary < 60)
 
 deaths_averted <- ggplot(model_outputs2) +
-  annotate("rect", xmin = -105, xmax = 0, ymin = -Inf, ymax = Inf, fill = "grey", alpha = 0.1) +
-  annotate("rect", xmin = 0, xmax = 100, ymin = -Inf, ymax = Inf, fill = "white", alpha = 0.1) +
-  geom_line(aes(x = -days_source_detection_is_ahead_arrival_secondary, 
+  annotate("rect", xmin = -105, xmax = 0, ymin = -Inf, ymax = Inf, fill = "white", alpha = 0.1) +
+  annotate("rect", xmin = 0, xmax = 100, ymin = -Inf, ymax = Inf, fill = "grey", alpha = 0.1) +
+  geom_line(aes(x = days_source_detection_is_ahead_arrival_secondary, 
                 y = bpsv_deaths_averted * 1000 / population_size, 
                 col = interaction(factor(R0), before_after))) +
-  geom_point(aes(x = -days_source_detection_is_ahead_arrival_secondary, 
+  geom_point(aes(x = days_source_detection_is_ahead_arrival_secondary, 
                  y = bpsv_deaths_averted * 1000 / population_size,
                  col = interaction(factor(R0), before_after))) +
   facet_grid(NPI_scenario ~ specific_vaccine_start,
@@ -199,7 +199,7 @@ deaths_averted <- ggplot(model_outputs2) +
                                       `cModerate NPIs`="Moderate NPIs", 
                                       `dStringent NPIs`="Stringent NPIs"))) +
   theme_bw() +
-  scale_colour_manual(values = c("#E7CAAA", "#E3B273", "#DB9939", "#EBF2D3", "#DBE8B9", "#BED78B")) +
+  scale_colour_manual(values = c( "#EBF2D3", "#DBE8B9", "#BED78B", "#E7CAAA", "#E3B273", "#DB9939")) +
   scale_y_continuous(position = "left") +
   scale_x_continuous(breaks = c(-60, -30, 0, 30, 60),
                      labels = c("+60", "+30", "0", "-30", "-60")) +
@@ -211,16 +211,16 @@ deaths_averted <- ggplot(model_outputs2) +
         strip.background = element_rect(fill="white")) +
   coord_cartesian(xlim = c(-60, 60))
 
-ggsave(filename = "figures/Figure_7_SecondaryCountry_Exploration/NEW_Figure7_Secondary_TimingComparison_DifferentNPIs_CalendarDays.pdf",
-       plot = deaths_averted,
-       width = 9.5,
-       height = 6)
-
-secondary_legend <- cowplot::plot_grid(deaths_averted + theme(legend.position = "right"))
-ggsave(filename = "figures/Figure_7_SecondaryCountry_Exploration/updated_NEW_Figure7_legend.pdf",
-       plot = secondary_legend,
-       width = 9.5,
-       height = 6)
+# ggsave(filename = "figures/Figure_7_SecondaryCountry_Exploration/NEW_Figure7_Secondary_TimingComparison_DifferentNPIs_CalendarDays.pdf",
+#        plot = deaths_averted,
+#        width = 9.5,
+#        height = 6)
+# 
+# secondary_legend <- cowplot::plot_grid(deaths_averted + theme(legend.position = "right"))
+# ggsave(filename = "figures/Figure_7_SecondaryCountry_Exploration/updated_NEW_Figure7_legend.pdf",
+#        plot = secondary_legend,
+#        width = 9.5,
+#        height = 6)
 
 deaths_averted2 <- deaths_averted + 
   facet_grid(specific_vaccine_start ~ NPI_scenario,
