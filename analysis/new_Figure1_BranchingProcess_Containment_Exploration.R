@@ -25,7 +25,7 @@ SC2_prop_asymptomatic <- 0.15
 vaccine_start <- 21 # detection + logistical delay of 3 weeks to vaccination initiation (need to get implementation based on cases not calendar time in)
 vaccine_coverage <- 0.8
 pop <- 10^10
-check_final_size <- 2000
+check_final_size <- 2500
 initial_immune <- 0
 seeding_cases <- 5
 

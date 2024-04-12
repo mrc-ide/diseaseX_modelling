@@ -11,7 +11,7 @@ default <- define_default_params()
 # Getting the detection time
 R0_subset <- c(1.5, 2.5, 3.5)
 detection_theshold_hosp <- 5
-bp_df_long <- readRDS("outputs/Figure1_bp_detection_times.rds")
+bp_df_long <- readRDS("outputs/Figure1_branchingProcess_Containment/Figure1_bp_detection_times.rds")
 detection_threshold_inf <- unique(bp_df_long$detection)[detection_theshold_hosp]
 bp_subset <- bp_df_long %>%
   filter(R0 %in% R0_subset, detection == detection_threshold_inf, metric == "Daily Incidence") %>%
