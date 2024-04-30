@@ -80,12 +80,13 @@ spatial_bp_geog_vacc <- function(mn_offspring,
     time_infection = NA_real_,
     n_offspring = integer(max_cases),
     n_offspring_new = integer(max_cases),
+    n_offspring_new_new = integer(max_cases),
     offspring_generated = FALSE,
     distance = NA_real_,
     x_coordinate = NA_real_,
     y_coordinate = NA_real_,
     overall_distance = NA_real_,
-    hospitalised = NA_integer_, # why is this NA_integer and the others integer(max_cases) - was there an issue with "==" at some point?
+    hospitalised = NA_integer_, 
     vaccinated = integer(max_cases),
     time_vaccinated = numeric(max_cases),
     vaccinated_before_infection = integer(max_cases),
@@ -102,12 +103,13 @@ spatial_bp_geog_vacc <- function(mn_offspring,
     time_infection = t0 + seq(from = 0, to = 0.01, length.out = seeding_cases),
     n_offspring = NA_integer_,
     n_offspring_new = NA_integer_,
+    n_offspring_new_new = NA_integer_,
     offspring_generated = FALSE,
     distance = 0,
     x_coordinate = 0,
     y_coordinate = 0,
     overall_distance = 0,
-    hospitalised = 0,
+    hospitalised = rbinom(n = seeding_cases, size = 1, prob = prob_hosp),
     vaccinated = 0,
     time_vaccinated = NA,
     vaccinated_before_infection = NA,
@@ -133,7 +135,7 @@ spatial_bp_geog_vacc <- function(mn_offspring,
     n_offspring <- offspring_fun(1) 
     tdf$n_offspring[idx] <- n_offspring
     if (index_vaccinated == 1) {
-      if (time_protected < time_infection_index) {
+      if (!is.na(time_protected) & time_protected < time_infection_index) {
         n_offspring <- sum(rbinom(n = n_offspring, size = 1, prob = 1 - vaccine_efficacy_transmission))
       }
     }
@@ -169,56 +171,80 @@ spatial_bp_geog_vacc <- function(mn_offspring,
         tdf[(current_max_id+1):(current_max_id+n_offspring), "time_vaccinated"] <- NA
         tdf[(current_max_id+1):(current_max_id+n_offspring), "vaccinated_before_infection"] <- NA
         tdf[(current_max_id+1):(current_max_id+n_offspring), "time_protected"] <- NA
-        tdf[(current_max_id+1):(current_max_id+n_offspring), "protected_after_infection"] <- NA
+        tdf[(current_max_id+1):(current_max_id+n_offspring), "protected_before_infection"] <- NA
         tdf[(current_max_id+1):(current_max_id+n_offspring), "asymptomatic"] <- rbinom(n = n_offspring, size = 1, prob = prop_asymptomatic)
         tdf[(current_max_id+1):(current_max_id+n_offspring), "n_offspring"] <- NA
         tdf[(current_max_id+1):(current_max_id+n_offspring), "n_offspring_new"] <- NA
+        tdf[(current_max_id+1):(current_max_id+n_offspring), "n_offspring_new_new"] <- NA
         tdf[(current_max_id+1):(current_max_id+n_offspring), "offspring_generated"] <- FALSE
         tdf[(current_max_id+1):(current_max_id+n_offspring), "x_coordinate"] <- new_locations$x_coordinate
         tdf[(current_max_id+1):(current_max_id+n_offspring), "y_coordinate"] <- new_locations$y_coordinate
         tdf[(current_max_id+1):(current_max_id+n_offspring), "distance"] <- new_locations$distance
         tdf[(current_max_id+1):(current_max_id+n_offspring), "overall_distance"] <- new_locations$overall_distance
       } else {
+
+        ### Calculating the time when the nth hospitalisation gets admitted and they trigger the campaign
+        temp <- tdf[tdf$hospitalised == 1 & !is.na(tdf$hospitalised), ]     # getting all the hospitalised individuals
+        time_trigger_infection <- temp$time_infection[detection_threshold]  # getting the time of infection of the trigger individual
+        x_trigger_infection <- temp$x_coordinate[detection_threshold]       # x-coord of trigger individual
+        y_trigger_infection <- temp$y_coordinate[detection_threshold]       # y-coord of trigger individual
         
-        are_they_vaccinated <- vector(mode = "integer", length = n_offspring) ## vector of whether secondary infections get vaccinated
-        did_they_have_potential_protection <- vector(mode = "integer", length = n_offspring)
-        infection_retained <- vector(mode = "integer", length = n_offspring)  ## vector of whether secondary infections get retained (i.e. not prevented by vaccination)
-        infection_retained[1:length(infection_retained)] <- 1                 ## default to infections being retained; and then flow through below to see if they get removed
         
-        ### calculate the time when the nth hospitalisation gets admitted and they trigger the campaign
-        temp <- tdf[tdf$hospitalised == 1 & !is.na(tdf$hospitalised), ] # getting the hospitalised
-        time_trigger_infection <- temp$time_infection[detection_threshold]
-        x_trigger_infection <- temp$x_coordinate[detection_threshold]
-        y_trigger_infection <- temp$y_coordinate[detection_threshold]
+        ## Creating storage for various quantities relating to vaccination
         time_to_secondary_vaccination <- time_trigger_infection + hospitalisation_delay(1) + vaccine_logistical_delay  ## Time when geographical vaccination campaign starts and people vaccinated
-        time_to_secondary_vaccination_protection <- time_to_secondary_vaccination + vaccine_protection_delay       ## Time between  geographical vaccination campaign starting and people protected by the vaccination
+        time_to_secondary_vaccination_protection <- time_to_secondary_vaccination + vaccine_protection_delay           ## Time between  geographical vaccination campaign starting and people protected by the vaccination
+        
+        are_they_vaccinated <- vector(mode = "integer", length = n_offspring)                ## vector of whether secondary infections get vaccinated
+        did_they_have_potential_protection <- vector(mode = "integer", length = n_offspring) ## vector of whether vaccinnated AND protection has developed
+        were_they_protected <- vector(mode = "integer", length = n_offspring)                ## did vaccination successfully protect them
+        infection_retained <- vector(mode = "integer", length = n_offspring)                 ## vector of whether secondary infections get retained (i.e. not prevented by vaccination)
+        infection_retained[1:length(infection_retained)] <- 1                                ## default to infections being retained; and then flow through below to see if they get removed
+        
         for (i in 1:n_offspring) {
           
+          ## Calculating the distance the new infection is from the trigger infection
           distance_from_trigger_x <- abs(new_locations$x_coordinate[i] - x_trigger_infection)
           distance_from_trigger_y <- abs(new_locations$y_coordinate[i] - y_trigger_infection)
           distance_from_trigger <- sqrt(distance_from_trigger_x^2 + distance_from_trigger_y^2)
           
-          if (time_to_secondary_vaccination <= new_times[i] & distance_from_trigger <= vaccine_campaign_radius) { # if infection occurs AFTER (potential) vaccination
+          ## If they're within the radius and can be potentially vaccinated before they would otherwise be infected
+          if (time_to_secondary_vaccination <= (t_parent + new_times[i]) & distance_from_trigger <= vaccine_campaign_radius) { # if infection occurs AFTER (potential) vaccination
             are_they_vaccinated[i] <- rbinom(n = 1, size = 1, prob = vaccine_coverage)
-            did_they_have_potential_protection[i] <- ifelse(time_to_secondary_vaccination_protection <= new_times[i], 1, 0)
-            were_they_protected <- rbinom(n = 1, size = 1, prob = vaccine_efficacy_infection * did_they_have_potential_protection[i])
-            infection_retained[i] <- ifelse(are_they_vaccinated[i] == 1 & were_they_protected == 1, 0, 1)
+            did_they_have_potential_protection[i] <- ifelse(are_they_vaccinated[i] == 1 & time_to_secondary_vaccination_protection <= (t_parent + new_times[i]), 1, 0)
+            were_they_protected[i] <- rbinom(n = 1, size = 1, prob = vaccine_efficacy_infection * did_they_have_potential_protection[i])
+            infection_retained[i] <- ifelse(are_they_vaccinated[i] == 1 & were_they_protected[i] == 1, 0, 1)
           } else { # if infection occurs BEFORE vaccination
             are_they_vaccinated[i] <- 0 ## eliding together "unvaccinated" and "vaccinated after infection occurs"
-            infection_retained[i] <- 1 ## note that implicitly here we're implicitly "saying" these folks aren't vaccinated.
+            infection_retained[i] <- 1 ## note that implicitly here we're "saying" these folks aren't vaccinated.
           }
         }
         new_n_offspring <- sum(infection_retained)
+        tdf$n_offspring_new_new[idx] <- new_n_offspring
         
+        ## Adding the infections that are retained into our overall dataframe 
         if (new_n_offspring != 0) {
           
-          new_new_times <- new_times[which(infection_retained == 1)]
-          new_new_locations <- new_locations[which(infection_retained == 1), ]
-          vaccinated <- ifelse(are_they_vaccinated[which(infection_retained == 1)] == 0, 0, 1)                                            # of the retained infections, which are vaccinated
-          time_vaccinated <- ifelse(are_they_vaccinated == 1, time_to_secondary_vaccination, NA)[which(infection_retained == 1)]           # of the retained infections, when are they vaccinated (relative to infection time of index)
-          vaccinated_before_infection <- ifelse(are_they_vaccinated[which(infection_retained == 1)] == 0, NA, 1)                           # (currently we combine all individuals not vaccinated and vaccinated after infection into "unvaccinated", so all vaccinated individuals necessarily got vaccinated before infection)
-          time_protected <- ifelse(are_they_vaccinated == 1, time_to_secondary_vaccination_protection, NA)[which(infection_retained == 1)] # of the retained infections, when are they protected (relative to infection time of index)
-          protected_before_infection <- ifelse(is.na(time_protected), NA, ifelse(time_protected <= new_new_times, 1, 0))
+          ## Defining index for which infections we keep (i.e. those vaccination doesn't successfully protect)
+          retained_infections_index <- which(infection_retained == 1)
+          
+          ## Subsetting the times and locations of retained infections
+          new_new_times <- new_times[retained_infections_index]                                                                      # The time of infection for retained infections
+          new_new_locations <- new_locations[retained_infections_index, ]                                                            # The locations of retained infections
+          
+          ## Getting vaccination status and timing of vaccination relative to infection
+          vaccinated <- ifelse(are_they_vaccinated[retained_infections_index] == 1, 1, 0)                                            # of the retained infections, which are vaccinated
+          time_vaccinated <- ifelse(are_they_vaccinated[retained_infections_index] == 1, time_to_secondary_vaccination, NA)          # of the retained infections, when are they vaccinated (relative to infection time of index)
+          vaccinated_before_infection <- ifelse(are_they_vaccinated[retained_infections_index] == 0, NA, 
+                                          ifelse(are_they_vaccinated[retained_infections_index] == 1 & 
+                                                   time_to_secondary_vaccination <= (t_parent + new_new_times),
+                                                1, 0))
+          time_protected <- ifelse(did_they_have_potential_protection[retained_infections_index] == 1, time_to_secondary_vaccination_protection, NA)
+          protected_before_infection <- ifelse(are_they_vaccinated[retained_infections_index] == 0, NA, 
+                                          ifelse(are_they_vaccinated[which(infection_retained == 1)] == 1 & 
+                                                 time_to_secondary_vaccination_protection <= (t_parent + new_new_times), 
+                                               1, 0))
+          
+          ## Calculating whether individuals are hospitalised
           hospitalised_vec <- vector(mode = "integer", length = new_n_offspring)
           for (i in 1:length(protected_before_infection)) {
             if (is.na(protected_before_infection[i]) | (!is.na(protected_before_infection[i]) & protected_before_infection[i] == 0)) {
@@ -234,13 +260,14 @@ spatial_bp_geog_vacc <- function(mn_offspring,
           tdf[(current_max_id+1):(current_max_id+new_n_offspring), "time_infection"] <- new_new_times + t_parent
           tdf[(current_max_id+1):(current_max_id+new_n_offspring), "vaccinated"] <- vaccinated
           tdf[(current_max_id+1):(current_max_id+new_n_offspring), "hospitalised"] <- hospitalised_vec
-          tdf[(current_max_id+1):(current_max_id+new_n_offspring), "time_vaccinated"] <- time_vaccinated + t_parent
+          tdf[(current_max_id+1):(current_max_id+new_n_offspring), "time_vaccinated"] <- time_vaccinated #  + t_parent
           tdf[(current_max_id+1):(current_max_id+new_n_offspring), "vaccinated_before_infection"] <- vaccinated_before_infection
-          tdf[(current_max_id+1):(current_max_id+new_n_offspring), "time_protected"] <- time_protected + t_parent
+          tdf[(current_max_id+1):(current_max_id+new_n_offspring), "time_protected"] <- time_protected # + t_parent
           tdf[(current_max_id+1):(current_max_id+new_n_offspring), "protected_before_infection"] <- protected_before_infection
           tdf[(current_max_id+1):(current_max_id+new_n_offspring), "asymptomatic"] <- rbinom(n = new_n_offspring, size = 1, prob = prop_asymptomatic)
           tdf[(current_max_id+1):(current_max_id+new_n_offspring), "n_offspring"] <- NA
           tdf[(current_max_id+1):(current_max_id+new_n_offspring), "n_offspring_new"] <- NA
+          tdf[(current_max_id+1):(current_max_id+new_n_offspring), "n_offspring_new_new"] <- NA
           tdf[(current_max_id+1):(current_max_id+new_n_offspring), "offspring_generated"] <- FALSE
           tdf[(current_max_id+1):(current_max_id+new_n_offspring), "x_coordinate"] <- new_new_locations$x_coordinate
           tdf[(current_max_id+1):(current_max_id+new_n_offspring), "y_coordinate"] <- new_new_locations$y_coordinate
