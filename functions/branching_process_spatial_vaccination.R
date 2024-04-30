@@ -218,6 +218,7 @@ spatial_bp_geog_vacc <- function(mn_offspring,
             infection_retained[i] <- 1 ## note that implicitly here we're "saying" these folks aren't vaccinated.
           }
         }
+        print(sum(infection_retained))
         new_n_offspring <- sum(infection_retained)
         tdf$n_offspring_new_new[idx] <- new_n_offspring
         
@@ -275,6 +276,8 @@ spatial_bp_geog_vacc <- function(mn_offspring,
           tdf[(current_max_id+1):(current_max_id+new_n_offspring), "overall_distance"] <- new_new_locations$overall_distance
         }
       }
+    } else {
+      tdf$n_offspring_new_new[idx] <- 0
     }
     tdf <- tdf[tdf$time_infection <= tf, ]
     tdf <- tdf[order(tdf$time_infection, tdf$id), ]
