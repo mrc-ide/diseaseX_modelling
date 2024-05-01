@@ -3,7 +3,7 @@ spatial_calc <- function(parent_overall_distance, parent_x_coord, parent_y_coord
                          n_offspring, spatial_kernel) {
   
   
-  ## Drawing spatial - note that currently time and distance/direction are completely uncorrelate atm
+  ## Drawing spatial - note that currently time and distance/direction are completely uncorrelated atm
   distance <- spatial_kernel(n_offspring)
   direction <- runif(n_offspring, 0, 2*pi)
   direction_degrees <- 360 * direction / (2 * pi) 
@@ -25,27 +25,31 @@ spatial_calc <- function(parent_overall_distance, parent_x_coord, parent_y_coord
       tdf[i, "x_coordinate"] <- parent_x_coord + opposite[i]
       tdf[i, "y_coordinate"] <- parent_y_coord + adjacent[i]
       tdf[i, "distance"] <- distance[i]
-      tdf[i, "overall_distance"] <- parent_overall_distance + distance[i]
-      
+      tdf[i, "overall_distance"] <- sqrt(tdf[i, "x_coordinate"]^2 + tdf[i, "y_coordinate"]^2)
     } else if (direction_degrees[i] >= 90 & direction_degrees[i] < 180) {
       tdf[i, "x_coordinate"] <- parent_x_coord + opposite[i]
       tdf[i, "y_coordinate"] <- parent_y_coord - adjacent[i]
       tdf[i, "distance"] <- distance[i]
-      tdf[i, "overall_distance"] <- parent_overall_distance + distance[i]
+      tdf[i, "overall_distance"] <- sqrt(tdf[i, "x_coordinate"]^2 + tdf[i, "y_coordinate"]^2)
     } else if (direction_degrees[i] >= 180 & direction_degrees[i] < 270) {
       tdf[i, "x_coordinate"] <- parent_x_coord - opposite[i]
       tdf[i, "y_coordinate"] <- parent_y_coord - adjacent[i]
       tdf[i, "distance"] <- distance[i]
-      tdf[i, "overall_distance"] <- parent_overall_distance + distance[i]
+      tdf[i, "overall_distance"] <- sqrt(tdf[i, "x_coordinate"]^2 + tdf[i, "y_coordinate"]^2)
     } else {
       tdf[i, "x_coordinate"] <- parent_x_coord - opposite[i]
       tdf[i, "y_coordinate"] <- parent_y_coord + adjacent[i]
       tdf[i, "distance"] <- distance[i]
-      tdf[i, "overall_distance"] <- parent_overall_distance + distance[i]
+      tdf[i, "overall_distance"] <- sqrt(tdf[i, "x_coordinate"]^2 + tdf[i, "y_coordinate"]^2)
     }
   }
   return(tdf)
 }
+
+#### REVIEW THE ENTIRE CODEBASE BELOW AGAIN
+#### FIX SPATIAL OVERALL DISTANCE AND DON'T MAKE IT PART OF PARENT OVERALL DISTANCE,
+#### MAKE IT EXPLICITLY "OVERALL DISTANCE FROM ORIGIN" AND THEN CALCULATE MANUALLY
+#### RATHER THAN WITH PARENT_OVERALL_DISTANCE
 
 ## spatial vaccination branching process
 spatial_bp_geog_vacc <- function(mn_offspring, 
@@ -218,7 +222,6 @@ spatial_bp_geog_vacc <- function(mn_offspring,
             infection_retained[i] <- 1 ## note that implicitly here we're "saying" these folks aren't vaccinated.
           }
         }
-        print(sum(infection_retained))
         new_n_offspring <- sum(infection_retained)
         tdf$n_offspring_new_new[idx] <- new_n_offspring
         
@@ -261,9 +264,9 @@ spatial_bp_geog_vacc <- function(mn_offspring,
           tdf[(current_max_id+1):(current_max_id+new_n_offspring), "time_infection"] <- new_new_times + t_parent
           tdf[(current_max_id+1):(current_max_id+new_n_offspring), "vaccinated"] <- vaccinated
           tdf[(current_max_id+1):(current_max_id+new_n_offspring), "hospitalised"] <- hospitalised_vec
-          tdf[(current_max_id+1):(current_max_id+new_n_offspring), "time_vaccinated"] <- time_vaccinated #  + t_parent
+          tdf[(current_max_id+1):(current_max_id+new_n_offspring), "time_vaccinated"] <- time_vaccinated
           tdf[(current_max_id+1):(current_max_id+new_n_offspring), "vaccinated_before_infection"] <- vaccinated_before_infection
-          tdf[(current_max_id+1):(current_max_id+new_n_offspring), "time_protected"] <- time_protected # + t_parent
+          tdf[(current_max_id+1):(current_max_id+new_n_offspring), "time_protected"] <- time_protected
           tdf[(current_max_id+1):(current_max_id+new_n_offspring), "protected_before_infection"] <- protected_before_infection
           tdf[(current_max_id+1):(current_max_id+new_n_offspring), "asymptomatic"] <- rbinom(n = new_n_offspring, size = 1, prob = prop_asymptomatic)
           tdf[(current_max_id+1):(current_max_id+new_n_offspring), "n_offspring"] <- NA
