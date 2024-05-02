@@ -35,26 +35,29 @@ vaccine_protection_delay <- 7
 
 ### Other parameters
 pop <- 10^10
-check_final_size <- 2000
+check_final_size <- 4000
 initial_immune <- 0
 seeding_cases <- 3
 
 ### Sensitivity analysis parameters
 R0_scan <- c(0.75, 1, 1.25, 1.5, 1.75, 2)
 surveillance_scan <- c(1, 10, 25, 50, 100)
-iterations <- 10
+iterations <- 100
 
+library(future)
+library(future.apply)
+plan(multisession, workers = 5, future.seed=TRUE)
 SC1_storage <- array(data = NA, dim = c(iterations, length(R0_scan), length(surveillance_scan), length(spatial_ratio_scan)))
 SC2_storage <- array(data = NA, dim = c(iterations, length(R0_scan), length(surveillance_scan), length(spatial_ratio_scan)))
 for (i in 1:length(R0_scan)) {
   for (j in 1:length(surveillance_scan)) {
     for (k in 1:length(spatial_ratio_scan)) {
-      for (l in 1:iterations) {
-        
-        ## Generatin the vaccination radius according to the spatial_ratio scan
+      
+      # Setup parallel processing for the iterations
+      results <- future_lapply(1:iterations, function(l) {
         vaccination_radius <- spatial_ratio_scan[k] * mu
         
-        ## SARS-CoV-1 Pathogen Archetype
+        # SARS-CoV-1 Pathogen Archetype
         SC1_temp <- spatial_bp_geog_vacc(mn_offspring = R0_scan[i],
                                          generation_time = SC1_generation_time,
                                          spatial_kernel = spatial_kernel,
@@ -72,9 +75,9 @@ for (i in 1:length(R0_scan)) {
                                          vaccine_efficacy_disease = vaccine_efficacy_disease,
                                          vaccine_logistical_delay = vaccine_logistical_delay,
                                          vaccine_protection_delay = vaccine_protection_delay)
-        SC1_storage[l, i, j, k] <- sum(!is.na(SC1_temp$time_infection))
+        SC1_count <- sum(!is.na(SC1_temp$time_infection))
         
-        ## SARS-CoV-2 Pathogen Archetype
+        # SARS-CoV-2 Pathogen Archetype
         SC2_temp <- spatial_bp_geog_vacc(mn_offspring = R0_scan[i],
                                          generation_time = SC2_generation_time,
                                          spatial_kernel = spatial_kernel,
@@ -92,8 +95,15 @@ for (i in 1:length(R0_scan)) {
                                          vaccine_efficacy_disease = vaccine_efficacy_disease,
                                          vaccine_logistical_delay = vaccine_logistical_delay,
                                          vaccine_protection_delay = vaccine_protection_delay)
-        SC2_storage[l, i, j, k] <- sum(!is.na(SC2_temp$time_infection))
+        SC2_count <- sum(!is.na(SC2_temp$time_infection))
         
+        list(SC1_count = SC1_count, SC2_count = SC2_count)
+      })
+      
+      # Extract results and store them in the respective storage arrays
+      for (l in 1:iterations) {
+        SC1_storage[l, i, j, k] <- results[[l]]$SC1_count
+        SC2_storage[l, i, j, k] <- results[[l]]$SC2_count
       }
     }
   }
