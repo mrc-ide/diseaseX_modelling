@@ -46,7 +46,7 @@ iterations <- 100
 
 library(future)
 library(future.apply)
-plan(multisession, workers = 5, future.seed=TRUE)
+plan(multisession, workers = 20, future.seed=TRUE)
 SC1_storage <- array(data = NA, dim = c(iterations, length(R0_scan), length(surveillance_scan), length(spatial_ratio_scan)))
 SC2_storage <- array(data = NA, dim = c(iterations, length(R0_scan), length(surveillance_scan), length(spatial_ratio_scan)))
 for (i in 1:length(R0_scan)) {
@@ -113,10 +113,12 @@ for (i in 1:length(R0_scan)) {
 SC1_reshaped <- reshape2::melt(SC1_storage)
 colnames(SC1_reshaped) <- c("iteration", "R0", "surveillance", "spatial_ratio", "outbreak_size")
 SC1_reshaped$pathogen <- "SARS-CoV-1"
+saveRDS(SC1_reshaped, "outputs/Figure1_branchingProcess_Containment/spatial_vax_sens_SC1.rds")
 
 SC2_reshaped <- reshape2::melt(SC2_storage)
 colnames(SC2_reshaped) <- c("iteration", "R0", "surveillance", "spatial_ratio", "outbreak_size")
 SC2_reshaped$pathogen <- "SARS-CoV-2"
+saveRDS(SC2_reshaped, "outputs/Figure1_branchingProcess_Containment/spatial_vax_sens_SC2.rds")
 
 overall <- rbind(SC1_reshaped, SC2_reshaped) %>%
   mutate(contained = ifelse(outbreak_size < (0.9 * check_final_size), 1, 0)) %>%
