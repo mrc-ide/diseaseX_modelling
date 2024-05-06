@@ -199,118 +199,140 @@ SC2_reshaped2 <- rbind(SC2_reshaped, SC2_no_vaccination)
 SC2_reshaped2$pathogen <- "SARS-CoV-2"
 saveRDS(SC2_reshaped2, "outputs/Figure1_branchingProcess_Containment/spatial_vax_sens_SC2.rds")
 
+SC1_reshaped <- readRDS("outputs/Figure1_branchingProcess_Containment/spatial_vax_sens_SC1.rds")
+SC2_reshaped <- readRDS("outputs/Figure1_branchingProcess_Containment/spatial_vax_sens_SC2.rds")
+
 overall <- rbind(SC1_reshaped, SC2_reshaped) %>%
   mutate(contained = ifelse(outbreak_size < (0.9 * check_final_size), 1, 0)) %>%
-  group_by(R0, surveillance, spatial_ratio, pathogen) %>%
+  group_by(R0, surveillance, spatial_ratio, vaccine_efficacy, vaccine, pathogen) %>%
   summarise(proportion_contained = sum(contained) / iterations)
 
-ggplot(overall, aes(x = R0, y = proportion_contained, col = factor(surveillance))) +
-  geom_line(linewidth = 1) +
+### Plotting the output
+vaccine_efficacy_index <- which(vaccine_efficacy_infection_scan == 0.35)
+spatial_ratio_index <- which(spatial_ratio_scan == 50)
+surveillance_scan_index <- which(surveillance_scan == 10)
+surveillance_scan_exclude <- which(surveillance_scan == 25)
+
+overall2 <- overall %>%
+  filter(vaccine_efficacy == vaccine_efficacy_index | vaccine_efficacy == 0 ,
+         spatial_ratio == spatial_ratio_index | spatial_ratio == 0,
+         surveillance != surveillance_scan_exclude) %>%
+  mutate(R0 = ifelse(vaccine == "no_vaccine", R0, R0_scan[R0]))
+
+fig1c <- ggplot(overall2, aes(x = R0, y = 100 * proportion_contained, col = factor(surveillance))) +
+  geom_line() +
+  geom_point() +
   theme_bw() +
-  scale_x_continuous(breaks = 1:length(R0_scan), labels = R0_scan) +
-  facet_grid(pathogen ~ spatial_ratio,
-             labeller = as_labeller(c(`1`= "Radius 1x Average Inf. Dist",
-                                      `2`= "Radius 10x Average Inf. Dist",
-                                      `3`= "Radius 25x Average Inf. Dist",
-                                      `4`= "Radius 50x Average Inf. Dist",
-                                      `5`= "Radius 100x Average Inf. Dist",
-                                      `SARS-CoV-1` = "SARS-CoV-1",
+  facet_grid(. ~ pathogen,
+             labeller = as_labeller(c(`SARS-CoV-1` = "SARS-CoV-1",
                                       `SARS-CoV-2` = "SARS-CoV-2"))) +
-  scale_colour_manual(labels = surveillance_scan,
-                      values = c("#FEC9F1", "#E899DC", "#D387AB", "#B279A7", "#948D9B"),
-                      name = "Surveillance\nThreshold\nTrigger")
+  scale_colour_manual(labels = c("No\nVaccine", paste0(surveillance_scan, " Hosp.")),
+                      values = c("#474747", c("#E3AFCB", "#D474A4", "#B52F7B", "#9C105A", "#6B0045")),
+                      name = "Surveillance\nThreshold\nTrigger") +
+  labs(y = "% Outbreaks Contained") +
+  theme_bw() +
+  theme(strip.background = element_rect(fill = "white"))
 
+R0_surveillance <- overall %>%
+  mutate(R0 = ifelse(vaccine == "no_vaccine", R0, R0_scan[R0])) %>%
+  filter(pathogen == "SARS-CoV-2" & 
+           spatial_ratio == spatial_ratio_index & 
+           vaccine_efficacy == vaccine_efficacy_index & 
+           R0 > 1 & 
+           vaccine == "yes_vaccine")
+R0_surveillance_plot <- ggplot(R0_surveillance, aes(x = R0, y = surveillance , fill = 100 * proportion_contained)) +
+  geom_tile(colour = "black") +
+  scale_fill_viridis_c(option = "rocket", limits = c(0, 100), begin = 0.175, end = 1, name = "Proportion\nContained",
+                       direction = -1) +
+  scale_y_continuous(breaks = 1:length(unique(R0_surveillance$surveillance)), labels = surveillance_scan) +
+  scale_x_continuous(breaks = c(1.5, 2.0, 2.5), labels = c(1.5, 2, 2.5)) +
+  labs(x = "R0",
+       y = "Surveillance Threshold") +
+  theme(axis.text = element_text(angle = 0),
+        plot.title = element_text(hjust = 0.5, size = 20, face = "bold"),
+        legend.title = element_text(size = 12),
+        legend.text = element_text(size = 12),
+        legend.position = "right",
+        panel.border = element_rect(linetype = "solid", fill = NA, linewidth = 0.5)) +  # Add black border
+  coord_cartesian(expand = FALSE)
 
-# x <- reshape2::melt(storage)
-# colnames(x) <- c("iteration", "R0", "surveillance", "outbreak_size")
-# test <- x %>%
-#   mutate(contained = ifelse(outbreak_size < (0.9 * check_final_size), 1, 0)) %>%
-#   group_by(R0, surveillance) %>%
-#   summarise(proportion_contained = sum(contained) / iterations)
-# ggplot(test, aes(x = R0, y = proportion_contained, col = factor(surveillance))) +
-#   geom_line(linewidth = 1) +
-#   scale_x_continuous(labels = R0_scan) +
+R0_spatial <- overall %>%
+  mutate(R0 = ifelse(vaccine == "no_vaccine", R0, R0_scan[R0])) %>%
+  filter(pathogen == "SARS-CoV-2" & 
+           surveillance == surveillance_scan_index & 
+           vaccine_efficacy == vaccine_efficacy_index & 
+           R0 > 1 & 
+           vaccine == "yes_vaccine")
+R0_spatial_plot <- ggplot(R0_spatial, aes(x = R0, y = spatial_ratio, fill = 100 * proportion_contained)) +
+  geom_tile(colour = "black") +
+  scale_fill_viridis_c(option = "rocket", limits = c(0, 100), begin = 0.175, end = 1, name = "Proportion\nContained",
+                       direction = -1) +
+  scale_y_continuous(breaks = 1:length(unique(R0_spatial$spatial_ratio)), labels = spatial_ratio_scan) +
+  scale_x_continuous(breaks = c(1.5, 2.0, 2.5), labels = c(1.5, 2, 2.5)) +
+  labs(x = "R0",
+       y = "Ratio Spatial Vax Radius") +
+  theme(axis.text = element_text(angle = 0),
+        plot.title = element_text(hjust = 0.5, size = 20, face = "bold"),
+        legend.title = element_text(size = 12),
+        legend.text = element_text(size = 12),
+        legend.position = "right",
+        panel.border = element_rect(linetype = "solid", fill = NA, linewidth = 0.5)) +  # Add black border
+  coord_cartesian(expand = FALSE)
+
+vaccine_efficacy_central_index <- which(vaccine_efficacy_infection_scan == 0.35)
+R0_efficacy <- overall %>%
+  mutate(R0 = ifelse(vaccine == "no_vaccine", R0, R0_scan[R0])) %>%
+  filter(pathogen == "SARS-CoV-2" & 
+           surveillance == surveillance_scan_index & 
+           spatial_ratio == spatial_ratio_index & 
+           R0 > 1 & 
+           vaccine == "yes_vaccine" &
+           vaccine_efficacy != vaccine_efficacy_central_index) %>%
+  mutate(vaccine_efficacy = ifelse(vaccine_efficacy > 2, vaccine_efficacy - 1, vaccine_efficacy))
+R0_efficacy_plot <- ggplot(R0_efficacy, aes(x = R0, y = vaccine_efficacy, fill = 100 * proportion_contained)) +
+  geom_tile(colour = "black") +
+  scale_fill_viridis_c(option = "rocket", limits = c(0, 100), begin = 0.175, end = 1, name = "Proportion\nContained",
+                       direction = -1) +
+  scale_y_continuous(breaks = c(2, 4, 6), 
+                     labels = c(40, 60, 80)) +
+  scale_x_continuous(breaks = c(1.5, 2.0, 2.5), labels = c(1.5, 2, 2.5)) +
+  labs(x = "R0",
+       y = "Vaccine Efficacy (%)") +
+  theme(axis.text = element_text(angle = 0),
+        plot.title = element_text(hjust = 0.5, size = 20, face = "bold"),
+        legend.title = element_text(size = 12),
+        legend.text = element_text(size = 12),
+        legend.position = "right",
+        panel.border = element_rect(linetype = "solid", fill = NA, linewidth = 0.5)) +  # Add black border
+  coord_cartesian(expand = FALSE)
+
+heatmap_legend <- cowplot::get_legend(R0_spatial_plot)
+heatmaps <- cowplot::plot_grid(R0_spatial_plot + theme(legend.position = "none"), 
+                               R0_efficacy_plot + theme(legend.position = "none"),
+                               R0_surveillance_plot + theme(legend.position = "none"), 
+                               heatmap_legend,
+                               ncol = 4, rel_widths = c(1, 1, 1, 0.3))
+cowplot::plot_grid(fig1c, heatmaps, nrow = 2)
+
+ggsave(filename = "figures/Figure_1_BranchingProcess/Fig1H_SpatialVaxContainmentPlot.pdf", 
+       plot = fig1c, 
+       width = 8, height = 3.1)
+
+# ### subsetting
+# subset <- overall %>%
+#   filter(spatial_ratio == 3)
+# colours <- c("#E4AFC2", "#D37598", "#C33F6F", "#B31A51", "#810331") # "black" for no vaccination
+# colours <- c("#E3AFD6", "#D474B5", "#B52F8D", "#9C1068", "#820366") # "black" for no vaccination
+# colours <- c("#E3AFCB", "#D474A4", "#B52F7B", "#9C105A", "#6B0045") # "black" for no vaccination
+# 
+# fig1_c <- ggplot(subset, aes(x = R0, y = 100 * proportion_contained, col = factor(surveillance))) +
+#   geom_line() +
+#   geom_point() +
+#   scale_x_continuous(breaks = 1:length(R0_scan), labels = R0_scan) +
+#   theme_bw() +
+#   facet_grid(.~pathogen) + 
 #   scale_colour_manual(labels = surveillance_scan,
-#                       values = c("#FEC9F1", "#E899DC", "#B279A7"),
+#                       values = colours,
 #                       name = "Surveillance\nThreshold\nTrigger") +
-#   theme_bw()
-  
-
-# 
-# ## note that vax campaign can never be triggered until all infections are generated from index case.
-# 
-# mn_offspring = 6
-# generation_time = SC1_generation_time
-# spatial_kernel = spatial_kernel
-# t0 = 0
-# tf = Inf
-# check_final_size = check_final_size
-# seeding_cases = seeding_cases
-# prop_asymptomatic = SC1_prop_asymptomatic
-# prob_hosp = SC1_prob_hosp
-# hospitalisation_delay = SC1_hospitalisation_delay
-# detection_threshold = 5
-# vaccine_campaign_radius = vaccination_radius
-# vaccine_coverage = vaccine_coverage
-# vaccine_efficacy_infection = vaccine_efficacy_infection
-# vaccine_efficacy_transmission = vaccine_efficacy_transmission
-# vaccine_efficacy_disease = vaccine_efficacy_disease
-# vaccine_logistical_delay = vaccine_logistical_delay
-# vaccine_protection_delay = vaccine_protection_delay
-
-# set.seed(10)
-# test <- spatial_bp_geog_vacc(mn_offspring = 6,
-#                              generation_time = SC1_generation_time,
-#                              spatial_kernel = spatial_kernel,
-#                              t0 = 0, tf = Inf,
-#                              check_final_size = check_final_size,
-#                              seeding_cases = seeding_cases,
-#                              prop_asymptomatic = SC1_prop_asymptomatic,
-#                              prob_hosp = SC1_prob_hosp,
-#                              hospitalisation_delay = SC1_hospitalisation_delay,
-#                              detection_threshold = 10,
-#                              vaccine_campaign_radius = vaccination_radius,
-#                              vaccine_coverage = vaccine_coverage,
-#                              vaccine_efficacy_infection = vaccine_efficacy_infection,
-#                              vaccine_efficacy_transmission = vaccine_efficacy_transmission,
-#                              vaccine_efficacy_disease = vaccine_efficacy_disease,
-#                              vaccine_logistical_delay = vaccine_logistical_delay,
-#                              vaccine_protection_delay = vaccine_protection_delay)
-# sum(!is.na(test$time_infection))
-# 
-# x <- test %>%
-#   select(ancestor, n_offspring, n_offspring_new, n_offspring_new_new, hospitalised, time_infection,
-#          vaccinated, time_vaccinated, vaccinated_before_infection, time_protected, protected_before_infection)
-# table(x$vaccinated)
-# 
-# hist(x$n_offspring)
-# hist(x$n_offspring_new)
-# hist(x$n_offspring_new_new)
-# 
-# y <- x %>%
-#   filter(!is.na(vaccinated) & vaccinated == 1)
-# 
-# mean(y$n_offspring, na.rm = TRUE)
-# mean(y$n_offspring_new, na.rm = TRUE)
-# mean(y$n_offspring_new_new, na.rm = TRUE)#
-
-# ### Spatial kernel parameters
-# mu <- 1
-# size <- 5
-# spatial_kernel <- function(n) { rnbinom(n, size = 5, mu = mu) }
-# spatial_kernel <- function(n) { 0 }
-# vaccination_radius <- 1000 * mu
-# 
-# ### Vaccine related parameters
-# vaccine_coverage <- 1
-# vaccine_efficacy_infection <- 0.5
-# vaccine_efficacy_transmission <- 0.5
-# vaccine_efficacy_disease <- 0.5
-# vaccine_logistical_delay <- 2
-# vaccine_protection_delay <- 7
-# 
-# ### Other parameters
-# pop <- 10^10
-# check_final_size <- 2000
-# initial_immune <- 0
-# seeding_cases <- 3
+#   labs(x = "R0", y = "% Outbreaks Contained") +
+#   theme(strip.background = element_rect(fill = "white"))
