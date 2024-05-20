@@ -385,6 +385,32 @@ ggsave(filename = "figures/Figure_4_VaccineProperties/updated_NEW_Figure4_Vaccin
        height = 7,
        width = 12.5)
 
+## Alternative Figure
+disease_efficacy_plot <- ggplot(subset(disease_efficacy_plotting, R0 == 2.5 & detection_threshold_hosp == 5)) +
+  geom_line(aes(x = 100 * efficacy_disease_bpsv, y = central_deaths_averted, 
+                col = factor(NPI_int)), size = 1) +
+  geom_jitter(aes(x = 100 * efficacy_disease_bpsv, y = central_deaths_averted,
+                  fill = factor(NPI_int)),
+              size = 2, pch = 21, width = 0, height = 0) +
+  theme_bw() + 
+  scale_colour_manual(values = NPI_colours)  +
+  scale_fill_manual(values = NPI_colours) + 
+  scale_x_continuous(breaks = c(25, 50, 75, 100), labels = paste0(c(25, 50, 75, 100), "%")) +
+  annotate("text", x = 102, y = 5.5, label = expression(paste("R"[0], " 2.5")), color = "black", size = 4, hjust = 0) +
+  coord_cartesian(ylim = c(0, 10.5),
+                  xlim = c(min(disease_efficacy_plotting$efficacy_disease_bpsv) * 100, 110)) +
+  labs(x = "BPSV Disease Efficacy", y = "Deaths Averted By BPSV Per 1000") +
+  guides(fill = guide_legend("NPI\nScenario"), colour = "none") +
+  theme(legend.position = "none")
+disease_efficacy_plot2 <- disease_efficacy_plot + 
+  annotation_custom(
+    ggplotGrob(NPI_plot),
+    xmin = 0, xmax = 50, ymin = 3.8, ymax = 10.75)
+
+fig_4_first_half <- cowplot::plot_grid(disease_efficacy_plot2, temp, 
+                                       labels = c("A", NA), rel_widths = c(1.2, 1))
+saveRDS(fig_4_first_half,
+        file = "figures/Figure_4_VaccineProperties/test_new_Fig4_first_half.rds")
 
 # ## BPSV Coverage plot
 # bpsv_coverage_plotting <- model_outputs2 %>%

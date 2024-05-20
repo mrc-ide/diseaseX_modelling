@@ -120,7 +120,7 @@ create_vaccination_dose_series <- function(country,
     time_to_coverage_bpsv <- ceiling(elderly_pop_to_vaccinate_bpsv/daily_doses_bpsv)
     
     # Daily number of disease-specific doses available and associated time to vaccine elderly population
-    # - Note that tis done separately for the elderly population who DID and DID NOT get the BPSV - with daily doses allocated proportionally 
+    # - Note that is done separately for the elderly population who DID and DID NOT get the BPSV - with daily doses allocated proportionally 
     #   between these groups (i.e. not prioritising a particular elderly sub-group with the disease-specific vaccine)
     daily_doses_spec <- vaccination_rate_spec * population_size / 7 ## to general population
     
@@ -160,7 +160,7 @@ create_vaccination_dose_series <- function(country,
         rep(0, bpsv_start),                             ## time between detection and initiation of BPSV campaign
         rep(0, bpsv_protection_delay),                  ## time between initiation of BPSV campaign and people first being protected by that first dose
         rep(daily_doses_bpsv, time_to_coverage_bpsv - 1),   ## protection (if any) emerges in BPSV-vaccinated primary vaccinated folks
-        rep(elderly_pop_to_vaccinate_bpsv - (daily_doses_bpsv * (time_to_coverage_bpsv - 1)), 1),
+        rep(elderly_pop_to_vaccinate_bpsv - (daily_doses_bpsv * (time_to_coverage_bpsv - 1)), 1), # to make sure we hit coverage and not any small rounding errors
         rep(0, specific_vaccine_start - time_to_coverage_bpsv - bpsv_protection_delay - bpsv_start), # specific vaccine becomes available specific_vaccine_start days after detection
         rep(0, specific_protection_delay),                               ## time between initiation of specific vaccine campaign for elderly and them being protected by that vaccine
         rep(daily_doses_spec_no_bpsv, time_to_coverage_spec_no_bpsv),    ## no specific vaccine for non-elderly whilst that vaccination campaign is ongoing
@@ -313,7 +313,7 @@ run_sars_x <- function(## Demographic Parameters
                        varied = "",
                        ...) {
   
-  ## Sedding the seed
+  ## Setting the seed
   set.seed(123)
   
   ## Input Checking

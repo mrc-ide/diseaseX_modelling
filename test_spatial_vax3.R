@@ -35,7 +35,7 @@ vaccine_protection_delay <- 7
 
 ### Other parameters
 pop <- 10^10
-check_final_size <- 4000
+check_final_size <- 10000
 initial_immune <- 0
 seeding_cases <- 3
 
@@ -232,6 +232,9 @@ fig1c <- ggplot(overall2, aes(x = R0, y = 100 * proportion_contained, col = fact
   labs(y = "% Outbreaks Contained") +
   theme_bw() +
   theme(strip.background = element_rect(fill = "white"))
+ggsave(filename = "figures/Figure_1_BranchingProcess/Fig1HI_SpatialVaxContainmentPlot.pdf", 
+       plot = fig1c, 
+       width = 7.7, height = 3.1)
 
 R0_surveillance <- overall %>%
   mutate(R0 = ifelse(vaccine == "no_vaccine", R0, R0_scan[R0])) %>%
@@ -254,7 +257,11 @@ R0_surveillance_plot <- ggplot(R0_surveillance, aes(x = R0, y = surveillance , f
         legend.text = element_text(size = 12),
         legend.position = "right",
         panel.border = element_rect(linetype = "solid", fill = NA, linewidth = 0.5)) +  # Add black border
-  coord_cartesian(expand = FALSE)
+  coord_cartesian(expand = FALSE) +
+  theme(legend.position = "none")
+ggsave(filename = "figures/Figure_1_BranchingProcess/Figure1L_SurvThresh_SpatialVax.pdf", 
+       plot = R0_surveillance_plot, width = 2.5, height = 2.34)
+
 
 R0_spatial <- overall %>%
   mutate(R0 = ifelse(vaccine == "no_vaccine", R0, R0_scan[R0])) %>%
@@ -277,7 +284,12 @@ R0_spatial_plot <- ggplot(R0_spatial, aes(x = R0, y = spatial_ratio, fill = 100 
         legend.text = element_text(size = 12),
         legend.position = "right",
         panel.border = element_rect(linetype = "solid", fill = NA, linewidth = 0.5)) +  # Add black border
-  coord_cartesian(expand = FALSE)
+  coord_cartesian(expand = FALSE) +
+  theme(legend.position = "none")
+ggsave(filename = "figures/Figure_1_BranchingProcess/Figure1J_SpatRatio_SpatialVax.pdf", 
+       plot = R0_spatial_plot, width = 2.5, height = 2.34)
+
+
 
 vaccine_efficacy_central_index <- which(vaccine_efficacy_infection_scan == 0.35)
 R0_efficacy <- overall %>%
@@ -304,7 +316,11 @@ R0_efficacy_plot <- ggplot(R0_efficacy, aes(x = R0, y = vaccine_efficacy, fill =
         legend.text = element_text(size = 12),
         legend.position = "right",
         panel.border = element_rect(linetype = "solid", fill = NA, linewidth = 0.5)) +  # Add black border
-  coord_cartesian(expand = FALSE)
+  coord_cartesian(expand = FALSE) +
+  theme(legend.position = "none")
+ggsave(filename = "figures/Figure_1_BranchingProcess/Figure1K_Efficacy_SpatialVax.pdf", 
+       plot = R0_efficacy_plot, width = 2.5, height = 2.34)
+
 
 heatmap_legend <- cowplot::get_legend(R0_spatial_plot)
 heatmaps <- cowplot::plot_grid(R0_spatial_plot + theme(legend.position = "none"), 
@@ -317,6 +333,10 @@ cowplot::plot_grid(fig1c, heatmaps, nrow = 2)
 ggsave(filename = "figures/Figure_1_BranchingProcess/Fig1H_SpatialVaxContainmentPlot.pdf", 
        plot = fig1c, 
        width = 8, height = 3.1)
+
+legend <- R0_spatial_plot + theme(legend.position = "bottom")
+ggsave(file = "figures/Figure_1_BranchingProcess/LegendSpatialVaxHeatmap.pdf", plot = legend, width = 2.4, height = 2.4)
+
 
 # ### subsetting
 # subset <- overall %>%

@@ -8,7 +8,7 @@ source(here::here("functions/run_sars_x.R"))
 source(here::here("functions/helper_functions.R"))
 
 # Loading in bp based detection and calculating detection times for the the different R0 values
-bp_df_long <- readRDS("outputs/Figure1_bp_detection_times.rds")
+bp_df_long <- readRDS("outputs/Figure1_branchingProcess_Containment/Figure1_bp_detection_times.rds")
 prob_hosp <- squire.page.sarsX:::probs_booster$prob_hosp
 arg_pop <- squire::get_population("Argentina")
 IHR <- sum(prob_hosp * arg_pop$n / sum(arg_pop$n)) 
@@ -103,7 +103,7 @@ if (fresh_run) {
   model_outputs <- format_multirun_output(output_list = out, parallel = TRUE, cores = cores)
   saveRDS(model_outputs, "outputs/Figure_5_DiseaseSpecific_Dev_Access/updated_NEW_Figure_5_vax_implementation_scenarios.rds")
 } else {
-  model_outputs <- readRDS("outputs/Figure_5_DiseaseSpecific_Dev_Access/updated_NEW_Figure_5_vax_implementation_scenarios.rds")
+  model_outputs <- readRDS("outputs/Figure5_DiseaseSpecific_Dev_Access/updated_NEW_Figure_5_vax_implementation_scenarios.rds")
 }
 
 ## Joining back in the detection metrics
@@ -263,9 +263,9 @@ if (fresh_run) {
   plan(multisession, workers = cores) # multicore does nothing on windows as multicore isn't supported
   system.time({out <- future_pmap(final_vacc_delay_scenarios2, run_sars_x, .progress = TRUE, .options = furrr_options(seed = 123))})
   model_outputs <- format_multirun_output(output_list = out, parallel = TRUE, cores = cores)
-  saveRDS(model_outputs, "outputs/Figure_5_DiseaseSpecific_Dev_Access/updated_NEW_Figure_5_vax_implementation_Delayscenarios.rds")
+  saveRDS(model_outputs, "outputs/Figure5_DiseaseSpecific_Dev_Access/updated_NEW_Figure_5_vax_implementation_Delayscenarios.rds")
 } else {
-  model_outputs <- readRDS("outputs/Figure_5_DiseaseSpecific_Dev_Access/updated_NEW_Figure_5_vax_implementation_Delayscenarios.rds")
+  model_outputs <- readRDS("outputs/Figure5_DiseaseSpecific_Dev_Access/updated_NEW_Figure_5_vax_implementation_Delayscenarios.rds")
 }
 
 ## Downstream here I need to create columns for different access timings based on an assumed development time
@@ -363,11 +363,24 @@ bpsv_implementation_plots <- cowplot::plot_grid(bpsv_coverage_plot, bpsv_rate_pl
                                                 nrow = 2)
 fig5 <- cowplot::plot_grid(spec_dev_plot, bpsv_implementation_plots, access_plot,
                            ncol = 3, rel_widths = c(1, 0.7, 1.1), labels = c("A", "B", "D"))
-ggsave(filename = "figures/Figure_5_DiseaseSpecific_Dev_Access/Updated_NEW_Figure5_ImplementationAccess.pdf",
-       plot = fig5,
-       height = 6.25,
-       width = 8.25)
+# ggsave(filename = "figures/Figure_5_DiseaseSpecific_Dev_Access/Updated_NEW_Figure5_ImplementationAccess.pdf",
+#        plot = fig5,
+#        height = 6.25,
+#        width = 8.25)
 ##12.11 * 6.28 suggested dimension
+
+fig4_first_half <- readRDS(file = "figures/Figure_4_VaccineProperties/test_new_Fig4_first_half.rds")
+bpsv_implementation_plots <- cowplot::plot_grid(bpsv_coverage_plot, bpsv_rate_plot, labels = c("D", "E"), nrow = 2)
+access_plot <- cowplot::plot_grid(access_delay_empirical_boxplot, continent_delay_plot, labels = c("F", "G"),
+                                  nrow = 2, rel_heights = c(1, 2), align = "v", axis = "l")
+x <- cowplot::plot_grid(fig4_first_half, 
+                   bpsv_implementation_plots, 
+                   access_plot,
+                   ncol = 3, rel_widths = c(2, 1, 1.5))
+ggsave(filename = "figures/Figure_4_VaccineProperties/newUpdated_allBPSV_properties.pdf",
+       plot = x,
+       width = 13, 
+       height = 5.8)                                                
 
 
 
