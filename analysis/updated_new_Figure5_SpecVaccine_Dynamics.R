@@ -1,6 +1,6 @@
 # Load required libraries
 library(sf); library(ggplot2); library(dplyr); library(rnaturalearth)
-library(ggspatial); library(rgdal)
+library(ggspatial) #; library(rgdal)
 source(here::here("main.R"))
 
 # Load required functions

@@ -338,3 +338,34 @@ format_multirun_output <- function(output_list, parallel = FALSE, cores = NA) {
   
   return(joined)
 }
+
+pareto_frontier <- function(df) {
+  df_sorted <- df %>% arrange(NPI_days)
+  n <- nrow(df_sorted)
+  is_pareto <- rep(TRUE, n)
+  for (i in 2:(n-1)) {
+    if ((df_sorted$deaths[i-1] < df_sorted$deaths[i])) {
+      is_pareto[i] <- FALSE
+    }
+  }
+  return(df_sorted[is_pareto, ])
+}
+
+linear_interpolate <- function(df) {
+  new_df <- data.frame()
+  for (i in 1:(nrow(df) - 1)) {
+    x1 <- df$new_NPI_days[i]
+    y1 <- df$deaths[i]
+    x2 <- df$new_NPI_days[i + 1]
+    y2 <- df$deaths[i + 1]
+    
+    for (x in floor(x1):ceiling(x2)) {
+      if (x >= x1 && x <= x2) {
+        y <- y1 + (y2 - y1) * (x - x1) / (x2 - x1)
+        new_row <- data.frame(deaths = y, new_NPI_days = x)
+        new_df <- rbind(new_df, new_row)
+      }
+    }
+  }
+  return(new_df)
+}

@@ -233,3 +233,33 @@ ggsave(filename = "figures/Figure_7_SecondaryCountry_Exploration/updated_NEW_Fig
        plot = deaths_averted2,
        width = 10.5,
        height = 5)
+
+### new reduced Figure 7
+
+ggplot(subset(model_outputs2, NPI_int %in% c(4, 8))) +
+  annotate("rect", xmin = -105, xmax = 0, ymin = -Inf, ymax = Inf, fill = "white", alpha = 0.1) +
+  annotate("rect", xmin = 0, xmax = 100, ymin = -Inf, ymax = Inf, fill = "grey", alpha = 0.1) +
+  geom_line(aes(x = days_source_detection_is_ahead_arrival_secondary, 
+                y = bpsv_deaths_averted * 1000 / population_size, 
+                col = interaction(factor(R0), before_after))) +
+  geom_point(aes(x = days_source_detection_is_ahead_arrival_secondary, 
+                 y = bpsv_deaths_averted * 1000 / population_size,
+                 col = interaction(factor(R0), before_after))) +
+  facet_grid(specific_vaccine_start ~ NPI_scenario,
+             labeller = as_labeller(c(`100`='Specific Vaccine\nIn 100 Days', 
+                                      `250`='Specific Vaccine\nIn 250 Days',
+                                      `bMinimal NPIs`="Minimal NPIs",
+                                      `cModerate NPIs`="Moderate NPIs", 
+                                      `dStringent NPIs`="Stringent NPIs"))) +
+  theme_bw() +
+  scale_colour_manual(values = c( "#EBF2D3", "#DBE8B9", "#BED78B", "#E7CAAA", "#E3B273", "#DB9939")) +
+  scale_y_continuous(position = "left") +
+  scale_x_continuous(breaks = c(-60, -30, 0, 30, 60),
+                     labels = c("+60", "+30", "0", "-30", "-60")) +
+  labs(x = "Days Pathogen Detection (in Source Country) is Ahead of Importation (to Secondary Country)",
+       y = "Deaths Averted By BPSV in Secondary\nCountry (Per 1,000 Population)") +
+  geom_vline(xintercept = 0, linewidth = 0.25, linetype = "dashed") +
+  theme(strip.placement = "outside",
+        legend.position = "none",
+        strip.background = element_rect(fill="white")) +
+  coord_cartesian(xlim = c(-60, 60))

@@ -56,7 +56,7 @@ scenarios <- baseline_scenarios_reduced %>%
   mutate(scenario_index = 1:n())
 
 ## Running the model and summarising the output
-fresh_run <- TRUE
+fresh_run <- FALSE
 if (fresh_run) {
   plan(multisession, workers = 4) # multicore does nothing on windows as multicore isn't supported
   system.time({out <- future_pmap(scenarios, run_sars_x, .progress = TRUE, .options = furrr_options(seed = 123))})
@@ -195,28 +195,79 @@ Figure2 <- cowplot::plot_grid(NPI_plot, deaths_averted_plot,
 ggsave(filename = "figures/Figure_2_FrameworkIntro/NEW_Figure2BC_NPI_Plot.pdf", plot = Figure2, width = 9.25, height = 7.5)
 
 
-# raw_baseline_scenarios <- create_scenarios(R0 = R0_subset,                                                # Basic reproduction number
-#                                            IFR = default$IFR,                                             # IFR
-#                                            population_size = default$population_size,                     # Population size
-#                                            hosp_bed_capacity = default$hosp_bed_capacity,                 # Hospital Bed Capacity
-#                                            ICU_bed_capacity = default$ICU_bed_capacit,                    # ICU Bed Capacity
-#                                            Tg = default$Tg,                                               # Tg
-#                                            detection_time = 1,                                            # Detection time (Placeholder - this is sorted below)
-#                                            bpsv_start = default$bpsv_start,                               # BPSV distribution start (time after detection time)
-#                                            bpsv_protection_delay = default$bpsv_protection_delay,         # Delay between receipt of BPSV dose and protection
-#                                            specific_vaccine_start = c(100, 220, 365),                     # Specific vaccine distribution start (time after detection time)
-#                                            specific_protection_delay = default$specific_protection_delay, # Delay between receipt of specific dose and protection
-#                                            efficacy_infection_bpsv = default$efficacy_infection_bpsv,     # Vaccine efficacy against infection - BPSV
-#                                            efficacy_disease_bpsv = default$efficacy_disease_bpsv,         # Vaccine efficacy against disease - BPSV
-#                                            efficacy_infection_spec = default$efficacy_infection_spec,     # Vaccine efficacy against infection - specific vaccine
-#                                            efficacy_disease_spec = default$efficacy_disease_spec,         # Vaccine efficacy against disease - specific vaccine
-#                                            dur_R = default$dur_R,                                         # Duration of infection-induced immunity
-#                                            dur_bpsv = default$dur_bpsv,                                   # Duration of BPSV vaccine immunity
-#                                            dur_spec = default$dur_spec,                                   # Duration of disease-specific vaccine immunity
-#                                            coverage_bpsv = default$coverage_bpsv,                         # Proportion of the population vaccinated
-#                                            coverage_spec = default$coverage_spec,                         # Proportion of the population vaccinated
-#                                            vaccination_rate_bpsv = default$vaccination_rate_bpsv,         # BPSV vaccination rate per week as percentage of population
-#                                            vaccination_rate_spec = default$vaccination_rate_spec,         # Specific vaccination rate per week as percentage of population
-#                                            min_age_group_index_priority = default$min_age_group_index_priority,         # Index of the youngest age group given priority w.r.t vaccines (13 = 60+)
-#                                            min_age_group_index_non_priority = default$min_age_group_index_non_priority, # Index of the youngest age group that *receives* vaccines (4 = 15+)
-#                                            seeding_cases = default$seeding_cases)                         # Seeding Cases
+test <- subset(model_outputs2, R0 == 2.5 & specific_vaccine_start %in% spec_dev_scenarios)
+x <- data.frame(specific_vaccine_start = test$specific_vaccine_start,
+                deaths = test$deaths_spec, 
+                NPI_int = test$NPI_int,
+                NPI_days = test$composite_NPI_spec)
+frontiers <- x %>% 
+  group_by(specific_vaccine_start) %>% 
+  group_modify(~pareto_frontier(.x))
+frontiers$new_NPI_days <- floor(frontiers$NPI_days)
+interpolated_frontiers <- frontiers %>% 
+  group_by(specific_vaccine_start) %>% 
+  group_modify(~linear_interpolate(.x))
+test$bpsv_deaths_averted[test$bpsv_deaths_averted < 0] <- 0
+test_250 <- test %>%
+  filter(specific_vaccine_start == 250)
+interpolated_frontiers_250 <- interpolated_frontiers %>%
+  filter(specific_vaccine_start == 250)
+new_NPI_days_250 <- sapply(test_250$deaths_bpsv, function(x) {
+  temp_df <- interpolated_frontiers_250[which.min(abs(x - interpolated_frontiers_250$deaths)), ]
+  return(temp_df$new_NPI_days)
+})
+test_100 <- test %>%
+  filter(specific_vaccine_start == 100)
+interpolated_frontiers_100 <- interpolated_frontiers %>%
+  filter(specific_vaccine_start == 100)
+new_NPI_days_100 <- sapply(test_100$deaths_bpsv, function(x) {
+  temp_df <- interpolated_frontiers_100[which.min(abs(x - interpolated_frontiers_100$deaths)), ]
+  return(temp_df$new_NPI_days)
+})
+
+new_NPI_days_250 - test_250$composite_NPI_bpsv
+ordering_250 <- NPI_composite_df$NPI_int[order(NPI_composite_df$composite)]
+plot((new_NPI_days_250 - test_250$composite_NPI_bpsv)[ordering_250])
+
+new_NPI_days_100 - test_100$composite_NPI_bpsv
+ordering_100 <- NPI_composite_df$NPI_int[order(NPI_composite_df$composite)]
+plot((new_NPI_days_100 - test_100$composite_NPI_bpsv)[ordering_100])
+
+new <- data.frame(specific_vaccine_start = test$specific_vaccine_start,
+           NPI_days_averted = c((new_NPI_days_100 - test_100$composite_NPI_bpsv)[ordering_100],
+                                (new_NPI_days_250 - test_250$composite_NPI_bpsv)[ordering_250]),
+           NPI_int = test$NPI_int)
+new$NPI_days_averted[new$NPI_days_averted < 0] <- 0.1
+new$NPI_int2 <- factor(new$NPI_int, levels = NPI_composite_df$NPI_int[order(NPI_composite_df$composite)])
+NPI_days_averted <- ggplot(new) +
+  geom_bar(aes(x = NPI_int, y = NPI_days_averted, fill = NPI_int), stat = "identity") +
+  facet_grid(specific_vaccine_start ~ ., scales = "free_y",
+             labeller = as_labeller(c(`100`='Specific Vaccine In 100 Days', `250`='Specific Vaccine In 250 Days'))) +
+  scale_fill_manual(values = colour_func2) +
+  theme_bw() +
+  labs(y = "NPI Days Averted by BPSV") +
+  theme(legend.position = "none",
+        axis.title.x =  element_text(size = 10),
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        strip.background = element_rect(fill="white"))
+
+
+x <- cowplot::plot_grid(deaths_averted_plot, NPI_days_averted,
+                   nrow = 1, rel_widths = c(1.4, 2.4/3.75),
+                   labels = c("C", "D"),
+                   align = "h", axis = "tb")
+Figure2_new <- cowplot::plot_grid(NPI_plot, x,
+                        nrow = 1, rel_widths = c(1, 1.4 + 2.4/3.75),
+                        labels = c("B", NA))
+ggsave(filename = "figures/Figure_2_FrameworkIntro/NEW_Figure2BCD_NPI_Plot_DaysAverted.pdf", 
+       plot = Figure2_new, width = 9.25 + (9.25 * 1/3.75), height = 7.5)
+
+# ggplot() +
+#   geom_line(data = interpolated_frontiers, aes(x = new_NPI_days, y = deaths, color = as.factor(specific_vaccine_start), group = specific_vaccine_start)) +
+#   geom_point(data = interpolated_frontiers, aes(x = new_NPI_days, y = deaths, color = as.factor(specific_vaccine_start))) +
+#   labs(title = "Pareto Frontier for Each Vaccine Start Group",
+#        x = "NPI_days",
+#        y = "deaths",
+#        color = "Vaccine Start") +
+#   theme_minimal()
