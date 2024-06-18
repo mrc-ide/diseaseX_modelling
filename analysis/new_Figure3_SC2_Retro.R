@@ -1,5 +1,5 @@
 # Load required libraries
-library(tidyverse); library(squire.page); library(rnaturalearth); library(sf); library(rgdal)
+library(tidyverse); library(rnaturalearth); library(sf); #library(rgdal); # library(squire.page); 
 source("functions/extract_process_generate_fits.R")
 source("functions/run_sars_x.R")
 source("functions/helper_functions.R")
@@ -164,6 +164,8 @@ evaluate_country_impact <- function(original_fit, country_iso = "IRN") {
     index <- i
     tt_Rt <- out$samples[[index]]$tt_R0
     tt_R0 <- tt_Rt + 1
+      # excess$squire_mode$parameter_func <- squire.page.sarsX:::nimue_booster_model()$parameter_func
+    init <- seed_infections(excess$squire_model, excess$parameters$country, out$samples[[index]]$initial_infections)
     BPSV <- squire.page.sarsX:::run_booster(time_period = max(out$samples[[index]]$tt_R0) + 200,
                                             population = squire::get_population(country = out$parameters$country)$n,                                                 
                                             contact_matrix_set = squire::get_mixing_matrix(country = out$parameters$country),                                                   
@@ -201,7 +203,7 @@ evaluate_country_impact <- function(original_fit, country_iso = "IRN") {
                                             
                                             ## Misc
                                             seeding_cases = NULL,
-                                            init = seed_infections(excess$squire_model, excess$parameters$country, out$samples[[index]]$initial_infections))
+                                            init = init)
     
     check_BPSV <- nimue::format(BPSV, compartments = "D", summaries = "deaths") %>%
       filter(t > 1, compartment == "deaths") %>%
@@ -271,10 +273,15 @@ iso_list <- substr(list.files(path = "outputs/Figure3_SC2_Counterfactual_Impact/
 deaths_df <- data.frame(iso = rep(NA_character_, length(iso_list)), 
                         empirical_deaths = rep(NA_real_, length(iso_list)), 
                         deaths_BPSV = rep(NA_real_, length(iso_list)))
+new_run <- FALSE
 for (i in 1:length(iso_list)) {
-  temp <- readRDS(paste0("outputs/Figure3_SC2_Counterfactual_Impact/raw/raw_", iso_list[i], "_fit.rds"))
-  temp_overall <- evaluate_country_impact(original_fit = temp, country_iso = iso_list[i])
-  saveRDS(object = temp_overall, file = paste0("outputs/Figure3_SC2_Counterfactual_Impact/BPSV_counterfactual/BPSV_counterfactual_", iso_list[i], "_fit.rds"))
+  if (new_run) {
+    temp <- readRDS(paste0("outputs/Figure3_SC2_Counterfactual_Impact/raw/raw_", iso_list[i], "_fit.rds"))
+    temp_overall <- evaluate_country_impact(original_fit = temp, country_iso = iso_list[i])
+    saveRDS(object = temp_overall, file = paste0("outputs/Figure3_SC2_Counterfactual_Impact/BPSV_counterfactual/BPSV_counterfactual_", iso_list[i], "_fit.rds"))
+  } else {
+    temp_overall <- readRDS(paste0("outputs/Figure3_SC2_Counterfactual_Impact/BPSV_counterfactual/BPSV_counterfactual_", iso_list[i], "_fit.rds"))
+  }
   deaths <- temp_overall %>%
     group_by(scenario) %>%
     summarise(med = sum(med)) %>%
@@ -371,6 +378,10 @@ country_colors <- viridis_palette[as.integer(rescaled_values * (n_colors - 1)) +
 color_mapping <- data.frame(Country = merged_data$iso_a3, Color = country_colors)
 
 ### Italy
+age_groups <- c("65-69", "70-74", "75-79", "80+")
+squire:::get_population("Italy") %>%
+  filter(age_group %in% age_groups) %>%
+  summarise(total = sum(n))
 bpsv_ITA <- readRDS("outputs/Figure3_SC2_Counterfactual_Impact/BPSV_counterfactual/BPSV_counterfactual_ITA_fit.rds") %>%
   mutate(iso = "ITA")
 ita_plot <- ggplot(data = bpsv_ITA) +
@@ -383,6 +394,9 @@ ita_plot <- ggplot(data = bpsv_ITA) +
     labs(x = "Date", y = "COVID-19 Deaths Per Day") +
     theme(legend.position = "none")
 
+squire:::get_population("Iran") %>%
+  filter(age_group %in% age_groups) %>%
+  summarise(total = sum(n))
 bpsv_IRN <- readRDS("outputs/Figure3_SC2_Counterfactual_Impact/BPSV_counterfactual/BPSV_counterfactual_IRN_fit.rds") %>%
   mutate(iso = "IRN")
 irn_plot <- ggplot(data = bpsv_IRN) +
@@ -407,6 +421,9 @@ col_plot <- ggplot(data = bpsv_COL) +
   labs(x = "Date", y = "COVID-19 Deaths Per Day") +
   theme(legend.position = "none")
 
+squire:::get_population("Bangladesh") %>%
+  filter(age_group %in% age_groups) %>%
+  summarise(total = sum(n))
 bpsv_BGD <- readRDS("outputs/Figure3_SC2_Counterfactual_Impact/BPSV_counterfactual/BPSV_counterfactual_BGD_fit.rds") %>%
   mutate(iso = "BGD")
 bgd_plot <- ggplot(data = bpsv_BGD) +
