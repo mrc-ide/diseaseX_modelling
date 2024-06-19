@@ -263,11 +263,59 @@ Figure2_new <- cowplot::plot_grid(NPI_plot, x,
 ggsave(filename = "figures/Figure_2_FrameworkIntro/NEW_Figure2BCD_NPI_Plot_DaysAverted.pdf", 
        plot = Figure2_new, width = 9.25 + (9.25 * 1/3.75), height = 7.5)
 
-# ggplot() +
-#   geom_line(data = interpolated_frontiers, aes(x = new_NPI_days, y = deaths, color = as.factor(specific_vaccine_start), group = specific_vaccine_start)) +
-#   geom_point(data = interpolated_frontiers, aes(x = new_NPI_days, y = deaths, color = as.factor(specific_vaccine_start))) +
-#   labs(title = "Pareto Frontier for Each Vaccine Start Group",
-#        x = "NPI_days",
-#        y = "deaths",
-#        color = "Vaccine Start") +
-#   theme_minimal()
+## Supplementary Figure
+absolute_deaths_plot_supp <- ggplot() +
+  geom_segment(data = subset(model_outputs2, R0 != 2.5), 
+               aes(x = composite_NPI_spec, xend = composite_NPI_spec, 
+                   y = deaths_spec * 1000 / default$population_size, yend = deaths_bpsv * 1000 / default$population_size + 0.2, group = factor(NPI_int)),
+               arrow = arrow(length = unit(0.02, "npc"), type = "closed")) +
+  geom_point(data = subset(model_outputs2, R0 != 2.5),
+             aes(x = composite_NPI_spec, y = deaths_spec * 1000 / default$population_size, fill = factor(NPI_int)), 
+             shape = 4, colour = "black", size = 2, pch = 21) +
+  geom_point(data = subset(model_outputs2, R0 != 2.5),
+             aes(x = composite_NPI_spec, y = deaths_bpsv * 1000 / default$population_size, fill = factor(NPI_int)), 
+             colour = "black", size = 4, pch = 21) +
+  facet_grid(specific_vaccine_start ~ R0, scales = "free_x",
+             labeller = as_labeller(c(`100`='VSV In 100 Days', 
+                                      `250`='VSV In 250 Days',
+                                      `365`='VSV In 365 Days',
+                                      `1.5`='R0=1.5',
+                                      `3.5`='R0=3.5'))) +
+  scale_fill_manual(values = colour_func) +
+  theme_bw() +
+  lims(y = c(0, max(model_outputs2$deaths_spec[model_outputs2$R0 == 3.5] * 1000 / default$population_size))) +
+  labs(x = "NPI Days (Composite Duration & Stringency)", y = "Disease Deaths Per 1000 Population") +
+  theme(strip.placement = "outside",
+        legend.position = "none",
+        strip.background = element_rect(fill="white")) +
+  guides(fill = guide_legend(title = "Scenario"))
+
+deaths_averted_supp_plot <- ggplot() +
+  geom_bar(data = subset(model_outputs2, R0 != 2.5), 
+           aes(x = factor(NPI_int2), y = bpsv_deaths_averted * 1000 / default$population_size, fill = factor(NPI_int)), stat = "identity") +
+  labs(x = "NPI Scenario", y = "BPSV Deaths Averted\nPer 1000 Pop") +
+  scale_fill_manual(values = colour_func) +
+  facet_grid(specific_vaccine_start ~ R0, scales = "free_x",
+             labeller = as_labeller(c(`100`='VSV In 100 Days', 
+                                      `250`='VSV In 250 Days',
+                                      `365`='VSV In 365 Days',
+                                      `1.5`='R0=1.5',
+                                      `3.5`='R0=3.5'))) +
+  scale_x_discrete(labels = 1:9) +
+  theme_bw() +
+  theme(legend.position = "none",
+        strip.background = element_rect(fill="white"))
+
+
+NPI_plot_supp <- NPI_plot + 
+  facet_wrap(~scenario2, nrow = 1) +
+  theme(axis.text.x = element_text(size = 6))
+
+deaths_supp_plot <- cowplot::plot_grid(absolute_deaths_plot_supp, deaths_averted_supp_plot,
+                                       nrow = 1, labels = c("B", "C"))
+supp_deaths_plot_final <- cowplot::plot_grid(NPI_plot_supp, deaths_supp_plot, nrow = 2, rel_heights = c(1, 3),
+                                             labels = c("A", NA))
+ggsave(filename = "figures/Figure_2_FrameworkIntro/Supp_Figure1_NPI_Plot_Sensitivity.pdf",
+       plot = supp_deaths_plot_final,
+       height = 8,
+       width = 13)
