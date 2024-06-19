@@ -236,7 +236,7 @@ disease_efficacy_plotting <- model_outputs2 %>%
             composite_NPI_bpsv = composite_NPI_bpsv)
 
 ribbon_plotting_eff <- disease_efficacy_plotting %>%
-  filter(R0 != 2 & R0 != 3 & detection_threshold_hosp == 5) %>%
+  filter(R0 != 2.5 & detection_threshold_hosp == 5) %>%
   group_by(efficacy_disease_bpsv, R0, detection_threshold_hosp) %>%
   summarise(lower = ifelse(min(central_deaths_averted) - 0.2 < 0, 0, min(central_deaths_averted) - 0.2),
             upper = max(central_deaths_averted) + 0.2)
@@ -245,26 +245,28 @@ NPI_1_colours <- rev(generate_palette(NPI_colours[1], modification = "go_lighter
 NPI_2_colours <- rev(generate_palette(NPI_colours[2], modification = "go_lighter", n_colours = 3))[c(1, 3, 1)]
 NPI_3_colours <- rev(generate_palette(NPI_colours[3], modification = "go_lighter", n_colours = 3))[c(1, 3, 1)]
 
-disease_efficacy_plot <- ggplot(subset(disease_efficacy_plotting, R0 != 2 & R0 != 3 & detection_threshold_hosp == 5)) +
-  geom_ribbon(data = ribbon_plotting_eff, aes(x = 100 * efficacy_disease_bpsv, ymin = lower, ymax = upper, group = R0), 
-              alpha = 0.1, colour = "black", linetype = "dashed") +
+disease_efficacy_plot_supp <- ggplot(subset(disease_efficacy_plotting, R0 != 2.5 & detection_threshold_hosp == 5)) +
+  # geom_ribbon(data = ribbon_plotting_eff, aes(x = 100 * efficacy_disease_bpsv, ymin = lower, ymax = upper, group = R0), 
+  #             alpha = 0.1, colour = "black", linetype = "dashed") +
   geom_line(aes(x = 100 * efficacy_disease_bpsv, y = central_deaths_averted, 
                 col = interaction(factor(R0), factor(NPI_int))), size = 1) +
   geom_jitter(aes(x = 100 * efficacy_disease_bpsv, y = central_deaths_averted,
                   fill = interaction(factor(R0), factor(NPI_int))),
               size = 2, pch = 21, width = 0, height = 0) +
   theme_bw() +
-  scale_colour_manual(values = c(NPI_1_colours, NPI_2_colours, NPI_3_colours))  +
-  scale_fill_manual(values = c(NPI_1_colours, NPI_2_colours, NPI_3_colours)) + 
+  scale_colour_manual(values = c(NPI_1_colours[1:2], NPI_2_colours[1:2], NPI_3_colours[1:2]))  +
+  scale_fill_manual(values = c(NPI_1_colours[1:2], NPI_2_colours[1:2], NPI_3_colours[1:2])) + 
   scale_x_continuous(breaks = c(25, 50, 75, 100), labels = paste0(c(25, 50, 75, 100), "%")) +
-  annotate("text", x = 102, y = 0.65, label = expression(paste("R"[0], " 1.5")), color = "black", size = 4, hjust = 0) +
-  annotate("text", x = 102, y = 5.5, label = expression(paste("R"[0], " 2.5")), color = "black", size = 4, hjust = 0) +
-  annotate("text", x = 102, y = 6.75, label = expression(paste("R"[0], " 3.5")), color = "black", size = 4, hjust = 0) +
-  coord_cartesian(ylim = c(0, 9),
+  # annotate("text", x = 102, y = 0.65, label = expression(paste("R"[0], " 1.5")), color = "black", size = 4, hjust = 0) +
+  # annotate("text", x = 102, y = 6.75, label = expression(paste("R"[0], " 3.5")), color = "black", size = 4, hjust = 0) +
+  coord_cartesian(ylim = c(0, max(subset(disease_efficacy_plotting, R0 == 3.5)$central_deaths_averted)),
                   xlim = c(min(disease_efficacy_plotting$efficacy_disease_bpsv) * 100, 110)) +
   labs(x = "BPSV Disease Efficacy", y = "Deaths Averted By BPSV Per 1000") +
   guides(fill = guide_legend("NPI\nScenario"), colour = "none") +
-  theme(legend.position = "none")
+  facet_wrap(R0 ~ ., nrow = 2,
+             labeller = as_labeller(c(`1.5`='R0=1.5', `3.5`='R0=3.5'))) +
+  theme(legend.position = "none",
+        strip.background = element_rect(fill = "white"))
 disease_efficacy_plot2 <- disease_efficacy_plot + 
   annotation_custom(
     ggplotGrob(NPI_plot),
@@ -296,24 +298,27 @@ ribbon_plotting_eff <- spec_dev_plotting %>%
 
 NPI_colours_new <- rep(NPI_colours, each = 3)
 
-spec_dev_plot <- ggplot(data = subset(spec_dev_plotting, detection_threshold_hosp == 5), aes(group = interaction(R0, NPI_int))) +
-  geom_ribbon(data = ribbon_plotting_eff, aes(x = specific_vaccine_start, ymin = lower, ymax = upper, group = R0),
-              alpha = 0.1, colour = "black", linetype = "dashed") +
+spec_dev_plot <- ggplot(data = subset(spec_dev_plotting, detection_threshold_hosp == 5 & R0 != 2.5), aes(group = interaction(R0, NPI_int))) +
+  # geom_ribbon(data = ribbon_plotting_eff, aes(x = specific_vaccine_start, ymin = lower, ymax = upper, group = R0),
+  #             alpha = 0.1, colour = "black", linetype = "dashed") +
   geom_line(aes(x = specific_vaccine_start, y = central_deaths_averted,
                 col = interaction(factor(R0), factor(NPI_int))), size = 1) +
   geom_point(aes(x = specific_vaccine_start, y = central_deaths_averted, fill = interaction(factor(R0), factor(NPI_int))),
              size = 2, pch = 21, col = "black") +
-  scale_colour_manual(values = c(NPI_1_colours, NPI_2_colours, NPI_3_colours))  +
-  scale_fill_manual(values = c(NPI_1_colours, NPI_2_colours, NPI_3_colours)) + 
+  scale_colour_manual(values = c(NPI_1_colours[1:2], NPI_2_colours[1:2], NPI_3_colours[1:2]))  +
+  scale_fill_manual(values = c(NPI_1_colours[1:2], NPI_2_colours[1:2], NPI_3_colours[1:2])) + 
   theme_bw() +
-  annotate("text", x = 375, y = 1.3, label = expression(paste("R"[0], " 1.5")), color = "black", size = 4, hjust = 0) +
-  annotate("text", x = 375, y = 4.3, label = expression(paste("R"[0], " 2.5")), color = "black", size = 4, hjust = 0) +
-  annotate("text", x = 375, y = 5.5, label = expression(paste("R"[0], " 3.5")), color = "black", size = 4, hjust = 0) +
+  # annotate("text", x = 375, y = 1.3, label = expression(paste("R"[0], " 1.5")), color = "black", size = 4, hjust = 0) +
+  # annotate("text", x = 375, y = 4.3, label = expression(paste("R"[0], " 2.5")), color = "black", size = 4, hjust = 0) +
+  # annotate("text", x = 375, y = 5.5, label = expression(paste("R"[0], " 3.5")), color = "black", size = 4, hjust = 0) +
   lims(y = c(0, max(subset(spec_dev_plotting, R0 == 3.5)$central_deaths_averted) + 0.2),
        x = c(100, 410)) +
   labs(x = "Time to Specific Vaccine Development (Days)", y = "Deaths Averted By BPSV Per 1000") +
   guides(fill = guide_legend("NPI\nScenario"), colour = "none") +
-  theme(legend.position = "none")
+  theme(legend.position = "none") +
+  facet_wrap(R0 ~ ., nrow = 2) +
+  theme(legend.position = "none",
+        strip.background = element_rect(fill = "white"))
 
 
 ## Figure 5C - Duration of Immune Protection
@@ -344,6 +349,21 @@ dur_protect_plot <- ggplot(subset(dur_protect_plotting, R0 == 2.5 & detection_th
   guides(fill = guide_legend("NPI\nScenario"), colour = "none") +
   theme(legend.position = "none")
 
+dur_protect_plot_supp <- ggplot(subset(dur_protect_plotting, R0 != 2.5 & detection_threshold_hosp == 5)) +
+  geom_line(aes(x = dur_bpsv, y = central_deaths_averted, col = interaction(factor(R0), factor(NPI_int))), size = 1) +
+  geom_point(aes(x = dur_bpsv, y = central_deaths_averted, fill = interaction(factor(R0), factor(NPI_int))), 
+             size = 2, pch = 21, col = "black") +
+  scale_colour_manual(values = c(NPI_1_colours[1:2], NPI_2_colours[1:2], NPI_3_colours[1:2]))  +
+  scale_fill_manual(values = c(NPI_1_colours[1:2], NPI_2_colours[1:2], NPI_3_colours[1:2])) + 
+  theme_bw() +
+  lims(y = c(0, max(subset(dur_protect_plotting, R0 == 3.5)$central_deaths_averted))) +
+  labs(x = "BPSV Immunity Duration (Days)", y = "Deaths Averted By BPSV Per 1000") +
+  guides(fill = guide_legend("NPI\nScenario"), colour = "none") +
+  facet_wrap(R0 ~ ., nrow = 2,
+             labeller = as_labeller(c(`1.5`='R0=1.5', `3.5`='R0=3.5'))) +
+  theme(legend.position = "none",
+        strip.background = element_rect(fill = "white"))
+
 ## Figure 5D - BPSV Infection Efficacy plot
 bpsv_inf_efficacy_plotting <- model_outputs2 %>%
   filter(IFR == 1, 
@@ -361,16 +381,39 @@ bpsv_inf_efficacy_plotting <- model_outputs2 %>%
             composite_NPI_bpsv = composite_NPI_bpsv)
 
 bpsv_inf_efficacy_plot <- ggplot(subset(bpsv_inf_efficacy_plotting, R0 == 2.5 & detection_threshold_hosp == 5)) +
+  geom_line(aes(x = 100 * efficacy_infection_bpsv, y = central_deaths_averted, col = interaction(factor(R0), factor(NPI_int))), size = 1) +
+  geom_point(aes(x = 100 * efficacy_infection_bpsv, y = central_deaths_averted, fill = interaction(factor(R0), factor(NPI_int))), 
+             size = 2, pch = 21, col = "black") +
+  scale_colour_manual(values = c(NPI_1_colours[1:2], NPI_2_colours[1:2], NPI_3_colours[1:2]))  +
+  scale_fill_manual(values = c(NPI_1_colours[1:2], NPI_2_colours[1:2], NPI_3_colours[1:2])) + 
+  theme_bw() +
+  lims(y = c(0, max(subset(bpsv_inf_efficacy_plotting, R0 == 2.5)$central_deaths_averted))) +
+  labs(x = "BPSV Infection Efficacy", y = "Deaths Averted By BPSV Per 1000") +
+  guides(fill = guide_legend("NPI\nScenario"), colour = "none") +
+  theme(legend.position = "none")
+
+bpsv_inf_efficacy_plot_supp <- ggplot(subset(bpsv_inf_efficacy_plotting, R0 != 2.5 & detection_threshold_hosp == 5)) +
   geom_line(aes(x = 100 * efficacy_infection_bpsv, y = central_deaths_averted, col = factor(NPI_int)), size = 1) +
   geom_point(aes(x = 100 * efficacy_infection_bpsv, y = central_deaths_averted, fill = factor(NPI_int)), 
              size = 2, pch = 21, col = "black") +
   scale_colour_manual(values = NPI_colours)  +
   scale_fill_manual(values = NPI_colours)  +
   theme_bw() +
-  lims(y = c(0, max(subset(bpsv_inf_efficacy_plotting, R0 == 2.5)$central_deaths_averted))) +
+  lims(y = c(0, max(subset(bpsv_inf_efficacy_plotting, R0 == 3.5)$central_deaths_averted))) +
   labs(x = "BPSV Infection Efficacy", y = "Deaths Averted By BPSV Per 1000") +
   guides(fill = guide_legend("NPI\nScenario"), colour = "none") +
-  theme(legend.position = "none")
+  facet_wrap(R0 ~ ., nrow = 2,
+             labeller = as_labeller(c(`1.5`='R0=1.5', `3.5`='R0=3.5'))) +
+  theme(legend.position = "none",
+        strip.background = element_rect(fill = "white"))
+
+supp_fig3_first_half <- cowplot::plot_grid(disease_efficacy_plot_supp, dur_protect_plot_supp, bpsv_inf_efficacy_plot_supp,
+                                           nrow = 1, labels = c("A", "B", "C"))
+saveRDS(supp_fig3_first_half, "outputs/Figure4_BPSVProperties/SuppFig3_altR0_vaccine_properties_figure.rds")
+ggsave(filename = "figures/Figure_4_VaccineProperties/SuppFig3_altR0_vaccine_properties_firsthalf.pdf",
+       plot = supp_fig3_first_half,
+       height = 8,
+       width = 4.65)
 
 ## Altogether Plotting
 temp <- cowplot::plot_grid(bpsv_inf_efficacy_plot, dur_protect_plot, nrow = 2, labels = c("C", "D"))

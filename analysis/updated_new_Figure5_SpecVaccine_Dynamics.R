@@ -150,6 +150,21 @@ bpsv_coverage_plot <- ggplot(subset(bpsv_coverage_plotting, R0 == 2.5 & detectio
   guides(fill = guide_legend("NPI\nScenario"), colour = "none") +
   theme(legend.position = "none")
 
+bpsv_coverage_plot_supp <- ggplot(subset(bpsv_coverage_plotting, R0 != 2.5 & detection_threshold_hosp == 5)) +
+  geom_line(aes(x = 100 * coverage_bpsv, y = central_deaths_averted, col = factor(NPI_int)), size = 1) +
+  geom_point(aes(x = 100 * coverage_bpsv, y = central_deaths_averted, fill = factor(NPI_int)), 
+             size = 2, pch = 21, col = "black") +
+  scale_colour_manual(values = NPI_colours)  +
+  scale_fill_manual(values = NPI_colours)  +
+  theme_bw() +
+  lims(y = c(0, max(subset(bpsv_coverage_plotting, R0 == 3.5)$central_deaths_averted))) +
+  labs(x = "% Coverage 65+ Population With BPSV", y = "Deaths Averted By BPSV Per 1000") +
+  guides(fill = guide_legend("NPI\nScenario"), colour = "none") +
+  facet_wrap(R0 ~ ., nrow = 2,
+             labeller = as_labeller(c(`1.5`='R0=1.5', `3.5`='R0=3.5'))) +
+  theme(legend.position = "none",
+        strip.background = element_rect(fill = "white"))
+
 ## BPSV Vaccination Rate plot
 bpsv_rate_plotting <- model_outputs2 %>%
   filter(IFR == 1, 
@@ -178,6 +193,30 @@ bpsv_rate_plot <- ggplot(subset(bpsv_rate_plotting, R0 == 2.5 & detection_thresh
   labs(x = "Days to Complete BPSV Campaign", y = "Deaths Averted By BPSV Per 1000") +
   guides(fill = guide_legend("NPI\nScenario"), colour = "none") +
   theme(legend.position = "none")
+
+bpsv_rate_plot_supp <- ggplot(subset(bpsv_rate_plotting, R0 != 2.5 & detection_threshold_hosp == 5)) +
+  geom_line(aes(x = days_to_bpsv_coverage, y = central_deaths_averted, col = factor(NPI_int)), size = 1) +
+  geom_point(aes(x = days_to_bpsv_coverage, y = central_deaths_averted, fill = factor(NPI_int)), 
+             size = 2, pch = 21, col = "black") +
+  scale_colour_manual(values = NPI_colours)  +
+  scale_fill_manual(values = NPI_colours)  +
+  theme_bw() +
+  lims(y = c(0, max(subset(bpsv_rate_plotting, R0 == 3.5)$central_deaths_averted))) +
+  labs(x = "Days to Complete BPSV Campaign", y = "Deaths Averted By BPSV Per 1000") +
+  guides(fill = guide_legend("NPI\nScenario"), colour = "none") +
+  facet_wrap(R0 ~ ., nrow = 2,
+             labeller = as_labeller(c(`1.5`='R0=1.5', `3.5`='R0=3.5'))) +
+  theme(legend.position = "none",
+        strip.background = element_rect(fill = "white"))
+
+supp_fig3_first_half <- readRDS("outputs/Figure4_BPSVProperties/SuppFig3_altR0_vaccine_properties_figure.rds")
+supp_fig3_final <- cowplot::plot_grid(supp_fig3_first_half, bpsv_coverage_plot_supp, bpsv_rate_plot_supp,
+                                      nrow = 1, rel_widths = c(3, 1, 1),
+                                      labels = c(NA, "D", "E"))
+ggsave(filename = "figures/Figure_4_VaccineProperties/SuppFig3_altR0_vaccine_properties_complete.pdf",
+       plot = supp_fig3_final,
+       width = 14.5,
+       height = 4.65)
 
 #### Figure Delay to Access
 
