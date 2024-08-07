@@ -9,11 +9,13 @@ source("functions/helper_functions.R")
 # Getting vaccination rates by country and summarising average by income strata
 vacc_rates <- read.csv("data/country_vaccination_rates.csv")
 vacc_rates$iso3c <- countrycode::countrycode(vacc_rates$country, "country.name", "iso3c")
-vaccination_rate_summarised <- wbstats::wb_countries() %>%
+wb_income_strata <- wbstats::wb_countries() %>%
   select(iso3c, iso2c, country, income_level_iso3c) %>%
   filter(!is.na(income_level_iso3c)) %>%
   left_join(vacc_rates, by = c("iso3c", "country")) %>%
-  mutate(daily_percent_vaccinated = 2 * Percent.population) %>%
+  mutate(daily_percent_vaccinated = 2 * Percent.population)
+
+vaccination_rate_summarised <- wb_income_strata %>%
   group_by(income_level_iso3c) %>%
   summarise(mean_vaccination_rate = mean(daily_percent_vaccinated, na.rm = TRUE) / 100,
             median_vaccination_rate = median(daily_percent_vaccinated, na.rm = TRUE) / 100,
@@ -63,7 +65,7 @@ iso_list <- substr(list.files(path = "outputs/Figure3_SC2_Counterfactual_Impact/
 low_coverage <- 0.4
 mid_coverage <- 0.6
 high_coverage <- 0.8
-coverage_df <- data.frame(income_level_iso3c = c("LIC", "LMIC", "UMIC", "HIC"),
+coverage_df <- data.frame(income_level_iso3c = c("LIC", "LMC", "UMC", "HIC"),
                           low_coverage = rep(low_coverage, 4),
                           mid_coverage = rep(mid_coverage, 4),
                           high_coverage = rep(high_coverage, 4),
@@ -81,12 +83,13 @@ bpsv_start_dates_df <- data.frame(start_trigger = c("1Deaths", "10Deaths", "100D
 ## Initialising Dataframe to Store the Outputs
 deaths_df <- data.frame(start_trigger = rep(NA_character_, 1),
                         coverage_scenario = rep(NA_character_, 1),
-                        iso = rep(NA_character_, 1), 
+                        coverage = rep(NA_real_, 1),
+                        deaths_BPSV = rep(NA_real_, 1),
                         empirical_deaths = rep(NA_real_, 1), 
-                        deaths_BPSV = rep(NA_real_, 1))
-
+                        iso = rep(NA_character_, 1))
+                        
 ## Running All the Different Scenarios and Looping Over Country
-new_run <- FALSE
+new_run <- TRUE
 for (i in 1:length(iso_list)) {
   if (new_run) {
     
@@ -113,8 +116,8 @@ for (i in 1:length(iso_list)) {
     mid_coverage <- coverage_df$mid_coverage[coverage_df$income_level_iso3c == income_group]
     high_coverage <- coverage_df$high_coverage[coverage_df$income_level_iso3c == income_group]
     variable_coverage <- coverage_df$variable_coverage[coverage_df$income_level_iso3c == income_group]
-    coverage_df <- data.frame(coverage = c(low_coverage, mid_coverage, high_coverage, variable_coverage),
-                              coverage_scenario = c("low", "mid", "high", "variable"))
+    run_coverage_df <- data.frame(coverage = c(low_coverage, mid_coverage, high_coverage, variable_coverage),
+                                  coverage_scenario = c("low", "mid", "high", "variable"))
     
     ## Loading in the raw fits (without the BPSV)
     temp <- readRDS(paste0("outputs/Figure3_SC2_Counterfactual_Impact/raw/raw_", iso_list[i], "_fit.rds"))
@@ -124,10 +127,10 @@ for (i in 1:length(iso_list)) {
     num_cores <- 16
     scenarios_df <- expand.grid(bpsv_start_date = bpsv_start_dates, coverage_scenario = c("low", "mid", "high", "variable")) %>%
       left_join(bpsv_start_dates_df, "bpsv_start_date") %>%
-      left_join(coverage_df, "coverage_scenario") 
+      left_join(run_coverage_df, "coverage_scenario") 
     
     ## Running the scenarios
-    mclapply(1:nrow(scenarios_df), mc.cores = num_cores, function(scenario) {
+    x <- parallel::mclapply(1:nrow(scenarios_df), mc.cores = num_cores, function(scenario) {
       temp_evaluation <- evaluate_country_impact2(original_fit = temp, country_iso = iso, 
                                                   vaccination_rate = vaccination_rate, 
                                                   bpsv_start_date = scenarios_df$bpsv_start_date[scenario], 
@@ -138,17 +141,13 @@ for (i in 1:length(iso_list)) {
       
       file_string <- paste0("Detect", scenarios_df$start_trigger[scenario], "_", scenarios_df$coverage_scenario[scenario], "VaccCoverage")
       saveRDS(object = temp_evaluation, 
-              file = paste0("outputs/Figure3_SC2_Counterfactual_Impact/" file_string, "_", iso, "_fit.rds"))
+              file = paste0("outputs/Figure3_SC2_Counterfactual_Impact/", file_string, "_", iso, "_fit.rds"))
       
       return(temp_evaluation)
     })
-  } else {
-    if (iso_list[i] == "GUF") {
-      iso_list[i] <- "GUY"
-    }
-    all_files <- list.files(path = "outputs/Figure3_SC2_Counterfactual_Impact/", full.names = TRUE)
-    iso_files <- all_files[grepl(iso, all_files)]
-  }
+  } 
+  all_files <- list.files(path = "outputs/Figure3_SC2_Counterfactual_Impact", full.names = TRUE)
+  iso_files <- all_files[grepl(iso, all_files)]
   deaths <- iso_files %>%
     map_dfr(readRDS) %>% 
     group_by(start_trigger, coverage_scenario, coverage, scenario) %>%
