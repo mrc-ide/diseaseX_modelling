@@ -247,6 +247,27 @@ evaluate_country_impact <- function(original_fit, country_iso = "IRN") {
   return(overall) 
 }
 
+# Getting vaccination rates by country
+vacc_rates <- read.csv("data/country_vaccination_rates.csv")
+vacc_rates$iso3c <- countrycode::countrycode(vacc_rates$country, "country.name", "iso3c")
+
+wb_income_strata <- wbstats::wb_countries() %>%
+  select(iso3c, iso2c, country, income_level_iso3c) %>%
+  filter(!is.na(income_level_iso3c)) %>%
+  left_join(vacc_rates, by = c("iso3c", "country")) %>%
+  mutate(daily_percent_vaccinated = 2 * Percent.population)
+
+ggplot(wb_income_strata, aes(x = daily_percent_vaccinated)) +
+  geom_histogram() +
+  facet_wrap(. ~ income_level_iso3c, nrow = 2)
+
+vaccination_rate_summarised <- wb_income_strata %>%
+  group_by(income_level_iso3c) %>%
+  summarise(mean_vaccination_rate = mean(daily_percent_vaccinated, na.rm = TRUE) / 100,
+            median_vaccination_rate = median(daily_percent_vaccinated, na.rm = TRUE) / 100,
+            weekly_mean_vaccination_rate = 7 * mean_vaccination_rate,
+            weekly_median_vaccination_rate = 7 * median_vaccination_rate)
+
 # Loading country ISOs and extracting squire.page fits
 fresh_run_fits <- FALSE
 if (fresh_run_fits) {
@@ -267,8 +288,7 @@ if (fresh_run_fits) {
   }
 }
 
-## Generating BPSV impact (need to go back and figure out when I'm implicitly deploying the BPSV and
-##                         make a PDF to check everything looks reasonable)
+## Generating BPSV impact (need to go back and figure out when I'm implicitly deploying the BPSV and make a PDF to check everything looks reasonable)
 iso_list <- substr(list.files(path = "outputs/Figure3_SC2_Counterfactual_Impact/raw/"), 5, 7)
 deaths_df <- data.frame(iso = rep(NA_character_, length(iso_list)), 
                         empirical_deaths = rep(NA_real_, length(iso_list)), 

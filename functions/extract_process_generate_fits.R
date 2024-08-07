@@ -83,15 +83,109 @@ seed_infections <- function(squire_model, country, seeding_cases){
 }
 
 # Defining function
-evaluate_country_impact <- function(original_fit, country_iso = "IRN") {
+get_country_draws <- function(country_iso = "IRN") {
   
+  # Getting fits for country with excess deaths and extracting the Rt
+  excess <- grab_fit(country_iso, TRUE, TRUE)
+  out <- squire.page:::generate_draws.rt_optimised(excess)
+  daily <- get_deaths_infections_hosps_time(out) %>%
+    group_by(replicate) %>%
+    arrange(date) %>%
+    group_by(date)
+  
+  # Results generation for each of the 100 draws
+  temp_list <- vector(mode = "list", length = length(out$samples))
+  for (i in 1:length(out$samples)) {
+    
+    index <- i
+    if (is.null(out$samples[[index]]$prob_severe_multiplier)) {
+      out$samples[[index]]$prob_severe_multiplier <- rep(1, length(out$samples[[index]]$tt_prob_hosp_multiplier))
+      out$samples[[index]]$tt_prob_severe_multiplier <- out$samples[[index]]$tt_prob_hosp_multiplier
+    }
+    tt_Rt <- out$samples[[index]]$tt_R0
+    tt_R0 <- tt_Rt + 1
+    check1 <- squire.page:::run_booster(time_period = max(out$samples[[index]]$tt_R0),
+                                        population = squire::get_population(country = out$parameters$country)$n,                                                 
+                                        contact_matrix_set = squire::get_mixing_matrix(country = out$parameters$country),                                                   
+                                        R0 = out$samples[[index]]$R0,     
+                                        tt_R0 = tt_R0, 
+                                        hosp_bed_capacity = out$parameters$hosp_bed_capacity,                                     
+                                        ICU_bed_capacity = out$parameters$ICU_bed_capacity,                                       
+                                        
+                                        prob_hosp = out$samples[[index]]$prob_hosp,
+                                        prob_severe = out$samples[[index]]$prob_severe,
+                                        prob_severe_death_treatment = out$samples[[index]]$prob_severe_death_treatment, 
+                                        prob_severe_death_no_treatment = out$samples[[index]]$prob_severe_death_no_treatment, 
+                                        prob_non_severe_death_treatment = out$samples[[index]]$prob_non_severe_death_treatment, 
+                                        prob_non_severe_death_no_treatment = out$samples[[index]]$prob_non_severe_death_no_treatment, 
+                                        dur_R = out$samples[[index]]$dur_R,   
+                                        tt_dur_R = out$samples[[index]]$tt_dur_R,
+                                        
+                                        prob_hosp_multiplier = out$samples[[index]]$prob_hosp_multiplier,
+                                        tt_prob_hosp_multiplier = out$samples[[index]]$tt_prob_hosp_multiplier,
+                                        prob_severe_multiplier = out$samples[[index]]$prob_severe_multiplier,
+                                        tt_prob_severe_multiplier = out$samples[[index]]$tt_prob_severe_multiplier,
+                                        dur_V = out$samples[[index]]$dur_V,
+                                        tt_dur_V = out$samples[[index]]$tt_dur_V,
+                                        vaccine_efficacy_infection = out$samples[[index]]$vaccine_efficacy_infection,
+                                        vaccine_efficacy_disease = out$samples[[index]]$vaccine_efficacy_disease,
+                                        tt_vaccine_efficacy_disease = out$samples[[index]]$tt_vaccine_efficacy_disease,
+                                        tt_vaccine_efficacy_infection = out$samples[[index]]$tt_vaccine_efficacy_infection,
+                                        primary_doses = 0,
+                                        booster_doses = 0, 
+                                        
+                                        seeding_cases = NULL,
+                                        init = seed_infections(excess$squire_model, excess$parameters$country, out$samples[[index]]$initial_infections))
+    check1d <- nimue::format(check1, compartments = "D", summaries = "deaths") %>%
+      filter(t > 1, compartment == "deaths") %>%
+      mutate(index = i)
+    temp_list[[i]] <- check1d
+  }
+  
+  rep_summary <- bind_rows(temp_list) %>%
+    group_by(replicate) %>%
+    arrange(t) %>%
+    group_by(t)  %>%
+    summarise(
+      across(c(value), ~median(.x, na.rm=TRUE), .names = "no_bpsv_deaths_med"),
+      across(c(value), ~quantile(.x, 0.025, na.rm=TRUE), .names = "no_bpsv_deaths_025"),
+      across(c(value), ~quantile(.x, 0.975, na.rm=TRUE), .names = "no_bpsv_deaths_975"),
+      .groups = "drop") 
+  
+  return(list(country_iso = country_iso,
+              model_fit = rep_summary,
+              daily = daily,
+              out = list(samples = out$samples, 
+                         parameters = out$parameters, 
+                         inputs = out$inputs)))
+  
+}
+
+# Defining function
+evaluate_country_impact2 <- function(original_fit, country_iso = "IRN", vaccination_rate, bpsv_start_date, coverage) {
+  
+  # Loading in various components for evaluating impact
   excess <- grab_fit(country_iso, TRUE, TRUE)
   out <- original_fit$out
   rep_summary <- original_fit$model_fit
   daily <- original_fit$daily
   
+  # Getting date first death
+  # time_first_death <- round((out$inputs$data$t_start[1] + out$inputs$data$t_end[1]) / 2 ) # time of first death relative to time model starts
+  
+  # Timing the start of the BPSV
+  if (!is.Date(bpsv_start_date)) {
+    stop("start_date must be a date")
+  }
+  time_simulation_start <- original_fit$out$inputs$start_date
+  numeric_bpsv_start_date <- as.numeric(bpsv_start_date - time_simulation_start)
+  if (numeric_bpsv_start_date <= 1) {
+    numeric_bpsv_start_date <- 1
+  }
+  
   ### Generating the counterfactual impact of a BPSV
-  temp <- create_scenarios(R0 = 3, specific_vaccine_start = 500) %>%
+  temp <- create_scenarios(R0 = 3, specific_vaccine_start = 500,
+                           coverage_bpsv = coverage, coverage_spec = coverage) %>% # need to decide what to make this
     filter(vaccine_scenario == "both_vaccines")
   
   # Generating vaccine coverage matrix
@@ -104,10 +198,10 @@ evaluate_country_impact <- function(original_fit, country_iso = "IRN") {
   
   # Generating vaccine dose series
   detection_time <- 1
-  bpsv_start <- 1
-  bpsv_protection_delay <- 14
-  specific_vaccine_start <- 450
-  specific_protection_delay <- 14
+  bpsv_start <- numeric_bpsv_start_date
+  bpsv_protection_delay <- 7
+  specific_vaccine_start <- 500
+  specific_protection_delay <- 7
   vaccine_doses <- create_vaccination_dose_series(country = out$parameters$country, 
                                                   population_size = sum(squire::get_population(country = out$parameters$country)$n), 
                                                   detection_time = detection_time, 
@@ -116,12 +210,12 @@ evaluate_country_impact <- function(original_fit, country_iso = "IRN") {
                                                   bpsv_protection_delay = bpsv_protection_delay,
                                                   specific_vaccine_start = specific_vaccine_start,
                                                   specific_protection_delay = specific_protection_delay,
-                                                  vaccination_rate_bpsv = temp$vaccination_rate_bpsv,
-                                                  vaccination_rate_spec = temp$vaccination_rate_spec,
+                                                  vaccination_rate_bpsv = vaccination_rate,
+                                                  vaccination_rate_spec = vaccination_rate,
                                                   coverage_bpsv = temp$coverage_bpsv,
                                                   coverage_spec = temp$coverage_spec,
                                                   min_age_group_index_priority = temp$min_age_group_index_priority,
-                                                  runtime = max(out$samples[[1]]$tt_R0))
+                                                  runtime = max(out$samples[[1]]$tt_R0) + 200)
   primary_doses <- vaccine_doses$primary_doses
   second_doses <- vaccine_doses$second_doses
   booster_doses <- vaccine_doses$booster_doses
@@ -164,7 +258,10 @@ evaluate_country_impact <- function(original_fit, country_iso = "IRN") {
     index <- i
     tt_Rt <- out$samples[[index]]$tt_R0
     tt_R0 <- tt_Rt + 1
-    BPSV <- squire.page.sarsX:::run_booster(time_period = max(out$samples[[index]]$tt_R0),
+    # excess$squire_mode$parameter_func <- squire.page.sarsX:::nimue_booster_model()$parameter_func
+    init <- seed_infections(excess$squire_model, excess$parameters$country, out$samples[[index]]$initial_infections)
+    time_period <- max(out$samples[[index]]$tt_R0)
+    BPSV <- squire.page.sarsX:::run_booster(time_period = time_period,
                                             population = squire::get_population(country = out$parameters$country)$n,                                                 
                                             contact_matrix_set = squire::get_mixing_matrix(country = out$parameters$country),                                                   
                                             R0 = out$samples[[index]]$R0,     
@@ -188,9 +285,9 @@ evaluate_country_impact <- function(original_fit, country_iso = "IRN") {
                                             
                                             ## BPSV specific stuff
                                             vaccine_coverage_mat = vaccine_coverage_mat,
-                                            primary_doses = primary_doses,  
-                                            second_doses = second_doses,
-                                            booster_doses = booster_doses,   
+                                            primary_doses = primary_doses[1:time_period],  
+                                            second_doses = second_doses[1:time_period],
+                                            booster_doses = booster_doses[1:time_period],   
                                             vaccine_efficacy_infection = list(vaccine_efficacy_infection_bpsv_campaign, vaccine_efficacy_infection_spec_campaign),
                                             tt_vaccine_efficacy_disease = c(0, temp$specific_vaccine_start - 5),
                                             vaccine_efficacy_disease = list(vaccine_efficacy_disease_bpsv_campaign, vaccine_efficacy_disease_spec_campaign),
@@ -201,12 +298,13 @@ evaluate_country_impact <- function(original_fit, country_iso = "IRN") {
                                             
                                             ## Misc
                                             seeding_cases = NULL,
-                                            init = seed_infections(excess$squire_model, excess$parameters$country, out$samples[[index]]$initial_infections))
+                                            init = init)
     
     check_BPSV <- nimue::format(BPSV, compartments = "D", summaries = "deaths") %>%
       filter(t > 1, compartment == "deaths") %>%
       mutate(index = i)
     temp_list_BPSV[[i]] <- check_BPSV
+    # print(i)
   }
   
   rep_bpsv <- bind_rows(temp_list_BPSV) %>%
@@ -225,7 +323,8 @@ evaluate_country_impact <- function(original_fit, country_iso = "IRN") {
   
   fit <- daily %>%
     filter(replicate == 1)
-  overall$date <- fit$date[1:364] 
+  index <- ifelse(length(overall$t) < 364, length(overall$t), 364)
+  overall$date <- fit$date[1:index] 
   overall <- overall %>%
     pivot_longer(cols = -c(t, date), 
                  names_to = c("scenario", "metric"), 
