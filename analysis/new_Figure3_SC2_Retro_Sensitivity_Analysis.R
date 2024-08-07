@@ -21,6 +21,21 @@ vaccination_rate_summarised <- wbstats::wb_countries() %>%
             weekly_median_vaccination_rate = 7 * median_vaccination_rate) %>%
   filter(income_level_iso3c != "INX")
 
+# Extracting unprocessed squire.page fits (required for Linux desktop to run as it struggles with download
+# call in grab_fit)
+fresh_run_fits <- FALSE
+if (fresh_run_fits) {
+  country_ISOs <- unique(squire::population$iso3c)
+  for (i in 199:length(country_ISOs)) {
+    # Getting squire.page country fit draws 
+    excess <- grab_fit(country_ISOs[i], TRUE, TRUE)
+    
+    # Saving output
+    saveRDS(object = excess, file = paste0("outputs/Figure3_SC2_Counterfactual_Impact/unprocessed_outputs/" , country_ISOs[i], "_fit.rds"))
+    print(paste0("i = ", i, ", ISO = ", country_ISOs[i]))
+  }
+}
+
 # Loading country ISOs and extracting squire.page fits
 fresh_run_fits <- FALSE
 if (fresh_run_fits) {
