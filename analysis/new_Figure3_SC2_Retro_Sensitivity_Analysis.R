@@ -161,7 +161,7 @@ for (i in 1:length(iso_list)) {
 
 ## Overall deaths averted
 overall_deaths_averted <- deaths_df %>%
-  group_by(start_trigger) %>%
+  group_by(start_trigger, coverage_scenario) %>%
   summarise(total_bpsv_deaths = sum(deaths_BPSV),
             total_empirical_deaths = sum(empirical_deaths))
 
