@@ -215,12 +215,11 @@ overall_impact_deaths %>%
             lower_empirical_deaths = sum(total_low_no_bpsv_deaths),
             upper_empirical_deaths = sum(total_high_no_bpsv_deaths))
 
-ggplot(overall_impact_deaths) +
+supp_figure <- ggplot(overall_impact_deaths) +
   geom_line(aes(x = date, y = cumulative_no_bpsv_deaths), colour = "#748386", linewidth = 1) +
-  geom_line(aes(x = date, y = cumulative_bpsv_deaths), colour = "#E9614F", linewidth = 1) +
-  geom_ribbon(aes(x = date, ymin = cumulative_bpsv_deaths, ymax = cumulative_no_bpsv_deaths), 
-              alpha = 0.2, fill = "#F2C7C1") +
-  facet_grid(coverage_scenario ~ start_trigger) +
+  geom_line(aes(x = date, y = cumulative_bpsv_deaths, colour = coverage_scenario), linewidth = 1) +
+  facet_grid(. ~ start_trigger) +
+  scale_colour_manual(values = c("#A82C14", "#F2B592", "#D85F46", "#03B5AA")) +
   labs(x = "", y = "Cumulative COVID-19 Deaths") +
   theme_bw() +
   scale_y_continuous(labels = c("1M", "2M", "3M", "4M", "5M", "6M"),
