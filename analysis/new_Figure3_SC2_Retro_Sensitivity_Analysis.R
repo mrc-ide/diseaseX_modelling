@@ -323,7 +323,7 @@ world_map <- ggplot() +
         panel.background = element_rect(fill = "white")) +
   theme_void() +
   theme(legend.position = "bottom",
-        legend.key.width = unit(0.125, "npc")) +
+        legend.key.width = unit(0.0625, "npc")) +
   scale_fill_viridis_c(option = "mako", 
                        direction = -1, 
                        limits = c(min_perc_averted, max_perc_averted), 
@@ -435,7 +435,9 @@ row1_alt <- cowplot::plot_grid(c_alt_final, world_map + theme(legend.position = 
 row2_alt <- cowplot::plot_grid(ita_plot, irn_plot, bgd_plot, ncol = 3, labels = c("E", "F", "G"))
 full_plot_alt <- cowplot::plot_grid(row1_alt, row2_alt, nrow = 2, 
                                     rel_heights = c(1.25, 1), align = "v", axis = "lr")
-
+ggsave(filename = "figures/Figure_3_BPSV_SC2_Impact/NEW_NEW_Figure3_full_plots.pdf",
+       plot = full_plot_alt,
+       width = 10.27, height = 6)
 
 # row1_alt2 <- cowplot::plot_grid(world_map, c_alt_final, ncol = 1, labels = c("A", "B"))
 # row2_alt2 <- cowplot::plot_grid(ita_plot, irn_plot, bgd_plot, nrow = 3, labels = c("C", "D", "E"))
