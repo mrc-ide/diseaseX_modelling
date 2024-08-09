@@ -206,14 +206,17 @@ overall_impact_deaths <- impact_deaths_df %>%
   pivot_wider(names_from = "scenario",
               values_from = c("total_deaths", "total_low", "total_high", "cumulative", "cumulative_low", "cumulative_high"))
 
-overall_impact_deaths %>%
+perc_red <- overall_impact_deaths %>%
   group_by(start_trigger, coverage_scenario) %>%
   summarise(total_bpsv_deaths = sum(total_deaths_bpsv_deaths),
             lower_bpsv_deaths = sum(total_low_bpsv_deaths),
             upper_bpsv_deaths = sum(total_high_bpsv_deaths),
             total_empirical_deaths = sum(total_deaths_no_bpsv_deaths),
             lower_empirical_deaths = sum(total_low_no_bpsv_deaths),
-            upper_empirical_deaths = sum(total_high_no_bpsv_deaths))
+            upper_empirical_deaths = sum(total_high_no_bpsv_deaths),
+            lower_perc_reduction = 100 * (lower_empirical_deaths - upper_bpsv_deaths) / lower_empirical_deaths,
+            total_perc_reduction = 100 * (total_empirical_deaths - total_bpsv_deaths) / total_empirical_deaths,
+            upper_perc_reduction = 100 * (upper_empirical_deaths - lower_bpsv_deaths) / upper_empirical_deaths)
 
 supp_figure <- ggplot(overall_impact_deaths) +
   geom_line(aes(x = date, y = cumulative_no_bpsv_deaths), colour = "#748386", linewidth = 1) +
@@ -341,7 +344,7 @@ color_mapping <- data.frame(Country = merged_data$iso_a3, Color = country_colors
 age_groups <- c("60-64", "65-69", "70-74", "75-79", "80+")
 squire:::get_population("Italy") %>%
   filter(age_group %in% age_groups) %>%
-  summarise(total = sum(n))
+  summarise(total = sum(n)) * 0.6
 ITA_files <- all_files[grepl("ITA", all_files)]
 bpsv_ITA <- ITA_files %>%
   map_dfr(readRDS) %>%
@@ -362,10 +365,13 @@ ita_plot <- ggplot() +
   labs(x = "Date", y = "COVID-19 Deaths Per Day") +
   theme(legend.position = "none")
 
+bpsv_ITA %>% group_by(coverage_scenario2, start_trigger) %>% summarise(total = sum(med))
+no_bpsv_ITA %>% group_by(coverage_scenario, start_trigger) %>% summarise(total = sum(med))
+
 ## Plotting for Iran
 squire:::get_population("Iran") %>%
   filter(age_group %in% age_groups) %>%
-  summarise(total = sum(n))
+  summarise(total = sum(n)) * 0.6
 IRN_files <- all_files[grepl("IRN", all_files)]
 bpsv_IRN <- IRN_files %>%
   map_dfr(readRDS) %>%
@@ -389,7 +395,7 @@ irn_plot <- ggplot() +
 ## Plotting for Bangladesh
 squire:::get_population("Bangladesh") %>%
   filter(age_group %in% age_groups) %>%
-  summarise(total = sum(n))
+  summarise(total = sum(n)) * 0.6
 BGD_files <- all_files[grepl("BGD", all_files)]
 bpsv_BGD <- BGD_files %>%
   map_dfr(readRDS) %>%
