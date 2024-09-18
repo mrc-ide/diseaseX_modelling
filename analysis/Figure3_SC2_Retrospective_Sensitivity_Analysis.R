@@ -1,5 +1,5 @@
 # Load required libraries
-library(tidyverse); library(rnaturalearth); library(sf); #library(rgdal); # library(squire.page); 
+library(tidyverse); library(rnaturalearth); library(sf); 
 
 # Sourcing required functions
 source("functions/extract_process_generate_fits.R")
@@ -190,6 +190,7 @@ for (i in 1:length(iso_list)) {
     data_list[[i]] <- bpsv
   }
 }
+
 impact_deaths_df <- bind_rows(data_list)
 
 overall_impact_deaths <- impact_deaths_df %>%
@@ -227,6 +228,9 @@ supp_figure <- ggplot(overall_impact_deaths) +
   theme_bw() +
   scale_y_continuous(labels = c("1M", "2M", "3M", "4M", "5M", "6M"),
                      breaks = c(1e6, 2e6, 3e6, 4e6, 5e6, 6e6))
+ggsave(filename = "figures/Figure_3_BPSV_SC2_Impact/SuppFigure_VaryingStartTrigger.pdf",
+       plot = supp_figure,
+       width = 10, height = 3)
 
 a <- ggplot(subset(overall_impact_deaths, coverage_scenario == "mid" & start_trigger == "1000Deaths")) +
   geom_line(aes(x = date, y = cumulative_no_bpsv_deaths), colour = "#748386", linewidth = 1) +
@@ -245,11 +249,6 @@ b <- ggplot(subset(overall_impact_deaths, coverage_scenario == "mid" & start_tri
               alpha = 0.2, fill = "#F2C7C1") +
   labs(x = "", y = "Daily\nCOVID-19 Deaths") +
   theme_bw() 
-
-c <- cowplot::plot_grid(a, b, nrow = 2, align = "v")
-ggsave(filename = "figures/Figure_3_BPSV_SC2_Impact/NEW_Figure3_total_plots.pdf",
-       plot = c,
-       width = 3.33, height = 3)
 
 a_alt <- ggplot(subset(overall_impact_deaths, start_trigger == "1000Deaths")) +
   geom_line(aes(x = date, y = cumulative_no_bpsv_deaths), colour = "#748386") +
@@ -312,7 +311,7 @@ PROJ <- "+proj=robin +lon_0=0 +x_0=0 +y_0=0 +ellps=WGS84 +datum=WGS84 +units=m +
 NE_box_rob <- spTransform(NE_box, CRSobj = PROJ)
 NE_graticules_rob <- spTransform(NE_graticules, CRSobj = PROJ)
 
-min_perc_averted <- floor(min(merged_data$perc_averted, na.rm = TRUE), digits = -1)
+min_perc_averted <- 10 #floor(min(merged_data$perc_averted, na.rm = TRUE), digits = -1)
 max_perc_averted <- plyr::round_any(max(merged_data$perc_averted, na.rm = TRUE), 10, f = ceiling)
 
 # Plotting the output 
@@ -416,19 +415,6 @@ bgd_plot <- ggplot() +
   labs(x = "Date", y = "COVID-19 Deaths Per Day") +
   theme(legend.position = "none")
 
-row1 <- cowplot::plot_grid(world_map, c, nrow = 1, rel_widths = c(1.75, 1), labels = c("A", "B"))
-row2 <- cowplot::plot_grid(ita_plot, irn_plot, bgd_plot, ncol = 3, labels = c("C", "D", "E"))
-full_plot <- cowplot::plot_grid(row1, row2, nrow = 2)
-Sys.sleep(5)
-full_plot
-ggsave(filename = "figures/Figure_3_BPSV_SC2_Impact/NEW_Figure3_full_plots.pdf",
-       plot = full_plot,
-       width = 10.27, height = 6)
-
-# row1_alt <- cowplot::plot_grid(world_map, c_alt_final, nrow = 1, rel_widths = c(1.25, 1), labels = c("A", "B"))
-# row2_alt <- cowplot::plot_grid(ita_plot, irn_plot, bgd_plot, ncol = 3, labels = c("C", "D", "E"))
-# full_plot_alt <- cowplot::plot_grid(row1_alt, row2_alt, nrow = 2)
-
 c_alt <- cowplot::plot_grid(a_alt + theme(legend.position = "none"), 
                             b_alt + theme(legend.position = "none"), nrow = 2, align = "v", labels = c("A", "B"))
 c_alt_final <- cowplot::plot_grid(c_alt, 
@@ -440,190 +426,6 @@ row1_alt <- cowplot::plot_grid(c_alt_final, world_map + theme(legend.position = 
 row2_alt <- cowplot::plot_grid(ita_plot, irn_plot, bgd_plot, ncol = 3, labels = c("E", "F", "G"))
 full_plot_alt <- cowplot::plot_grid(row1_alt, row2_alt, nrow = 2, 
                                     rel_heights = c(1.25, 1), align = "v", axis = "lr")
-ggsave(filename = "figures/Figure_3_BPSV_SC2_Impact/NEW_NEW_Figure3_full_plots.pdf",
+ggsave(filename = "figures/Figure_3_BPSV_SC2_Impact/Fig3_SC_BPSVImpact_Overall.pdf",
        plot = full_plot_alt,
        width = 10.27, height = 6)
-
-# row1_alt2 <- cowplot::plot_grid(world_map, c_alt_final, ncol = 1, labels = c("A", "B"))
-# row2_alt2 <- cowplot::plot_grid(ita_plot, irn_plot, bgd_plot, nrow = 3, labels = c("C", "D", "E"))
-# full_plot_alt2 <- cowplot::plot_grid(row1_alt2, row2_alt2, ncol = 2, rel_widths = c(1.5, 1))
-# 
-# c_alt_final2 <- cowplot::plot_grid(a_alt + theme(legend.position = "none"), 
-#                                    a_bar_alt2 + theme(legend.position = "none"), 
-#                                    nrow = 2, 
-#                                    rel_heights = c(1, 1.5), 
-#                                    labels = c("A", "B"),
-#                                    align = "v")
-# row1_alt3 <- cowplot::plot_grid(ita_plot, irn_plot, nrow = 1, labels = c("F", "F"))
-# row1_alt3_2 <- cowplot::plot_grid(world_map +theme(legend.position = "right"), row1_alt3, ncol = 1, labels = c("A", ""))
-# row2_alt2 <- cowplot::plot_grid(c_alt_final2, row1_alt3_2, ncol = 2, 
-#                                 rel_widths = c(1, 1.5), 
-#                                 align = "h")
-
-
-
-
-# country_row1 <- cowplot::plot_grid(NULL, ita_plot, nrow = 1, rel_widths = c(1.75, 1), labels = c("A", "B"))
-# country_row2 <- cowplot::plot_grid(col_plot, irn_plot, bgd_plot, ncol = 3, labels = c("C", "D", "E"))
-# country_plots <- cowplot::plot_grid(country_row1, country_row2, nrow = 2)
-# ggsave(filename = "figures/Figure_3_BPSV_SC2_Impact/NEW_Figure3_country_plots.pdf",
-#        plot = country_plots,
-#        width = 10, height = 6)
-# 
-
-# Bangladesh, Colombia, Italy and Iran
-
-### SCRAP CODE ###
-# overall_ITA <- evaluate_country_impact("ITA")
-# saveRDS(object = overall_ITA, file = "ITA_BPSV_counterfactual_impact.rds")
-# overall_IRN <- evaluate_country_impact("IRN")
-# saveRDS(object = overall_IRN, file = "IRN_BPSV_counterfactual_impact.rds")
-# 
-# overall_ITA <- readRDS("ITA_BPSV_counterfactual_impact.rds")
-# overall_IRN <- readRDS("IRN_BPSV_counterfactual_impact.rds")
-# 
-# ita_time_plot <- ggplot(data = overall_ITA) +
-#   geom_point(aes(x = date, y = reported_deaths), col = "grey") +
-#   geom_ribbon(aes(x = date, ymin = `025`, ymax = `975`, fill = scenario), alpha = 0.2) +
-#   geom_line(aes(x = date, y = med, col = scenario)) +
-#   theme_bw() +
-#   scale_colour_manual(values = c("#E67552", "#001A23")) +
-#   scale_fill_manual(values = c("#E67552", "#001A23")) +
-#   labs(x = "Date", y = "COVID-19 Deaths Per Day") +
-#   theme(legend.position = "none")
-# 
-# deaths_ITA <- overall_ITA %>%
-#   group_by(scenario) %>%
-#   summarise(med = sum(med),
-#             `025` = sum(`025`),
-#             `975` = sum(`975`))
-# 
-# ita_deaths_plot <- ggplot(deaths_ITA) +
-#   geom_bar(aes(x = scenario, y = med, fill = scenario), stat = "identity") +
-#   geom_errorbar(aes(x = scenario, ymin = `025`, ymax = `975`, group = scenario), width = 0.3) +
-#   labs(x = "", y = "COVID-19 Deaths") +
-#   scale_x_discrete(labels = c("Deaths with\nBPSV", "Actual\nDeaths")) +
-#   scale_fill_manual(values = c("#E67552", "#001A23")) +
-#   theme_bw() +
-#   theme(legend.position = "none")
-# 
-# irn_time_plot <- ggplot(data = overall_IRN) +
-#   geom_point(aes(x = date, y = reported_deaths), col = "grey") +
-#   geom_ribbon(aes(x = date, ymin = `025`, ymax = `975`, fill = scenario), alpha = 0.2) +
-#   geom_line(aes(x = date, y = med, col = scenario)) +
-#   theme_bw() +
-#   scale_colour_manual(values = c("#E67552", "#001A23")) +
-#   scale_fill_manual(values = c("#E67552", "#001A23")) +
-#   labs(x = "Date", y = "COVID-19 Deaths Per Day") +
-#   theme(legend.position = "none")
-# 
-# deaths_IRN <- overall_IRN %>%
-#   group_by(scenario) %>%
-#   summarise(med = sum(med),
-#             `025` = sum(`025`),
-#             `975` = sum(`975`))
-# 
-# irn_deaths_plot <- ggplot(deaths_IRN) +
-#   geom_bar(aes(x = scenario, y = med, fill = scenario), stat = "identity") +
-#   geom_errorbar(aes(x = scenario, ymin = `025`, ymax = `975`, group = scenario), width = 0.3) +
-#   labs(x = "", y = "COVID-19 Deaths") +
-#   scale_x_discrete(labels = c("Deaths with\nBPSV", "Actual\nDeaths")) +
-#   scale_fill_manual(values = c("#E67552", "#001A23")) +
-#   theme_bw() +
-#   theme(legend.position = "none")
-# 
-# italy <- cowplot::plot_grid(ita_time_plot, ita_deaths_plot, 
-#                             rel_widths = c(2.5, 1), labels = c("A", "B"))
-# iran <- cowplot::plot_grid(irn_time_plot, irn_deaths_plot, 
-#                            rel_widths = c(2.5, 1), labels = c("C", "D"))
-# 
-# cowplot::plot_grid(italy, iran, nrow = 2)
-# ggplot(overall_impact_deaths) +
-#   geom_line(aes(x = date, y = cumulative_no_bpsv_deaths)) +
-#   geom_ribbon(aes(x = date, ymin = cumulative_low_no_bpsv_deaths, ymax = cumulative_high_no_bpsv_deaths ), alpha = 0.2) +
-#   geom_line(aes(x = date, y = cumulative_bpsv_deaths)) +
-#   geom_ribbon(aes(x = date, ymin = cumulative_low_bpsv_deaths, ymax = cumulative_high_bpsv_deaths ), alpha = 0.2) +
-#   labs(x = "", y = "COVID-19 Deaths") +
-#   theme_bw() +
-#   scale_y_continuous(labels = c("1M", "2M", "3M", "4M", "5M", "6M"),
-#                      breaks = c(1e6, 2e6, 3e6, 4e6, 5e6, 6e6))
-## 1 Death Start
-# temp_overall_1 <- evaluate_country_impact2(original_fit = temp, country_iso = iso_list[i], 
-#                                            vaccination_rate = vaccination_rate, 
-#                                            bpsv_start_date = bpsv_start_date_1, coverage = 0.6)
-# temp_overall_1$start_trigger <- "1_deaths"
-# saveRDS(object = temp_overall_1, file = paste0("outputs/Figure3_SC2_Counterfactual_Impact/BPSV_counterfactual_VaccRate_1DeathsStart/BPSV_counterfactual_VaccRate_1DeathsStart_", iso_list[i], "_fit.rds"))
-# 
-# ## 10 Deaths Start
-# temp_overall_10 <- evaluate_country_impact2(original_fit = temp, country_iso = iso_list[i], 
-#                                             vaccination_rate = vaccination_rate, 
-#                                             bpsv_start_date = bpsv_start_date_10, coverage = 0.6)
-# temp_overall_10$start_trigger <- "10_deaths"
-# saveRDS(object = temp_overall_10, file = paste0("outputs/Figure3_SC2_Counterfactual_Impact/BPSV_counterfactual_VaccRate_10DeathsStart/BPSV_counterfactual_VaccRate_10DeathsStart_", iso_list[i], "_fit.rds"))
-# 
-# ## 100 Deaths Start
-# temp_overall_100 <- evaluate_country_impact2(original_fit = temp, country_iso = iso_list[i], 
-#                                              vaccination_rate = vaccination_rate, 
-#                                              bpsv_start_date = bpsv_start_date_100, coverage = 0.6)
-# temp_overall_100$start_trigger <- "100_deaths"
-# saveRDS(object = temp_overall_100, file = paste0("outputs/Figure3_SC2_Counterfactual_Impact/BPSV_counterfactual_VaccRate_100DeathsStart/BPSV_counterfactual_VaccRate_100DeathsStart_", iso_list[i], "_fit.rds"))
-# 
-# ## 1000 Deaths Start
-# temp_overall_1000 <- evaluate_country_impact2(original_fit = temp, country_iso = iso_list[i], 
-#                                               vaccination_rate = vaccination_rate, 
-#                                               bpsv_start_date = bpsv_start_date_1000, coverage = 0.6)
-# temp_overall_1000$start_trigger <- "1000_deaths"
-# saveRDS(object = temp_overall_1000, file = paste0("outputs/Figure3_SC2_Counterfactual_Impact/BPSV_counterfactual_VaccRate_1000DeathsStart/BPSV_counterfactual_VaccRate_1000DeathsStart_", iso_list[i], "_fit.rds"))
-
-# reported_deaths <- impact_deaths_df %>%
-#   filter(scenario == "no_bpsv_deaths") %>%
-#   select(iso, scenario, date, reported_deaths) %>%
-#   group_by(date) %>%
-#   summarise(total_reported_deaths = sum(reported_deaths, na.rm = TRUE)) %>%
-#   filter(date < as.Date("2020-11-28"))
-# plot(reported_deaths$date, reported_deaths$total_reported_deaths)
-# sum(reported_deaths$total_reported_deaths)
-
-# overall_impact_deaths <- impact_deaths_df %>%
-#   group_by(scenario, date) %>%
-#   filter(date < as.Date("2020-11-28")) %>%
-#   dplyr::summarise(total_deaths = sum(med, na.rm = TRUE), 
-#                    total_low = sum(`025`, na.rm = TRUE),
-#                    total_high = sum(`975`, na.rm = TRUE)) %>%
-#   mutate(cumulative = cumsum(total_deaths),
-#          cumulative_low = cumsum(total_low),
-#          cumulative_high = cumsum(total_high)) %>%
-#   pivot_wider(names_from = "scenario",
-#               values_from = c("total_deaths", "total_low", "total_high", "cumulative", "cumulative_low", "cumulative_high"))
-# 
-# a <- ggplot(overall_impact_deaths) +
-#   geom_line(aes(x = date, y = cumulative_no_bpsv_deaths), colour = "#748386", linewidth = 1) +
-#   geom_line(aes(x = date, y = cumulative_bpsv_deaths), colour = "#E9614F", linewidth = 1) +
-#   geom_ribbon(aes(x = date, ymin = cumulative_bpsv_deaths, ymax = cumulative_no_bpsv_deaths), 
-#               alpha = 0.2, fill = "#F2C7C1") +
-#   labs(x = "", y = "Cumulative COVID-19 Deaths") +
-#   theme_bw() +
-#   scale_y_continuous(labels = c("1M", "2M", "3M", "4M", "5M", "6M"),
-#                      breaks = c(1e6, 2e6, 3e6, 4e6, 5e6, 6e6))
-# 
-# b <- ggplot(overall_impact_deaths) +
-#   geom_line(aes(x = date, y = total_deaths_no_bpsv_deaths), colour = "#748386", linewidth = 1) +
-#   geom_line(aes(x = date, y = total_deaths_bpsv_deaths), colour = "#E9614F", linewidth = 1) +
-#   geom_ribbon(aes(x = date, ymin = total_deaths_bpsv_deaths, ymax = total_deaths_no_bpsv_deaths), 
-#               alpha = 0.2, fill = "#F2C7C1") +
-#   labs(x = "", y = "Daily COVID-19 Deaths") +
-#   theme_bw() 
-
-# COL_files <- all_files[grepl("COL", all_files)]
-# bpsv_COL <- COL_files %>%
-#   map_dfr(readRDS) %>%
-#   filter(coverage_scenario == "mid" & start_trigger == "1000Deaths")
-# col_plot <- ggplot(data = bpsv_COL) +
-#   geom_point(aes(x = date, y = reported_deaths), col = "grey") +
-#   geom_ribbon(aes(x = date, ymin = `025`, ymax = `975`, fill = scenario), alpha = 0.2) +
-#   geom_line(aes(x = date, y = med, col = scenario)) +
-#   theme_bw() +
-#   scale_colour_manual(values = c(color_mapping$Color[color_mapping$Country == "COL"], "#001A23")) +
-#   scale_fill_manual(values = c(color_mapping$Color[color_mapping$Country == "COL"], "#001A23")) +
-#   labs(x = "Date", y = "COVID-19 Deaths Per Day") +
-#   theme(legend.position = "none")
