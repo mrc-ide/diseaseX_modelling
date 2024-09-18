@@ -13,7 +13,7 @@ source(here::here("functions/branching_process2.R"))
 ### Fixed model parameters
 
 ### SARS-CoV-1-specific parameters (longer Tg, lower presymptomatic transmission, lower proportion asymptomatic infection)
-SC1_generation_time <- function(n) { rgamma(n, shape = 24, rate = 2) } ## Ask Azra for values
+SC1_generation_time <- function(n) { rgamma(n, shape = 24, rate = 2) } ## Ask Azra for values ## NOTE that shape = 2, rate = 2 /24 would be equiv to SIR with 2 I compartments
 SC1_infection_to_onset <- function(n) { rgamma(n, shape = 0.1, rate = 1) } ## Ask Azra for values (negligible assumed currently)
 SC1_prop_asymptomatic <- 0
 

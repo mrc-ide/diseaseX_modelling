@@ -82,7 +82,7 @@ chain_sim_susc_ring_vacc2 <- function(offspring = c("pois", "nbinom"), mn_offspr
     
     time_infection_index <- min(tdf$time_infection[tdf$offspring_generated == 0 & !is.na(tdf$time_infection)])              # Note: Is not an issue in practice, but I don't think this is currently set up to handle >= 2 infections with same infection time currently
     idx <- which(tdf$time_infection == time_infection_index & !tdf$offspring_generated)[1] # get the id of the earliest unsimulated infection
-    id_parent <- tdf$id[idx]                                                               # parent of the earliest unsimulated infection
+    id_parent <- tdf$id[idx]                                                               # id of the earliest unsimulated infection
     t_parent <- tdf$time_infection[idx]                                                    # infection time of the earliest unsimulated infection
     gen_parent <- tdf$generation[idx]                                                      # generation of the earliest unsimulated infection
     current_max_id <- max(tdf$id)                                                          # total number of infections in the dataframe currently (so we can figure out how to label the new infections)

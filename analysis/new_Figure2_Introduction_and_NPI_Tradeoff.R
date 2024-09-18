@@ -194,6 +194,13 @@ Figure2 <- cowplot::plot_grid(NPI_plot, deaths_averted_plot,
                               labels = c("B", "C"))
 ggsave(filename = "figures/Figure_2_FrameworkIntro/NEW_Figure2BC_NPI_Plot.pdf", plot = Figure2, width = 9.25, height = 7.5)
 
+## Calculating percent reduction in deaths
+subset(model_outputs2, R0 == 2.5 & specific_vaccine_start %in% 250) %>%
+  mutate(perc_reduction = 100 * (deaths_spec - deaths_bpsv) / deaths_spec) %>%
+  select(NPI_int, perc_reduction) %>%
+  summarise(median = median(perc_reduction),
+            mean = mean(perc_reduction))
+
 
 test <- subset(model_outputs2, R0 == 2.5 & specific_vaccine_start %in% spec_dev_scenarios)
 x <- data.frame(specific_vaccine_start = test$specific_vaccine_start,
