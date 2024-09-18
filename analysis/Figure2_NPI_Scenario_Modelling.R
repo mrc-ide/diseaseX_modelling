@@ -11,7 +11,7 @@ default <- define_default_params()
 # Getting the detection time
 R0_subset <- c(1.5, 2.5, 3.5)
 detection_theshold_hosp <- 5
-bp_df_long <- readRDS("outputs/Figure1_branchingProcess_Containment/Figure1_bp_detection_times.rds")
+bp_df_long <- readRDS("outputs/Figure1_branchingProcess_Containment/bp_detection_times.rds")
 detection_threshold_inf <- unique(bp_df_long$detection)[detection_theshold_hosp]
 bp_subset <- bp_df_long %>%
   filter(R0 %in% R0_subset, detection == detection_threshold_inf, metric == "Daily Incidence") %>%
@@ -61,9 +61,9 @@ if (fresh_run) {
   plan(multisession, workers = 4) # multicore does nothing on windows as multicore isn't supported
   system.time({out <- future_pmap(scenarios, run_sars_x, .progress = TRUE, .options = furrr_options(seed = 123))})
   model_outputs <- format_multirun_output(output_list = out, parallel = TRUE, cores = 2)
-  saveRDS(model_outputs, "outputs/Figure2_NPI_Exploration/NEW_Figure2_NPI_Exploration_Outputs.rds")
+  saveRDS(model_outputs, "outputs/Figure2_NPI_Exploration/Figure2_NPI_Exploration_Outputs.rds")
 } else {
-  model_outputs <- readRDS("outputs/Figure2_NPI_Exploration/NEW_Figure2_NPI_Exploration_Outputs.rds")
+  model_outputs <- readRDS("outputs/Figure2_NPI_Exploration/Figure2_NPI_Exploration_Outputs.rds")
 }
 
 ## Plotting the NPI Scenarios
@@ -189,11 +189,6 @@ deaths_averted_plot <- absolute_deaths_plot +
                  ggplot_build(absolute_deaths_plot)$layout$panel_params[[2]]$x.range[1]) / 1.5), xmax = Inf, 
            ymin = ggplot_build(absolute_deaths_plot)$layout$panel_params[[2]]$y.range[2] / 3, ymax = Inf)
 
-Figure2 <- cowplot::plot_grid(NPI_plot, deaths_averted_plot,
-                              nrow = 1, rel_widths = c(1, 1.4),
-                              labels = c("B", "C"))
-ggsave(filename = "figures/Figure_2_FrameworkIntro/NEW_Figure2BC_NPI_Plot.pdf", plot = Figure2, width = 9.25, height = 7.5)
-
 ## Calculating percent reduction in deaths
 subset(model_outputs2, R0 == 2.5 & specific_vaccine_start %in% 250) %>%
   mutate(perc_reduction = 100 * (deaths_spec - deaths_bpsv) / deaths_spec) %>%
@@ -201,13 +196,11 @@ subset(model_outputs2, R0 == 2.5 & specific_vaccine_start %in% 250) %>%
   summarise(median = median(perc_reduction),
             mean = mean(perc_reduction))
 
-
 test <- subset(model_outputs2, R0 == 2.5 & specific_vaccine_start %in% spec_dev_scenarios)
-x <- data.frame(specific_vaccine_start = test$specific_vaccine_start,
-                deaths = test$deaths_spec, 
-                NPI_int = test$NPI_int,
-                NPI_days = test$composite_NPI_spec)
-frontiers <- x %>% 
+frontiers <- data.frame(specific_vaccine_start = test$specific_vaccine_start,
+                        deaths = test$deaths_spec, 
+                        NPI_int = test$NPI_int,
+                        NPI_days = test$composite_NPI_spec) %>% 
   group_by(specific_vaccine_start) %>% 
   group_modify(~pareto_frontier(.x))
 frontiers$new_NPI_days <- floor(frontiers$NPI_days)
@@ -234,11 +227,8 @@ new_NPI_days_100 <- sapply(test_100$deaths_bpsv, function(x) {
 
 new_NPI_days_250 - test_250$composite_NPI_bpsv
 ordering_250 <- NPI_composite_df$NPI_int[order(NPI_composite_df$composite)]
-plot((new_NPI_days_250 - test_250$composite_NPI_bpsv)[ordering_250])
-
 new_NPI_days_100 - test_100$composite_NPI_bpsv
 ordering_100 <- NPI_composite_df$NPI_int[order(NPI_composite_df$composite)]
-plot((new_NPI_days_100 - test_100$composite_NPI_bpsv)[ordering_100])
 
 new <- data.frame(specific_vaccine_start = test$specific_vaccine_start,
            NPI_days_averted = c((new_NPI_days_100 - test_100$composite_NPI_bpsv)[ordering_100],
@@ -259,16 +249,15 @@ NPI_days_averted <- ggplot(new) +
         axis.ticks.x = element_blank(),
         strip.background = element_rect(fill="white"))
 
-
 x <- cowplot::plot_grid(deaths_averted_plot, NPI_days_averted,
                    nrow = 1, rel_widths = c(1.4, 2.4/3.75),
                    labels = c("C", "D"),
                    align = "h", axis = "tb")
-Figure2_new <- cowplot::plot_grid(NPI_plot, x,
-                        nrow = 1, rel_widths = c(1, 1.4 + 2.4/3.75),
-                        labels = c("B", NA))
-ggsave(filename = "figures/Figure_2_FrameworkIntro/NEW_Figure2BCD_NPI_Plot_DaysAverted.pdf", 
-       plot = Figure2_new, width = 9.25 + (9.25 * 1/3.75), height = 7.5)
+Figure2 <- cowplot::plot_grid(NPI_plot, x,
+                              nrow = 1, rel_widths = c(1, 1.4 + 2.4/3.75),
+                              labels = c("B", NA))
+ggsave(filename = "figures/Figure_2_FrameworkIntro/Fig2BCD_NPI_BPSVImpact_DaysAverted.pdf", 
+       plot = Figure2, width = 9.25 + (9.25 * 1/3.75), height = 7.5)
 
 ## Supplementary Figure
 absolute_deaths_plot_supp <- ggplot() +
@@ -312,7 +301,6 @@ deaths_averted_supp_plot <- ggplot() +
   theme_bw() +
   theme(legend.position = "none",
         strip.background = element_rect(fill="white"))
-
 
 NPI_plot_supp <- NPI_plot + 
   facet_wrap(~scenario2, nrow = 1) +
