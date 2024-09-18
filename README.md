@@ -1,9 +1,3 @@
----
-editor_options: 
-  markdown: 
-    wrap: 72
----
-
 # diseaseX_modelling
 
 🦠🌍😷Modelling the deployment of a broad-spectrum vaccine against a
