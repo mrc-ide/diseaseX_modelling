@@ -1,22 +1,3 @@
-##### THINGS TO CHECK
-### 1) ref_infectious_vaccinated was previously set to 50% - have defaulted back to 100% for now. What should we do?
-### 2) What to do about variable seeding cases?
-### 3) What to do about healthcare capacity? 
-### 4) Bug - have to have second dose coverage last a few days longer than primary dose coverage to get
-###    up to same overall level of coverage.
-### 5) Bug - dynamics of first dose delivery vs booster dose delivery are different (especially so for small population sizes)
-###    result is that both vs spec-only scenarios are non-identical (as in former, booster = spec for elderly and in latter first = spec for elderly)
-###    ==> this is fixed when you make population sizes really big (10^8 minimum - probably best to work in 10^9 and scale down to per 1000)
-### 6) Bug - time_to_coverage_bpsv <- ceiling(elderly_pop_to_vaccinate/daily_doses) + 1 - have to do "+1" to make sure all elderly get
-###    vaxxed - does result in a little overshoot into younger age-groups, but doesn't influence deaths basically at all
-### 7) Concern: The way dose_pops/vaccination_cov is calculated includes small but non-zero ineligible groups of people like those in hospital.
-###    Probably it shouldn't.
-### 8) IFR calculation under the hood on my end not quite right, and need to sort (chat to Azra about this)
-
-### Collecting intuition on bits of behaviour
-# 1) Only people who can get 2nd dose can be boostered. But in both-vaccines scenario, some of the BPSV'd elderly will die
-#    leaving <coverage % of them left for receipt of the specific vaccine.
-
 # Load required libraries
 source(here::here("main.R"))
 
@@ -25,7 +6,7 @@ source(here::here("functions/run_sars_x.R"))
 source(here::here("functions/helper_functions.R"))
 
 # Loading in bp based detection and calculating detection times for the the different R0 values
-bp_df_long <- readRDS("outputs/Figure1_branchingProcess_Containment/Figure1_bp_detection_times.rds")
+bp_df_long <- readRDS("outputs/Figure1_branchingProcess_Containment/bp_detection_times.rds")
 prob_hosp <- squire.page.sarsX:::probs_booster$prob_hosp
 arg_pop <- squire::get_population("Argentina")
 IHR <- sum(prob_hosp * arg_pop$n / sum(arg_pop$n)) 
@@ -151,9 +132,9 @@ if (fresh_run) {
   plan(multisession, workers = cores) # multicore does nothing on windows as multicore isn't supported
   system.time({out <- future_pmap(vaccine_property_scenarios, run_sars_x, .progress = TRUE, .options = furrr_options(seed = 123))})
   model_outputs <- format_multirun_output(output_list = out, parallel = TRUE, cores = cores)
-  saveRDS(model_outputs, "outputs/Figure4_BPSVProperties/updated_NEW_BPSV_properties_exploration_scenarios.rds")
+  saveRDS(model_outputs, "outputs/Figure4_VaccineProperties/Figure4_BPSVproperties_exploration.rds")
 } else {
-  model_outputs <- readRDS("outputs/Figure4_BPSVProperties/updated_NEW_BPSV_properties_exploration_scenarios.rds")
+  model_outputs <- readRDS("outputs/Figure4_VaccineProperties/Figure4_BPSVproperties_exploration.rds")
 }
 
 ## Joining back in the detection metrics
@@ -267,11 +248,32 @@ disease_efficacy_plot_supp <- ggplot(subset(disease_efficacy_plotting, R0 != 2.5
              labeller = as_labeller(c(`1.5`='R0=1.5', `3.5`='R0=3.5'))) +
   theme(legend.position = "none",
         strip.background = element_rect(fill = "white"))
+
+NPI_colours <- c("#C64191", "#F0803C", "#0D84A9")
+disease_efficacy_plot <- ggplot(subset(disease_efficacy_plotting, R0 == 2.5 & detection_threshold_hosp == 5)) +
+  # geom_ribbon(data = ribbon_plotting_eff, aes(x = 100 * efficacy_disease_bpsv, ymin = lower, ymax = upper, group = R0), 
+  #             alpha = 0.1, colour = "black", linetype = "dashed") +
+  geom_line(aes(x = 100 * efficacy_disease_bpsv, y = central_deaths_averted, 
+                col = interaction(factor(R0), factor(NPI_int))), size = 1) +
+  geom_jitter(aes(x = 100 * efficacy_disease_bpsv, y = central_deaths_averted,
+                  fill = interaction(factor(R0), factor(NPI_int))),
+              size = 2, pch = 21, width = 0, height = 0) +
+  theme_bw() +
+  scale_colour_manual(values = NPI_colours)  +
+  scale_fill_manual(values = NPI_colours) + 
+  scale_x_continuous(breaks = c(25, 50, 75, 100), labels = paste0(c(25, 50, 75, 100), "%")) +
+  # annotate("text", x = 102, y = 0.65, label = expression(paste("R"[0], " 1.5")), color = "black", size = 4, hjust = 0) +
+  # annotate("text", x = 102, y = 6.75, label = expression(paste("R"[0], " 3.5")), color = "black", size = 4, hjust = 0) +
+  coord_cartesian(ylim = c(0, max(subset(disease_efficacy_plotting, R0 == 3.5)$central_deaths_averted)),
+                  xlim = c(min(disease_efficacy_plotting$efficacy_disease_bpsv) * 100, 110)) +
+  labs(x = "BPSV Disease Efficacy", y = "Deaths Averted By BPSV Per 1000") +
+  guides(fill = guide_legend("NPI\nScenario"), colour = "none") +
+  theme(legend.position = "none",
+        strip.background = element_rect(fill = "white"))
 disease_efficacy_plot2 <- disease_efficacy_plot + 
   annotation_custom(
     ggplotGrob(NPI_plot),
     xmin = 0, xmax = 35, ymin = 3.8, ymax = 9.25)
-
 
 ## Figure 5B - Specific Vaccine Development Time
 spec_dev_plotting <- model_outputs2 %>%
@@ -384,8 +386,8 @@ bpsv_inf_efficacy_plot <- ggplot(subset(bpsv_inf_efficacy_plotting, R0 == 2.5 & 
   geom_line(aes(x = 100 * efficacy_infection_bpsv, y = central_deaths_averted, col = interaction(factor(R0), factor(NPI_int))), size = 1) +
   geom_point(aes(x = 100 * efficacy_infection_bpsv, y = central_deaths_averted, fill = interaction(factor(R0), factor(NPI_int))), 
              size = 2, pch = 21, col = "black") +
-  scale_colour_manual(values = c(NPI_1_colours[1:2], NPI_2_colours[1:2], NPI_3_colours[1:2]))  +
-  scale_fill_manual(values = c(NPI_1_colours[1:2], NPI_2_colours[1:2], NPI_3_colours[1:2])) + 
+  scale_colour_manual(values = NPI_colours)  +
+  scale_fill_manual(values = NPI_colours) + 
   theme_bw() +
   lims(y = c(0, max(subset(bpsv_inf_efficacy_plotting, R0 == 2.5)$central_deaths_averted))) +
   labs(x = "BPSV Infection Efficacy", y = "Deaths Averted By BPSV Per 1000") +
@@ -409,24 +411,10 @@ bpsv_inf_efficacy_plot_supp <- ggplot(subset(bpsv_inf_efficacy_plotting, R0 != 2
 
 supp_fig3_first_half <- cowplot::plot_grid(disease_efficacy_plot_supp, dur_protect_plot_supp, bpsv_inf_efficacy_plot_supp,
                                            nrow = 1, labels = c("A", "B", "C"))
-saveRDS(supp_fig3_first_half, "outputs/Figure4_BPSVProperties/SuppFig3_altR0_vaccine_properties_figure.rds")
-ggsave(filename = "figures/Figure_4_VaccineProperties/SuppFig3_altR0_vaccine_properties_firsthalf.pdf",
+saveRDS(supp_fig3_first_half, "outputs/Figure4_VaccineProperties/SuppFig3_R0_vaccine_properties_figure.rds")
+ggsave(filename = "figures/Figure_4_VaccineProperties/SuppFig3_R0_vaccine_properties_firsthalf.pdf",
        plot = supp_fig3_first_half,
-       height = 8,
-       width = 4.65)
-
-## Altogether Plotting
-temp <- cowplot::plot_grid(bpsv_inf_efficacy_plot, dur_protect_plot, nrow = 2, labels = c("C", "D"))
-cowplot::plot_grid(disease_efficacy_plot2, spec_dev_plot, temp, nrow = 1, 
-                   labels = c("A", "B", NULL), rel_widths = c(2, 2, 1.5))                                                                                          
-
-temp <- cowplot::plot_grid(bpsv_inf_efficacy_plot, dur_protect_plot, nrow = 2, labels = c("B", "C"))
-overall2 <- cowplot::plot_grid(disease_efficacy_plot2, temp, spec_dev_plot, nrow = 1, 
-                   labels = c("A", "B", "D"), rel_widths = c(2, 1.5, 2))                                                                                          
-ggsave(filename = "figures/Figure_4_VaccineProperties/updated_NEW_Figure4_VaccineProperties_Exploration.pdf",
-       plot = overall2,
-       height = 7,
-       width = 12.5)
+       height = 8)
 
 ## Alternative Figure
 disease_efficacy_plot <- ggplot(subset(disease_efficacy_plotting, R0 == 2.5 & detection_threshold_hosp == 5)) +
@@ -450,64 +438,9 @@ disease_efficacy_plot2 <- disease_efficacy_plot +
     ggplotGrob(NPI_plot),
     xmin = 0, xmax = 50, ymin = 3.8, ymax = 10.75)
 
+temp <- cowplot::plot_grid(bpsv_inf_efficacy_plot, dur_protect_plot, nrow = 2, labels = c("B", "C"))
 fig_4_first_half <- cowplot::plot_grid(disease_efficacy_plot2, temp, 
                                        labels = c("A", NA), rel_widths = c(1.2, 1))
 saveRDS(fig_4_first_half,
-        file = "figures/Figure_4_VaccineProperties/test_new_Fig4_first_half.rds")
+        file = "outputs/Figure4_VaccineProperties/Figure4_figure_first_half.rds")
 
-# ## BPSV Coverage plot
-# bpsv_coverage_plotting <- model_outputs2 %>%
-#   filter(IFR == IFR_fixed, 
-#          NPI_int %in% NPI_to_include, 
-#          specific_vaccine_start == specific_vaccine_start_fixed) %>%
-#   filter(map_lgl(varied, ~ setequal(., c("R0", "coverage_bpsv")))) %>%
-#   group_by(R0, specific_vaccine_start, coverage_bpsv , NPI_int, detection_threshold_hosp) %>%
-#   summarise(min_deaths_averted = min(bpsv_deaths_averted) * 1000 / population_size,
-#             max_deaths_averted = max(bpsv_deaths_averted) * 1000 / population_size,
-#             central_deaths_averted = bpsv_deaths_averted * 1000 / population_size,
-#             perc_deaths_averted = 100 * bpsv_deaths_averted / deaths_spec,
-#             total_deaths_spec = deaths_spec * 1000 / population_size,
-#             total_deaths_bpsv = deaths_bpsv * 1000 / population_size,
-#             time_under_NPIs_bpsv = time_under_NPIs_bpsv,
-#             composite_NPI_bpsv = composite_NPI_bpsv)
-# 
-# bpsv_coverage_plot <- ggplot(subset(bpsv_coverage_plotting, R0 == 2.5 & detection_threshold_hosp == 5)) +
-#   geom_line(aes(x = 100 * coverage_bpsv, y = central_deaths_averted, col = factor(NPI_int)), size = 1) +
-#   geom_point(aes(x = 100 * coverage_bpsv, y = central_deaths_averted, fill = factor(NPI_int)), 
-#              size = 2, pch = 21, col = "black") +
-#   scale_colour_manual(values = NPI_colours)  +
-#   scale_fill_manual(values = NPI_colours)  +
-#   theme_bw() +
-#   lims(y = c(0, max(subset(bpsv_coverage_plotting, R0 == 2.5)$central_deaths_averted))) +
-#   labs(x = "% Coverage 65+ Population With BPSV", y = "Deaths Averted By BPSV Per 1000") +
-#   guides(fill = guide_legend("NPI\nScenario"), colour = "none") +
-#   theme(legend.position = "none")
-# 
-# ## BPSV Vaccination Rate plot
-# bpsv_rate_plotting <- model_outputs2 %>%
-#   filter(IFR == IFR_fixed, 
-#          NPI_int %in% NPI_to_include, 
-#          specific_vaccine_start == specific_vaccine_start_fixed) %>%
-#   filter(map_lgl(varied, ~ setequal(., c("R0", "vaccination_rate_bpsv")))) %>%
-#   group_by(R0, specific_vaccine_start, vaccination_rate_bpsv , NPI_int, detection_threshold_hosp) %>%
-#   summarise(min_deaths_averted = min(bpsv_deaths_averted) * 1000 / population_size,
-#             max_deaths_averted = max(bpsv_deaths_averted) * 1000 / population_size,
-#             central_deaths_averted = bpsv_deaths_averted * 1000 / population_size,
-#             perc_deaths_averted = 100 * bpsv_deaths_averted / deaths_spec,
-#             total_deaths_spec = deaths_spec * 1000 / population_size,
-#             total_deaths_bpsv = deaths_bpsv * 1000 / population_size,
-#             time_under_NPIs_bpsv = time_under_NPIs_bpsv,
-#             composite_NPI_bpsv = composite_NPI_bpsv) %>%
-#   left_join(bpsv_coverage_time_df, by = "vaccination_rate_bpsv")
-# 
-# bpsv_rate_plot <- ggplot(subset(bpsv_rate_plotting, R0 == 2.5 & detection_threshold_hosp == 5)) +
-#   geom_line(aes(x = days_to_bpsv_coverage, y = central_deaths_averted, col = factor(NPI_int)), size = 1) +
-#   geom_point(aes(x = days_to_bpsv_coverage, y = central_deaths_averted, fill = factor(NPI_int)), 
-#              size = 2, pch = 21, col = "black") +
-#   scale_colour_manual(values = NPI_colours)  +
-#   scale_fill_manual(values = NPI_colours)  +
-#   theme_bw() +
-#   lims(y = c(0, max(subset(bpsv_rate_plotting, R0 == 2.5)$central_deaths_averted))) +
-#   labs(x = "Days to Complete BPSV Campaign", y = "Deaths Averted By BPSV Per 1000") +
-#   guides(fill = guide_legend("NPI\nScenario"), colour = "none") +
-#   theme(legend.position = "none")
