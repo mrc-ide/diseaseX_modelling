@@ -92,14 +92,14 @@ spatial_vax_bp_sim <- function(## Transmission Parameters
   offspring <- match.arg(offspring)
   if (offspring == "pois") {
     offspring_fun <- function(n, susc) {
-      rpois(n, lambda = mn_offspring * susc/pop)
+      rpois(n, lambda = mn_offspring * susc/population)
     }
   } else if (offspring == "nbinom") {
     if (disp_offspring <= 1) {
       stop("Offspring distribution 'nbinom' requires argument\n disp_offspring > 1. Use 'pois' if there is no overdispersion.")
     }
     offspring_fun <- function(n, susc) {
-      new_mn <- mn_offspring * susc/pop
+      new_mn <- mn_offspring * susc/population
       size <- new_mn/(disp_offspring - 1)
       truncdist::rtrunc(n, spec = "nbinom", b = susc, mu = new_mn, size = size)
     }
@@ -189,7 +189,7 @@ spatial_vax_bp_sim <- function(## Transmission Parameters
     total_hospitalised <- sum(tdf$hospitalised, na.rm = TRUE)
     
     # Generating offspring for this infection
-    n_offspring <- offspring_fun(1) 
+    n_offspring <- offspring_fun(1, susc) 
     tdf$n_offspring[idx] <- n_offspring
     tdf$offspring_generated[idx] <- TRUE
     
@@ -243,12 +243,18 @@ spatial_vax_bp_sim <- function(## Transmission Parameters
         tdf[(current_max_id+1):(current_max_id+n_offspring), "asymptomatic"] <- rbinom(n = n_offspring, size = 1, prob = prop_asymptomatic)
         tdf[(current_max_id+1):(current_max_id+n_offspring), "n_offspring"] <- NA
         tdf[(current_max_id+1):(current_max_id+n_offspring), "n_offspring_new"] <- NA
+        tdf[(current_max_id+1):(current_max_id+n_offspring), "n_offspring_quarantine"] <- NA
         tdf[(current_max_id+1):(current_max_id+n_offspring), "n_offspring_new_new"] <- NA
         tdf[(current_max_id+1):(current_max_id+n_offspring), "offspring_generated"] <- FALSE
         tdf[(current_max_id+1):(current_max_id+n_offspring), "x_coordinate"] <- new_locations$x_coordinate
         tdf[(current_max_id+1):(current_max_id+n_offspring), "y_coordinate"] <- new_locations$y_coordinate
         tdf[(current_max_id+1):(current_max_id+n_offspring), "distance"] <- new_locations$distance
         tdf[(current_max_id+1):(current_max_id+n_offspring), "overall_distance"] <- new_locations$overall_distance
+        tdf[(current_max_id+1):(current_max_id+n_offspring), "quarantined"] <- NA
+        tdf[(current_max_id+1):(current_max_id+n_offspring), "time_quarantined_relative_time_infection"] <- NA
+        tdf[(current_max_id+1):(current_max_id+n_offspring), "time_quarantined_relative_time_onset"] <- NA
+        tdf[(current_max_id+1):(current_max_id+n_offspring), "time_quarantined_absolute"] <- NA
+        
       } else {
 
         ### Calculating the time when the nth hospitalisation gets admitted and they trigger the campaign
@@ -256,7 +262,6 @@ spatial_vax_bp_sim <- function(## Transmission Parameters
         time_trigger_infection <- temp$time_infection[detection_threshold]  # getting the time of infection of the trigger individual
         x_trigger_infection <- temp$x_coordinate[detection_threshold]       # x-coord of trigger individual
         y_trigger_infection <- temp$y_coordinate[detection_threshold]       # y-coord of trigger individual
-        
         
         ## Creating storage for various quantities relating to vaccination
         time_to_secondary_vaccination <- time_trigger_infection + hospitalisation_delay(1) + vaccine_logistical_delay  ## Time when geographical vaccination campaign starts and people vaccinated
@@ -268,6 +273,7 @@ spatial_vax_bp_sim <- function(## Transmission Parameters
         infection_retained <- vector(mode = "integer", length = n_offspring)                 ## vector of whether secondary infections get retained (i.e. not prevented by vaccination)
         infection_retained[1:length(infection_retained)] <- 1                                ## default to infections being retained; and then flow through below to see if they get removed
         
+        ## Looping over secondary infections and evaluating whether they're vaccinated, protected and/or prevented
         for (i in 1:n_offspring) {
           
           ## Calculating the distance the new infection is from the trigger infection
@@ -281,7 +287,9 @@ spatial_vax_bp_sim <- function(## Transmission Parameters
             did_they_have_potential_protection[i] <- ifelse(are_they_vaccinated[i] == 1 & time_to_secondary_vaccination_protection <= (t_parent + new_times[i]), 1, 0)
             were_they_protected[i] <- rbinom(n = 1, size = 1, prob = vaccine_efficacy_infection * did_they_have_potential_protection[i])
             infection_retained[i] <- ifelse(are_they_vaccinated[i] == 1 & were_they_protected[i] == 1, 0, 1)
-          } else { # if infection occurs BEFORE vaccination
+          
+          # if infection occurs BEFORE vaccination can occur OR the infection is too far away from the case that triggers vaccination
+          } else { 
             are_they_vaccinated[i] <- 0 ## eliding together "unvaccinated" and "vaccinated after infection occurs"
             infection_retained[i] <- 1 ## note that implicitly here we're "saying" these folks aren't vaccinated.
           }
@@ -335,19 +343,25 @@ spatial_vax_bp_sim <- function(## Transmission Parameters
           tdf[(current_max_id+1):(current_max_id+new_n_offspring), "asymptomatic"] <- rbinom(n = new_n_offspring, size = 1, prob = prop_asymptomatic)
           tdf[(current_max_id+1):(current_max_id+new_n_offspring), "n_offspring"] <- NA
           tdf[(current_max_id+1):(current_max_id+new_n_offspring), "n_offspring_new"] <- NA
+          tdf[(current_max_id+1):(current_max_id+new_n_offspring), "n_offspring_quarantine"] <- NA
           tdf[(current_max_id+1):(current_max_id+new_n_offspring), "n_offspring_new_new"] <- NA
           tdf[(current_max_id+1):(current_max_id+new_n_offspring), "offspring_generated"] <- FALSE
           tdf[(current_max_id+1):(current_max_id+new_n_offspring), "x_coordinate"] <- new_new_locations$x_coordinate
           tdf[(current_max_id+1):(current_max_id+new_n_offspring), "y_coordinate"] <- new_new_locations$y_coordinate
           tdf[(current_max_id+1):(current_max_id+new_n_offspring), "distance"] <- new_new_locations$distance
           tdf[(current_max_id+1):(current_max_id+new_n_offspring), "overall_distance"] <- new_new_locations$overall_distance
+          tdf[(current_max_id+1):(current_max_id+new_n_offspring), "n_offspring"] <- NA
+          tdf[(current_max_id+1):(current_max_id+new_n_offspring), "n_offspring_new"] <- NA
+          tdf[(current_max_id+1):(current_max_id+new_n_offspring), "n_offspring_quarantine"] <- NA
+          tdf[(current_max_id+1):(current_max_id+new_n_offspring), "n_offspring_post_pruning"] <- NA
         }
       }
     } else {
       tdf$n_offspring_new_new[idx] <- 0
     }
-    tdf <- tdf[tdf$time_infection <= tf, ]
-    tdf <- tdf[order(tdf$time_infection, tdf$id), ]
+    susc <- susc - n_offspring
   }
+  tdf <- tdf[tdf$time_infection <= tf, ]
+  tdf <- tdf[order(tdf$time_infection, tdf$id), ] # moved to outside the bracket, check that doesn't mess anything up (I don't think so)
   return(tdf)
 }
