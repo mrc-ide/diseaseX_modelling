@@ -1,29 +1,43 @@
-ring_vax_bp_sim <- function(offspring = c("pois", "nbinom"), 
-                            mn_offspring, 
-                            disp_offspring,
-                            generation_time, 
-                            prop_asymptomatic, 
-                            infection_to_onset,                                 
-                            vaccine_start, 
-                            vaccine_coverage, 
-                            vaccine_efficacy_infection, 
-                            vaccine_efficacy_transmission, 
-                            vaccine_logistical_delay, 
-                            vaccine_protection_delay,
+ring_vax_bp_sim <- function(## Transmission Parameters
+                            offspring = c("pois", "nbinom"),   # offspring distribution 
+                            mn_offspring,                      # mean of the offspring distribution
+                            disp_offspring,                    # overdispersion of the offspring distribution (if negative binomial)
                             
+                            ## Natural History Parameters
+                            generation_time,                   # generation time distribution
+                            prop_asymptomatic,                 # probability of being asymptomatic
+                            infection_to_onset,                # time from infection to symptom onset distribution
+                             
+                            ## Vaccine-Related Parameters
+                            vaccine_start,                     # time at which the vaccine becomes available
+                            vaccine_coverage,                  # probability that each eligible individual gets vaccinated
+                            vaccine_efficacy_infection,        # vaccine efficacy against infection
+                            vaccine_efficacy_transmission,     # reduction in transmissibility of breakthrough infections in vaccinated individuals
+                            vaccine_logistical_delay,          # delay between symptom onset and vaccination of contacts (and contacts of contacts) occurring
+                            vaccine_protection_delay,          # delay between vaccination and protection developing
+                            
+                            ## Quarantine Related Parameters
+                            prob_quarantine,                   # probability that an individual isolates
+                            onset_to_quarantine,               # symptom onset to quarantine time distribution
+                            quarantine_efficacy,               # effectiveness of the quarantine at reducing onwards transmission for household infections
+
                             ## Miscellaneous Parameters
-                            t0 = 0,                       # simulation starting time
-                            tf = Inf,                     # final simulation time
-                            pop,                          # total population size
-                            check_final_size,             # maximum number of infections to simulate
-                            initial_immune = 0,           # initial number of individuals who are immune
-                            seeding_cases,                # number of seeding cases to start the epidemic with
-                            seed                          # stochastic seed
+                            t0 = 0,                            # simulation starting time
+                            tf = Inf,                          # final simulation time
+                            population,                        # total population size
+                            check_final_size,                  # maximum number of infections to simulate
+                            initial_immune = 0,                # initial number of individuals who are immune
+                            seeding_cases,                     # number of seeding cases to start the epidemic with
+                            seed                               # stochastic seed
                             ) {
   
   ## Setting the seed
   set.seed(seed)
   
+  ## Setting up the number of susceptibles
+  susc <- population - initial_immune
+  
+  ## Setting up the offspring distribution
   offspring <- match.arg(offspring)
   if (offspring == "pois") {
     if (!missing(disp_offspring)) {
@@ -32,8 +46,7 @@ ring_vax_bp_sim <- function(offspring = c("pois", "nbinom"),
     offspring_fun <- function(n, susc) {
       rpois(n, lambda = mn_offspring)
     }
-  }
-  else if (offspring == "nbinom") {
+  } else if (offspring == "nbinom") {
     if (disp_offspring <= 1) {
       stop("Offspring distribution 'nbinom' requires argument\n disp_offspring > 1. Use 'pois' if there is no overdispersion.")
     }
@@ -60,8 +73,14 @@ ring_vax_bp_sim <- function(offspring = c("pois", "nbinom"),
     protected_before_infection = integer(max_cases),
     protected_after_infection = integer(max_cases),
     asymptomatic = integer(max_cases),
+    quarantined = integer(check_final_size),                   
+    time_quarantined_relative_time_infection = NA_real_,
+    time_quarantined_relative_time_onset = NA_real_,
+    time_quarantined_absolute = NA_real_,
     n_offspring = integer(max_cases),
     n_offspring_new = integer(max_cases),
+    n_offspring_quarantine = integer(max_cases),
+    n_offspring_post_pruning = integer(max_cases),
     offspring_generated = FALSE,
     stringsAsFactors = FALSE
   )
@@ -81,22 +100,25 @@ ring_vax_bp_sim <- function(offspring = c("pois", "nbinom"),
     protected_before_infection = NA,
     protected_after_infection = NA,
     asymptomatic = integer(seeding_cases),
+    quarantined = integer(seeding_cases),
+    time_quarantined_relative_time_infection = NA,
+    time_quarantined_relative_time_onset = NA,
+    time_quarantined_absolute = NA,
     n_offspring = NA_integer_,
     n_offspring_new = NA_integer_,
+    n_offspring_quarantine = NA_integer_,
+    n_offspring_post_pruning = NA_integer_,
     offspring_generated = FALSE
   )
   
-  susc <- pop - initial_immune - 1L
   time_infection_index <- t0
 
-  # while (any(tdf$time_infection[!tdf$offspring_generated & !is.na(tdf$time_infection)] <= tf) & susc > 0) {
-  ### NOTE: check_final_size doesn't really work when you're trying to get incidence over time
-  ###       because at the check_final_size mark you might have lots of infections you haven't generated offspring 
-  ###       for, which in turn will go on to generate offspring that will contribute to the incidence within the
-  ###       timeframe you're simulating. It's incomplete in that regard
-  while (any(tdf$time_infection[!tdf$offspring_generated & !is.na(tdf$time_infection)] <= tf) & susc > 0 & nrow(tdf) <= check_final_size) {
+  ## While we haven't hit the simulation cap size (check_final_size) and any infections exist where we have not yet generated the requisite offspring, 
+  ## continue to generate infections
+  while ((any(is.na(tdf$n_offspring)) & nrow(tdf) <= check_final_size & susc > 0) {
     
-    time_infection_index <- min(tdf$time_infection[tdf$offspring_generated == 0 & !is.na(tdf$time_infection)])              # Note: Is not an issue in practice, but I don't think this is currently set up to handle >= 2 infections with same infection time currently
+    ## Getting the timings of the earliest/oldest infection we haven't yet generated tertiary infections for - this is the "INDEX INFECTION"
+    time_infection_index <- min(tdf$time_infection[tdf$offspring_generated == 0 & !is.na(tdf$time_infection)]) 
     idx <- which(tdf$time_infection == time_infection_index & !tdf$offspring_generated)[1] # get the id of the earliest unsimulated infection
     id_parent <- tdf$id[idx]                                                               # id of the earliest unsimulated infection
     t_parent <- tdf$time_infection[idx]                                                    # infection time of the earliest unsimulated infection
@@ -108,24 +130,44 @@ ring_vax_bp_sim <- function(offspring = c("pois", "nbinom"),
     onset_time_index_case <- infection_to_onset(n = 1)                                     # generate the time from infection to symptom onset for the index case
     tdf$time_onset[idx] <- onset_time_index_case                                           # --
     index_asymptomatic <- tdf$asymptomatic[idx]                                            # whether or not the index case (the "parent") is asymptomatic (influences whether contacts get ring vaccinated or not)
+    index_quarantine <- rbinom(n = 1, size = 1, prob = prob_quarantine)                                              # whether or not the index infection isolates
+    index_quarantine_time <- ifelse(index_quarantine == 1, onset_to_quarantine(n = 1), NA)                           # if the infection isolates, how soon after symptom onset they do so
+    tdf$quarantined[index_idx] <- index_quarantine                                                                   # adding quarantine indicator to storage dataframe
+    tdf$time_quarantined_relative_time_onset[index_idx] <- index_quarantine_time                                     # adding quarantine time relative to index's symptom onset to the storage dataframe
+    tdf$time_quarantined_relative_time_infection[index_idx] <- onset_time_index_case + index_quarantine_time         # adding quarantine time relative to index's infection to the storage dataframe
+    tdf$time_quarantined_absolute[index_idx] <- index_time_infection + index_onset_time + index_quarantine_time      # adding quarantine time in absolute calendar time to the storage dataframe
     
+    # Generating offspring for this infection
     n_offspring <- offspring_fun(1, susc) 
     tdf$n_offspring[idx] <- n_offspring
-    
-    if (index_vaccinated == 1) {
-      if (time_protected < time_infection_index) {
-        n_offspring <- sum(rbinom(n = n_offspring, size = 1, prob = 1 - vaccine_efficacy_transmission))
-      }
-    }
-    if (n_offspring %% 1 > 0) { # Checking offspring function is correctly returning integers
-      stop("Offspring distribution must return integers")
-    }
-    tdf$n_offspring_new[idx] <- n_offspring
     tdf$offspring_generated[idx] <- TRUE
     
+    ## If infection was previously vaccinated and is a breakthrough infection, account for reduced transmissibility
+    if (index_vaccinated == 1 & (time_protected < time_infection_index) & index_n_offspring != 0) {
+      n_offspring <- sum(rbinom(n = n_offspring, size = 1, prob = 1 - vaccine_efficacy_transmission))
+    }
+    tdf$n_offspring_new[idx] <- n_offspring
+    new_times <- generation_time(n_offspring)
+    
+    ## If index infection quarantines, reduce secondary infections - note that quarantine only occurs if infection has symptoms. Only do this if there are offspring to avert.
+    if (index_quarantine == 1 & index_asymptomatic == 0 & index_n_offspring != 0) {
+      
+      # Implement quarantining for index infection
+      index_n_offspring <- implement_quarantine(symptom_onset_time = onset_time_index_case,
+                                                quarantine_time = index_quarantine_time,
+                                                n_offspring = n_offspring,
+                                                offspring_infection_times = new_times,
+                                                quarantine_efficacy = quarantine_efficacy)
+      
+      # Updating number offspring, their infection times and characteristics to reflect removals due to quarantining
+      n_offspring <- index_quarantine_outcome$updated_n_offspring
+      new_times <- index_quarantine_outcome$updated_infection_times
+
+    }
+    
+    ## If there are any offspring remaining, implement ring vaccination
     if (n_offspring > 0) {
       
-      new_times <- generation_time(n_offspring)
       if (any(new_times < 0)) {
         stop("Generation times must be >= 0.")
       }
@@ -224,126 +266,58 @@ ring_vax_bp_sim <- function(offspring = c("pois", "nbinom"),
   return(tdf)
 }
 
-## Testing out the branching process
-## Loading required libraries
-# library(tictoc); library(profvis)
-# 
-# ## Checking both versions produce the same results
-# generation_time <- function(n) { rgamma(n, shape = 12, rate = 2) }
-# infection_to_onset <- function(n) { rgamma(n, shape = 3, rate = 2) }
-# iterations <- 25
-# R0_scan <- c(0.75, 1, 1.25, 1.5, 1.75, 2, 3)
-# storage_vacc <- matrix(nrow = iterations, ncol = length(R0_scan))
-# storage_vacc2 <- matrix(nrow = iterations, ncol = length(R0_scan))
-# for (i in 1:length(R0_scan)) {
-#   for (j in 1:iterations) {
-# 
-#     test_vacc <- chain_sim_susc_ring_vacc(offspring = "pois",
-#                                           mn_offspring = R0_scan[i],
-#                                           generation_time = generation_time,
-#                                           t0 = 0, tf = Inf, pop = 10^8, check_final_size = 1000, initial_immune = 0,
-#                                           seeding_cases = 5, prop_asymptomatic = 0,
-#                                           infection_to_onset = infection_to_onset,
-#                                           vaccine_start = 5, vaccine_coverage = 0.8,
-#                                           vaccine_efficacy_infection = 0.75,
-#                                           vaccine_efficacy_transmission = 0.75,
-#                                           vaccine_logistical_delay = 2,
-#                                           vaccine_protection_delay = 2)
-#     storage_vacc[j, i] <- nrow(test_vacc)
-#     
-#     test_vacc2 <- chain_sim_susc_ring_vacc2(offspring = "pois",
-#                                             mn_offspring = R0_scan[i],
-#                                             generation_time = generation_time,
-#                                             t0 = 0, tf = Inf, pop = 10^8, check_final_size = 1000, initial_immune = 0,
-#                                             seeding_cases = 5, prop_asymptomatic = 0,
-#                                             infection_to_onset = infection_to_onset,
-#                                             vaccine_start = 5, vaccine_coverage = 0.8,
-#                                             vaccine_efficacy_infection = 0.75,
-#                                             vaccine_efficacy_transmission = 0.75,
-#                                             vaccine_logistical_delay = 2,
-#                                             vaccine_protection_delay = 2)
-#     storage_vacc2[j, i] <- sum(!is.na(test_vacc2$time_infection))
-# 
-#   }
-#   print(i)
-# }
-# plot(R0_scan, apply(storage_vacc, 2, median), type = "l", xlab = "R0", ylab = "Final Epidemic Size (Capped at 1,000)")
-# lines(R0_scan, apply(storage_vacc2, 2, median), col = "blue")
-# 
-# 
-# ## Checking out relative speeds
-# tic()
-# storage_vacc <- matrix(nrow = iterations, ncol = length(R0_scan))
-# for (i in 1:length(R0_scan)) {
-#   for (j in 1:iterations) {
-#     test_vacc <- chain_sim_susc_ring_vacc(offspring = "pois",
-#                                           mn_offspring = R0_scan[i],
-#                                           generation_time = generation_time,
-#                                           t0 = 0, tf = Inf, pop = 10^8, check_final_size = 1000, initial_immune = 0,
-#                                           seeding_cases = 5, prop_asymptomatic = 0,
-#                                           infection_to_onset = infection_to_onset,
-#                                           vaccine_start = 5, vaccine_coverage = 0.8,
-#                                           vaccine_efficacy_infection = 0.75,
-#                                           vaccine_efficacy_transmission = 0.75,
-#                                           vaccine_logistical_delay = 2,
-#                                           vaccine_protection_delay = 2)
-#     storage_vacc[j, i] <- nrow(test_vacc)
-#   }
-#   print(i)
-# }
-# toc()
-# 
-# tic()
-# storage_vacc2 <- matrix(nrow = iterations, ncol = length(R0_scan))
-# for (i in 1:length(R0_scan)) {
-#   for (j in 1:iterations) {
-#     test_vacc2 <- chain_sim_susc_ring_vacc2(offspring = "pois",
-#                                             mn_offspring = R0_scan[i],
-#                                             generation_time = generation_time,
-#                                             t0 = 0, tf = Inf, pop = 10^8, check_final_size = 1000, initial_immune = 0,
-#                                             seeding_cases = 5, prop_asymptomatic = 0,
-#                                             infection_to_onset = infection_to_onset,
-#                                             vaccine_start = 5, vaccine_coverage = 0.8,
-#                                             vaccine_efficacy_infection = 0.75,
-#                                             vaccine_efficacy_transmission = 0.75,
-#                                             vaccine_logistical_delay = 2,
-#                                             vaccine_protection_delay = 2)
-#     storage_vacc2[j, i] <- sum(!is.na(test_vacc2$time_infection))
-#   }
-#   print(i)
-# }
-# toc()
+#' @export
+implement_quarantine <- function(symptom_onset_time,            # time after infection that the index infection develops symptoms
+                                 quarantine_time,               # time after symptom onset that the index infection quarantines
+                                 n_offspring,                   # number of offspring associated with the index infection
+                                 offspring_infection_times,     # timings (relative to index infection time) of infections of secondary offspring
+                                 offspring_function_draw,       # characteristics of the secondary offspring generated by the index infection
+                                 quarantine_efficacy) {         # efficacy of quarantining at preventing household infections
 
-# tic()
-# test <- chain_sim_susc_ring_vacc(offspring = "pois",
-#                                  mn_offspring = 3.5,
-#                                  generation_time = generation_time,
-#                                  t0 = 0, tf = Inf, pop = 10^8, check_final_size = 1500, initial_immune = 0,
-#                                  seeding_cases = 5, prop_asymptomatic = 0,
-#                                  infection_to_onset = infection_to_onset,
-#                                  vaccine_start = 5, vaccine_coverage = 1,
-#                                  vaccine_efficacy_infection = 0.85,
-#                                  vaccine_efficacy_transmission = 0.85,
-#                                  vaccine_logistical_delay = 3,
-#                                  vaccine_protection_delay = 1)
-# toc()
-# # 
-# tic()
-# profvis({test <- chain_sim_susc_ring_vacc2(offspring = "pois",
-#                                            mn_offspring = 3.5,
-#                                            generation_time = generation_time,
-#                                            t0 = 0, tf = Inf, pop = 10^8, check_final_size = 1500, initial_immune = 0,
-#                                            seeding_cases = 5, prop_asymptomatic = 0,
-#                                            infection_to_onset = infection_to_onset,
-#                                            vaccine_start = 5, vaccine_coverage = 1,
-#                                            vaccine_efficacy_infection = 0.85,
-#                                            vaccine_efficacy_transmission = 0.85,
-#                                            vaccine_logistical_delay = 3,
-#                                            vaccine_protection_delay = 1)})
-# toc()
-
-
-
-
-
+  ## Check offspring infection times relative to time of quarantining (i.e. do they otherwise occur before or after quarantining)
+  ##  1 = quarantine can avert this infection, 0 is the infection occurs before quarantining
+  quarantine_possible_avert <- ifelse((symptom_onset_time + quarantine_time) < offspring_infection_times, 1, 0)  # Only if an infection occurs later than quarantining can it be averted by quarantine
+  
+  ## Implementing quarantining and identifying the infections NOT prevented by quarantining (i.e. those to retain = 1, those averted = 0)
+  offspring_quarantine_retained <- rbinom(n = n_offspring, size = 1, prob = 1 - (quarantine_possible_avert * quarantine_efficacy))
+  offspring_quarantine_retained_index <- which(offspring_quarantine_retained == 1)
+  offspring_quarantine_averted_index <- which(offspring_quarantine_retained == 0)
+  
+  ## Modifying the offspring function draw to remove the infections averted by quarantining
+  offspring_function_draw$offspring_characteristics <- offspring_function_draw$offspring_characteristics[offspring_quarantine_retained_index, ]  # subsetting the offspring dataframe to only retain the infections that weren't averted
+  offspring_function_draw$total_offspring <- length(offspring_quarantine_retained_index)                                                         # updating total number of offspring to reflect loss of averted infections
+  
+  ## If any of the averted infections are household infections, we ALSO need to update the information in offspring_function_draw of any infections who share that household (i.e. who aren't averted, but share a household with an averted infection)
+  ## - Specifically, we need to update the cumulative household infections tracker and the vector that tracks which household members have been infected,
+  ##   and remove the quarantine averted infections from both of these
+  ## - Note that because of the way the offspring function is set up, the "household" infections must all belong to the same household,
+  ##   which is the same household as the index infection
+  offspring_quarantine_averted_transmission_route <- offspring_function_draw$offspring_characteristics$transmission_route[offspring_quarantine_averted_index] # getting the transmisssion route of each of the averted infections
+  offspring_quarantine_averted_hh_member_index <- offspring_function_draw$offspring_characteristics$hh_member_index[offspring_quarantine_averted_index]       # getting the hh member ids of each of the averted infections
+  
+  if ("household" %in% offspring_quarantine_averted_transmission_route) {
+    
+    ## Removing the averted household infections from the cumulative total household infections tracker for other household members
+    offspring_num_household_infections_averted <- sum(offspring_quarantine_averted_transmission_route == "household")
+    offspring_function_draw$new_hh_cumulative_infections <- offspring_function_draw$new_hh_cumulative_infections - offspring_num_household_infections_averted
+    offspring_function_draw$offspring_characteristics$hh_infections[offspring_function_draw$offspring_characteristics$transmission_route == "household"] <- offspring_function_draw$new_hh_cumulative_infections
+    
+    ## Modifying the list of all ids of infected household members to account for the averted infections (i.e. remove the averted infections from that list)
+    offspring_quarantine_averted_household_member_id <- offspring_quarantine_averted_hh_member_index[which(offspring_quarantine_averted_transmission_route == "household")]
+    offspring_quarantine_averted_household_member_index_for_removal <- which(unlist(offspring_function_draw$new_hh_infected_index) %in% offspring_quarantine_averted_household_member_id)
+    offspring_function_draw$new_hh_infected_index <- list(unlist(offspring_function_draw$new_hh_infected_index)[-offspring_quarantine_averted_household_member_index_for_removal])
+    offspring_function_draw$offspring_characteristics$hh_infected_index[offspring_function_draw$offspring_characteristics$transmission_route == "household"] <- I(offspring_function_draw$new_hh_infected_index)
+    
+  }
+  
+  # Updating index_n_offspring and secondary_infection_times in light of new removals due to quarantining
+  n_offspring <- sum(offspring_quarantine_retained)                                                       # accounting for infections averted by quarantine from index_n_offspring
+  infection_times <- offspring_infection_times[offspring_quarantine_retained_index]                       # removing infections averted by quarantine from secondary_infection_times
+  
+  ## Returning the number of offspring, offspring infection times and characteristics after removing infections averted by quarantining
+  return(list(updated_n_offspring = n_offspring,
+              updated_infection_times = infection_times,
+              updated_offspring_function_draw = offspring_function_draw))
+  
+}
 
