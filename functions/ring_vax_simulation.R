@@ -41,14 +41,14 @@ ring_vax_bp_sim <- function(## Transmission Parameters
   offspring <- match.arg(offspring)
   if (offspring == "pois") {
     offspring_fun <- function(n, susc) {
-      rpois(n, lambda = mn_offspring)
+      rpois(n, lambda = mn_offspring * susc/population)
     }
   } else if (offspring == "nbinom") {
     if (disp_offspring <= 1) {
       stop("Offspring distribution 'nbinom' requires argument\n disp_offspring > 1. Use 'pois' if there is no overdispersion.")
     }
     offspring_fun <- function(n, susc) {
-      new_mn <- mn_offspring * susc/pop
+      new_mn <- mn_offspring * susc/population
       size <- new_mn/(disp_offspring - 1)
       truncdist::rtrunc(n, spec = "nbinom", b = susc, mu = new_mn, size = size)
     }
@@ -116,7 +116,7 @@ ring_vax_bp_sim <- function(## Transmission Parameters
   ## continue to generate infections
   while ((any(is.na(tdf$n_offspring)) & nrow(tdf) <= check_final_size & susc > 0)) {
     
-    ## Getting the timings of the earliest/oldest infection we haven't yet generated tertiary infections for - this is the "INDEX INFECTION"
+    ## Getting the timings of the earliest/oldest infection we haven't yet generated infections for - this is the "INDEX INFECTION"
     time_infection_index <- min(tdf$time_infection[tdf$offspring_generated == 0 & !is.na(tdf$time_infection)]) 
     idx <- which(tdf$time_infection == time_infection_index & !tdf$offspring_generated)[1] # get the id of the earliest unsimulated infection
     id_parent <- tdf$id[idx]                                                               # id of the earliest unsimulated infection

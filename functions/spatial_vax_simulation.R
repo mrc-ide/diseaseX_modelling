@@ -1,6 +1,8 @@
 ## Function to calculate the geographical coordinates of infection offspring given parent coordinates
-spatial_calc <- function(parent_overall_distance, parent_x_coord, parent_y_coord,
-                         n_offspring, spatial_kernel) {
+spatial_calc <- function(parent_x_coord, 
+                         parent_y_coord,
+                         n_offspring, 
+                         spatial_kernel) {
   
   
   ## Drawing spatial - note that currently time and distance/direction are completely uncorrelated atm
@@ -46,33 +48,63 @@ spatial_calc <- function(parent_overall_distance, parent_x_coord, parent_y_coord
   return(tdf)
 }
 
-#### REVIEW THE ENTIRE CODEBASE BELOW AGAIN
-#### FIX SPATIAL OVERALL DISTANCE AND DON'T MAKE IT PART OF PARENT OVERALL DISTANCE,
-#### MAKE IT EXPLICITLY "OVERALL DISTANCE FROM ORIGIN" AND THEN CALCULATE MANUALLY
-#### RATHER THAN WITH PARENT_OVERALL_DISTANCE
-
 ## spatial vaccination branching process
-spatial_bp_geog_vacc <- function(mn_offspring, 
-                                 generation_time, 
-                                 spatial_kernel,
-                                 t0 = 0, tf = Inf, 
-                                 check_final_size,
-                                 seeding_cases,
-                                 prop_asymptomatic,
-                                 prob_hosp,
-                                 hospitalisation_delay,
-                                 detection_threshold,
-                                 vaccine_campaign_radius,
-                                 vaccine_coverage,
-                                 vaccine_efficacy_infection,
-                                 vaccine_efficacy_transmission,
-                                 vaccine_efficacy_disease,
-                                 vaccine_logistical_delay,
-                                 vaccine_protection_delay) {
+spatial_vax_bp_sim <- function(## Transmission Parameters
+                               offspring = c("pois", "nbinom"),   # offspring distribution 
+                               mn_offspring,                      # mean of the offspring distribution
+                               disp_offspring,                    # overdispersion of the offspring distribution (if negative binomial)
+                               spatial_kernel,                    # spatial kernel for onwards transmission (distance between infections)
+                               
+                               ## Natural History Parameters
+                               generation_time,                   # generation time distribution
+                               prop_asymptomatic,                 # probability of being asymptomatic
+                               infection_to_onset,                # time from infection to symptom onset distribution
+                               prob_hosp,                         # probability of an infected individual being hospitalised
+                               hospitalisation_delay,             # delay between becoming infected and becoming hospitalised
+                               
+                               ## Vaccine-Related Parameters
+                               vaccine_campaign_radius,           # radius of the spatial vaccination campaign
+                               vaccine_coverage,                  # probability that each eligible individual gets vaccinated
+                               vaccine_efficacy_infection,        # vaccine efficacy against infection
+                               vaccine_efficacy_transmission,     # reduction in transmissibility of breakthrough infections in vaccinated individuals
+                               vaccine_logistical_delay,          # delay between symptom onset and vaccination of contacts (and contacts of contacts) occurring
+                               vaccine_protection_delay,          # delay between vaccination and protection developing
+                               vaccine_efficacy_disease,          # vaccine efficacy against disease
+                               detection_threshold,               # hospitalisation threshold at which detection occurs
+                               
+                               ## Miscellaneous Parameters
+                               t0 = 0, 
+                               tf = Inf, 
+                               population,
+                               check_final_size,
+                               initial_immune,
+                               seeding_cases,
+                               seed
+                               ) {
   
-  ## Offspring Function
-  offspring_fun <- function(n) {
-    rpois(n, lambda = mn_offspring)
+  ## Setting the seed
+  set.seed(seed)
+  
+  ## Setting up the number of susceptibles
+  susc <- population - initial_immune
+  
+  ## Setting up the offspring distribution
+  offspring <- match.arg(offspring)
+  if (offspring == "pois") {
+    offspring_fun <- function(n, susc) {
+      rpois(n, lambda = mn_offspring * susc/pop)
+    }
+  } else if (offspring == "nbinom") {
+    if (disp_offspring <= 1) {
+      stop("Offspring distribution 'nbinom' requires argument\n disp_offspring > 1. Use 'pois' if there is no overdispersion.")
+    }
+    offspring_fun <- function(n, susc) {
+      new_mn <- mn_offspring * susc/pop
+      size <- new_mn/(disp_offspring - 1)
+      truncdist::rtrunc(n, spec = "nbinom", b = susc, mu = new_mn, size = size)
+    }
+  } else {
+    stop("offspring specification is wrong")
   }
   
   ## Pre-allocate a dataframe with the maximum number of individuals to be simulated
@@ -84,6 +116,7 @@ spatial_bp_geog_vacc <- function(mn_offspring,
     time_infection = NA_real_,
     n_offspring = integer(max_cases),
     n_offspring_new = integer(max_cases),
+    n_offspring_quarantine = integer(max_cases),
     n_offspring_new_new = integer(max_cases),
     offspring_generated = FALSE,
     distance = NA_real_,
@@ -97,6 +130,10 @@ spatial_bp_geog_vacc <- function(mn_offspring,
     time_protected = numeric(max_cases),
     protected_before_infection = integer(max_cases),
     asymptomatic = integer(max_cases),
+    quarantined = integer(check_final_size),                   
+    time_quarantined_relative_time_infection = NA_real_,
+    time_quarantined_relative_time_onset = NA_real_,
+    time_quarantined_absolute = NA_real_,
     stringsAsFactors = FALSE)
   
   ## Initialize the dataframe with the seeding cases
@@ -107,6 +144,7 @@ spatial_bp_geog_vacc <- function(mn_offspring,
     time_infection = t0 + seq(from = 0, to = 0.01, length.out = seeding_cases),
     n_offspring = NA_integer_,
     n_offspring_new = NA_integer_,
+    n_offspring_quarantine = NA_integer_,
     n_offspring_new_new = NA_integer_,
     offspring_generated = FALSE,
     distance = 0,
@@ -119,11 +157,19 @@ spatial_bp_geog_vacc <- function(mn_offspring,
     vaccinated_before_infection = NA,
     time_protected = NA,
     protected_before_infection = NA,
-    asymptomatic = integer(seeding_cases))
+    asymptomatic = integer(seeding_cases),
+    quarantined = integer(check_final_size),                   
+    time_quarantined_relative_time_infection = NA_real_,
+    time_quarantined_relative_time_onset = NA_real_,
+    time_quarantined_absolute = NA_real_)
+  
   time_infection_index <- t0
   
-  while (any(tdf$time_infection[!tdf$offspring_generated & !is.na(tdf$time_infection)] <= tf) & nrow(tdf) <= check_final_size) {
+  ## While we haven't hit the simulation cap size (check_final_size) and any infections exist where we have not yet generated the requisite offspring, 
+  ## continue to generate infections
+  while ((any(is.na(tdf$n_offspring)) & nrow(tdf) <= check_final_size & susc > 0)) {
     
+    ## Getting the timings of the earliest/oldest infection we haven't yet generated infections for - this is the "INDEX INFECTION"
     time_infection_index <- min(tdf$time_infection[tdf$offspring_generated == 0 & !is.na(tdf$time_infection)])              # Note: Is not an issue in practice, but I don't think this is currently set up to handle >= 2 infections with same infection time currently
     idx <- which(tdf$time_infection == time_infection_index & !tdf$offspring_generated)[1] # get the id of the earliest unsimulated infection
     id_parent <- tdf$id[idx]                                                               # parent of the earliest unsimulated infection
@@ -134,32 +180,50 @@ spatial_bp_geog_vacc <- function(mn_offspring,
     time_vaccinated <- tdf$time_vaccinated[idx]                                            # when the index case (the "parent") was vaccinated
     time_protected <- tdf$time_protected[idx]                                              # when the index case (the "parent") was protected
     index_asymptomatic <- tdf$asymptomatic[idx]                                            # whether or not the index case (the "parent") is asymptomatic (influences whether contacts get ring vaccinated or not)
+    index_quarantine <- rbinom(n = 1, size = 1, prob = prob_quarantine)                                              # whether or not the index infection isolates
+    index_quarantine_time <- ifelse(index_quarantine == 1, onset_to_quarantine(n = 1), NA)                           # if the infection isolates, how soon after symptom onset they do so
+    tdf$quarantined[idx] <- index_quarantine                                                                   # adding quarantine indicator to storage dataframe
+    tdf$time_quarantined_relative_time_onset[idx] <- index_quarantine_time                                     # adding quarantine time relative to index's symptom onset to the storage dataframe
+    tdf$time_quarantined_relative_time_infection[idx] <- onset_time_index_case + index_quarantine_time         # adding quarantine time relative to index's infection to the storage dataframe
+    tdf$time_quarantined_absolute[idx] <- time_infection_index + onset_time_index_case + index_quarantine_time      # adding quarantine time in absolute calendar time to the storage dataframe
     total_hospitalised <- sum(tdf$hospitalised, na.rm = TRUE)
     
+    # Generating offspring for this infection
     n_offspring <- offspring_fun(1) 
     tdf$n_offspring[idx] <- n_offspring
+    tdf$offspring_generated[idx] <- TRUE
+    
+    ## If infection was previously vaccinated and is a breakthrough infection, account for reduced transmissibility
     if (index_vaccinated == 1) {
       if (!is.na(time_protected) & time_protected < time_infection_index) {
         n_offspring <- sum(rbinom(n = n_offspring, size = 1, prob = 1 - vaccine_efficacy_transmission))
       }
     }
-    if (n_offspring %% 1 > 0) { # Checking offspring function is correctly returning integers
-      stop("Offspring distribution must return integers")
-    }
     tdf$n_offspring_new[idx] <- n_offspring
-    tdf$offspring_generated[idx] <- TRUE
+    new_times <- generation_time(n_offspring)
     
+    ## If index infection quarantines, reduce secondary infections - note that quarantine only occurs if infection has symptoms. Only do this if there are offspring to avert.
+    if (index_quarantine == 1 & index_asymptomatic == 0 & n_offspring != 0) {
+      
+      # Implement quarantining for index infection
+      index_n_offspring <- implement_quarantine(symptom_onset_time = onset_time_index_case,
+                                                quarantine_time = index_quarantine_time,
+                                                n_offspring = n_offspring,
+                                                offspring_infection_times = new_times,
+                                                quarantine_efficacy = quarantine_efficacy)
+      
+      # Updating number offspring, their infection times and characteristics to reflect removals due to quarantining
+      n_offspring <- index_n_offspring$updated_n_offspring
+      new_times <- index_n_offspring$updated_infection_times
+      
+    }
+    tdf$n_offspring_quarantine[idx] <- n_offspring
+    
+    ## If there are any offspring remaining, implement spatial vaccination
     if (n_offspring > 0) {
       
-      ## Generating time of infection for each individual
-      new_times <- generation_time(n_offspring)
-      if (any(new_times < 0)) {
-        stop("Generation times must be >= 0.")
-      }
-      
       ## Generating location of each newly infected individual
-      new_locations <- spatial_calc(parent_overall_distance = tdf$overall_distance[idx],
-                                    parent_x_coord = tdf$x_coordinate[idx],
+      new_locations <- spatial_calc(parent_x_coord = tdf$x_coordinate[idx],
                                     parent_y_coord = tdf$y_coordinate[idx],
                                     n_offspring = n_offspring,
                                     spatial_kernel = spatial_kernel)
