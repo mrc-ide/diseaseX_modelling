@@ -17,9 +17,9 @@ ring_vax_bp_sim <- function(## Transmission Parameters
                             vaccine_protection_delay,          # delay between vaccination and protection developing
                             
                             ## Quarantine Related Parameters
-                            prob_quarantine,                   # probability that an individual isolates
-                            onset_to_quarantine,               # symptom onset to quarantine time distribution
-                            quarantine_efficacy,               # effectiveness of the quarantine at reducing onwards transmission for household infections
+                            time_to_quarantine,                # time delay between trigger and quarantining (either symptoms of the primary infection, or symptoms in the secondary infection)
+                            prob_quarantine,                   # probability that the individual successfully isolates
+                            quarantine_efficacy,               # effectiveness of the quarantine at reducing onwards transmission
 
                             ## Miscellaneous Parameters
                             t0 = 0,                            # simulation starting time
@@ -56,6 +56,13 @@ ring_vax_bp_sim <- function(## Transmission Parameters
     stop("offspring specification is wrong")
   }
   
+  ## Checking the quarantine trigger
+  # Checking likelihood distributions are valid
+  quarantine_trigger <- c("contact_tracing", "symptom_onset")
+  if (!all(misc$likelihood_distribution %in% valid_distributions)) {
+    stop("misc$likelihood_distribution can only contain 'poisson' or 'negative_binomial'.")
+  }
+  
   # Pre-allocate a dataframe with the maximum size
   max_cases <- check_final_size
   tdf <- data.frame(
@@ -73,8 +80,6 @@ ring_vax_bp_sim <- function(## Transmission Parameters
     protected_after_infection = integer(max_cases),
     asymptomatic = integer(max_cases),
     quarantined = integer(check_final_size),                   
-    time_quarantined_relative_time_infection = NA_real_,
-    time_quarantined_relative_time_onset = NA_real_,
     time_quarantined_absolute = NA_real_,
     n_offspring = integer(max_cases),
     n_offspring_new = integer(max_cases),
@@ -100,8 +105,6 @@ ring_vax_bp_sim <- function(## Transmission Parameters
     protected_after_infection = NA,
     asymptomatic = integer(seeding_cases),
     quarantined = integer(seeding_cases),
-    time_quarantined_relative_time_infection = NA,
-    time_quarantined_relative_time_onset = NA,
     time_quarantined_absolute = NA,
     n_offspring = NA_integer_,
     n_offspring_new = NA_integer_,
@@ -119,6 +122,8 @@ ring_vax_bp_sim <- function(## Transmission Parameters
     ## Getting the timings of the earliest/oldest infection we haven't yet generated infections for - this is the "INDEX INFECTION"
     time_infection_index <- min(tdf$time_infection[tdf$offspring_generated == 0 & !is.na(tdf$time_infection)]) 
     idx <- which(tdf$time_infection == time_infection_index & !tdf$offspring_generated)[1] # get the id of the earliest unsimulated infection
+    previous_parent_id <- tdf$ancestor[idx]
+    previous_parent_idx <- which(tdf$id == previous_parent_id)
     id_parent <- tdf$id[idx]                                                               # id of the earliest unsimulated infection
     t_parent <- tdf$time_infection[idx]                                                    # infection time of the earliest unsimulated infection
     gen_parent <- tdf$generation[idx]                                                      # generation of the earliest unsimulated infection
@@ -129,12 +134,41 @@ ring_vax_bp_sim <- function(## Transmission Parameters
     onset_time_index_case <- infection_to_onset(n = 1)                                     # generate the time from infection to symptom onset for the index case
     tdf$time_onset[idx] <- onset_time_index_case                                           # --
     index_asymptomatic <- tdf$asymptomatic[idx]                                            # whether or not the index case (the "parent") is asymptomatic (influences whether contacts get ring vaccinated or not)
-    index_quarantine <- rbinom(n = 1, size = 1, prob = prob_quarantine)                                              # whether or not the index infection isolates
-    index_quarantine_time <- ifelse(index_quarantine == 1, onset_to_quarantine(n = 1), NA)                           # if the infection isolates, how soon after symptom onset they do so
-    tdf$quarantined[idx] <- index_quarantine                                                                   # adding quarantine indicator to storage dataframe
-    tdf$time_quarantined_relative_time_onset[idx] <- index_quarantine_time                                     # adding quarantine time relative to index's symptom onset to the storage dataframe
-    tdf$time_quarantined_relative_time_infection[idx] <- onset_time_index_case + index_quarantine_time         # adding quarantine time relative to index's infection to the storage dataframe
-    tdf$time_quarantined_absolute[idx] <- time_infection_index + onset_time_index_case + index_quarantine_time      # adding quarantine time in absolute calendar time to the storage dataframe
+    ### CHECK THAT T_PARENT AND time_infection_index ARE THE SAME - THEY SHOULD BE I THINK???
+    
+    ## Calculating whether or not the individual isolates/quarantines
+    ### note that here I swap from using "parent" to refer to "index" and instead as the prior infector. Need to sort this at some point.
+    ### (it's just syntax, the code is actually right/doing the right thing)
+    
+    ## Extracting parent information
+    parent_infection_time <- tdf$time_infection[previous_parent_idx];
+    parent_asymptomatic <- tdf$asymptomatic[previous_parent_idx];
+    parent_onset_time <- ifelse(parent_asymptomatic == 0, tdf$time_onset[previous_parent_idx], NA)
+    
+    ## If the parent is symptomatic, this triggers quarantine in secondary infections relative to timing of symptoms in parent
+    if (parent_asymptomatic == 0) {
+      
+      index_quarantine <- rbinom(n = 1, size = 1, prob = prob_quarantine)                                     # whether or not the index infection isolates
+      index_quarantine_time <- ifelse(index_quarantine == 1, onset_to_quarantine(n = 1), NA)                  # if the infection isolates, how soon after symptom onset they do so
+      tdf$quarantined[idx] <- index_quarantine                                                                # adding quarantine indicator to storage dataframe
+      absolute_quarantine_time <- parent_infection_time + parent_onset_time + index_quarantine_time           # adding quarantine time in absolute calendar time to the storage dataframe
+      tdf$time_quarantined_absolute[idx] <- absolute_quarantine_time
+
+    ## If the parent is asymptomatic but index is symptomatic, this triggers quarantine relative to timing in index
+    } else if (parent_asymptomatic == 1 & index_asymptomatic == 0) {
+      
+      index_quarantine <- rbinom(n = 1, size = 1, prob = prob_quarantine)                                        # whether or not the index infection isolates
+      index_quarantine_time <- ifelse(index_quarantine == 1, onset_to_quarantine(n = 1), NA)                     # if the infection isolates, how soon after symptom onset they do so
+      tdf$quarantined[idx] <- index_quarantine                                                                   # adding quarantine indicator to storage dataframe
+      absolute_quarantine_time <- time_infection_index + onset_time_index_case + index_quarantine_time           # adding quarantine time in absolute calendar time to the storage dataframe
+      tdf$time_quarantined_absolute[idx] <- absolute_quarantine_time
+    
+    ## If both the parent and index are asymptomatic, no quarantining can possibly happen
+    } else {
+      index_quarantine <- 0
+      index_quarantine_time <- NA
+      absolute_quarantine_time <- NA
+    }
     
     ## Calculating time to vaccinate the contacts of this index infection
     time_to_secondary_vaccination <- onset_time_index_case + vaccine_logistical_delay                    ## Time between index case infected and secondary cases ring vaccinated
@@ -151,15 +185,16 @@ ring_vax_bp_sim <- function(## Transmission Parameters
     }
     tdf$n_offspring_new[idx] <- n_offspring
     new_times <- generation_time(n_offspring)
+    absolute_new_times <- time_infection_index + new_times
     
     ## If index infection quarantines, reduce secondary infections - note that quarantine only occurs if infection has symptoms. Only do this if there are offspring to avert.
-    if (index_quarantine == 1 & index_asymptomatic == 0 & n_offspring != 0) {
+    if (index_quarantine == 1 & n_offspring != 0) {
       
       # Implement quarantining for index infection
-      index_n_offspring <- implement_quarantine(symptom_onset_time = onset_time_index_case,
-                                                quarantine_time = index_quarantine_time,
+      index_n_offspring <- implement_quarantine(symptom_onset_time = 0, # have wrapped symptom onset time into absolute_quarantine time,
+                                                quarantine_time = absolute_quarantine_time,
                                                 n_offspring = n_offspring,
-                                                offspring_infection_times = new_times,
+                                                offspring_infection_times = absolute_new_times,
                                                 quarantine_efficacy = quarantine_efficacy)
       
       # Updating number offspring, their infection times and characteristics to reflect removals due to quarantining
@@ -189,8 +224,6 @@ ring_vax_bp_sim <- function(## Transmission Parameters
         tdf[(current_max_id+1):(current_max_id+n_offspring), "protected_after_infection"] <- NA
         tdf[(current_max_id+1):(current_max_id+n_offspring), "asymptomatic"] <- asymptomatic
         tdf[(current_max_id+1):(current_max_id+n_offspring), "quarantined"] <- NA
-        tdf[(current_max_id+1):(current_max_id+n_offspring), "time_quarantined_relative_time_infection"] <- NA
-        tdf[(current_max_id+1):(current_max_id+n_offspring), "time_quarantined_relative_time_onset"] <- NA
         tdf[(current_max_id+1):(current_max_id+n_offspring), "time_quarantined_absolute"] <- NA
         tdf[(current_max_id+1):(current_max_id+n_offspring), "n_offspring"] <- NA
         tdf[(current_max_id+1):(current_max_id+n_offspring), "n_offspring_new"] <- NA
@@ -217,8 +250,6 @@ ring_vax_bp_sim <- function(## Transmission Parameters
           tdf[(current_max_id+1):(current_max_id+n_offspring), "protected_after_infection"] <- NA
           tdf[(current_max_id+1):(current_max_id+n_offspring), "asymptomatic"] <- asymptomatic
           tdf[(current_max_id+1):(current_max_id+n_offspring), "quarantined"] <- NA
-          tdf[(current_max_id+1):(current_max_id+n_offspring), "time_quarantined_relative_time_infection"] <- NA
-          tdf[(current_max_id+1):(current_max_id+n_offspring), "time_quarantined_relative_time_onset"] <- NA
           tdf[(current_max_id+1):(current_max_id+n_offspring), "time_quarantined_absolute"] <- NA
           tdf[(current_max_id+1):(current_max_id+n_offspring), "n_offspring"] <- NA
           tdf[(current_max_id+1):(current_max_id+n_offspring), "n_offspring_new"] <- NA
@@ -280,8 +311,6 @@ ring_vax_bp_sim <- function(## Transmission Parameters
             tdf[(current_max_id+1):(current_max_id+new_n_offspring), "protected_after_infection"] <- protected_after_infection
             tdf[(current_max_id+1):(current_max_id+new_n_offspring), "asymptomatic"] <- asymptomatic
             tdf[(current_max_id+1):(current_max_id+new_n_offspring), "quarantined"] <- NA
-            tdf[(current_max_id+1):(current_max_id+new_n_offspring), "time_quarantined_relative_time_infection"] <- NA
-            tdf[(current_max_id+1):(current_max_id+new_n_offspring), "time_quarantined_relative_time_onset"] <- NA
             tdf[(current_max_id+1):(current_max_id+new_n_offspring), "time_quarantined_absolute"] <- NA
             tdf[(current_max_id+1):(current_max_id+new_n_offspring), "n_offspring"] <- NA
             tdf[(current_max_id+1):(current_max_id+new_n_offspring), "n_offspring_new"] <- NA
