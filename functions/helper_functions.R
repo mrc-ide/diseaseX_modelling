@@ -369,3 +369,26 @@ linear_interpolate <- function(df) {
   }
   return(new_df)
 }
+
+convert_array <- function(arr, scenario, pathogen, R0_scan, prob_quarantine_scan, quarantine_efficacy_scan) {
+  
+  df <- as.data.frame.table(arr, responseName = "epidemic_size")
+  # Rename the Var* columns to something more meaningful
+  colnames(df) <- c("iteration_i", "R0_i", "prob_quarantine_i", "quarantine_efficacy_i", "epidemic_size")
+  
+  # Map these integer indices back to their actual values
+  df <- df %>%
+    mutate(
+      iteration           = as.integer(iteration_i),
+      scenario            = scenario,
+      pathogen            = pathogen,
+      R0                  = R0_scan[R0_i],
+      prob_quarantine     = prob_quarantine_scan[prob_quarantine_i],
+      quarantine_efficacy = quarantine_efficacy_scan[quarantine_efficacy_i]
+    ) %>%
+    # Keep columns in a nice order
+    select(iteration, scenario, pathogen, R0, prob_quarantine, quarantine_efficacy, epidemic_size)
+  
+  
+  return(df)
+}
