@@ -18,7 +18,8 @@ ring_vax_bp_sim <- function(## Transmission Parameters
                             
                             ## Quarantine Related Parameters
                             time_to_quarantine,                # time delay between trigger and quarantining (either symptoms of the primary infection, or symptoms in the secondary infection)
-                            prob_quarantine,                   # probability that the individual successfully isolates
+                            prob_quarantine_contact_traced,    # probability that the individual successfully isolates given they're a contact of an infection
+                            prob_quarantine_symptoms,          # probability that the individual successfully isolates given they have symptoms
                             quarantine_efficacy,               # effectiveness of the quarantine at reducing onwards transmission
 
                             ## Miscellaneous Parameters
@@ -147,7 +148,7 @@ ring_vax_bp_sim <- function(## Transmission Parameters
     ## If the parent is symptomatic, this triggers quarantine in secondary infections relative to timing of symptoms in parent
     if (parent_asymptomatic == 0) {
       
-      index_quarantine <- rbinom(n = 1, size = 1, prob = prob_quarantine)                                     # whether or not the index infection isolates
+      index_quarantine <- rbinom(n = 1, size = 1, prob = prob_quarantine_contact_traced)                                     # whether or not the index infection isolates
       index_quarantine_time <- ifelse(index_quarantine == 1, time_to_quarantine(n = 1), NA)                  # if the infection isolates, how soon after symptom onset they do so
       tdf$quarantined[idx] <- index_quarantine                                                                # adding quarantine indicator to storage dataframe
       absolute_quarantine_time <- parent_infection_time + parent_onset_time + index_quarantine_time           # adding quarantine time in absolute calendar time to the storage dataframe
@@ -156,7 +157,7 @@ ring_vax_bp_sim <- function(## Transmission Parameters
     ## If the parent is asymptomatic but index is symptomatic, this triggers quarantine relative to timing in index
     } else if (parent_asymptomatic == 1 & index_asymptomatic == 0) {
       
-      index_quarantine <- rbinom(n = 1, size = 1, prob = prob_quarantine)                                        # whether or not the index infection isolates
+      index_quarantine <- rbinom(n = 1, size = 1, prob = prob_quarantine_symptoms)                                        # whether or not the index infection isolates
       index_quarantine_time <- ifelse(index_quarantine == 1, time_to_quarantine(n = 1), NA)                     # if the infection isolates, how soon after symptom onset they do so
       tdf$quarantined[idx] <- index_quarantine                                                                   # adding quarantine indicator to storage dataframe
       absolute_quarantine_time <- time_infection_index + onset_time_index_case + index_quarantine_time           # adding quarantine time in absolute calendar time to the storage dataframe
@@ -198,7 +199,7 @@ ring_vax_bp_sim <- function(## Transmission Parameters
       
       # Updating number offspring, their infection times and characteristics to reflect removals due to quarantining
       n_offspring <- index_n_offspring$updated_n_offspring
-      new_times <- index_n_offspring$updated_infection_times
+      new_times <- index_n_offspring$updated_infection_times - time_infection_index
 
     }
     tdf$n_offspring_quarantine[idx] <- n_offspring
