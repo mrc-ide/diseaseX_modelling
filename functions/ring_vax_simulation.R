@@ -228,6 +228,7 @@ ring_vax_bp_sim <- function(## Transmission Parameters
         tdf[(current_max_id+1):(current_max_id+n_offspring), "n_offspring_quarantine"] <- NA
         tdf[(current_max_id+1):(current_max_id+n_offspring), "n_offspring_post_pruning"] <- NA
         tdf[(current_max_id+1):(current_max_id+n_offspring), "offspring_generated"] <- FALSE
+        tdf$n_offspring_post_pruning[idx] <- n_offspring
         
       } else {
         
@@ -254,6 +255,7 @@ ring_vax_bp_sim <- function(## Transmission Parameters
           tdf[(current_max_id+1):(current_max_id+n_offspring), "n_offspring_quarantine"] <- NA
           tdf[(current_max_id+1):(current_max_id+n_offspring), "n_offspring_post_pruning"] <- NA
           tdf[(current_max_id+1):(current_max_id+n_offspring), "offspring_generated"] <- FALSE
+          tdf$n_offspring_post_pruning[idx] <- n_offspring
           
         ## If vaccine is available and the infection is symptomatic, implement ring vaccination
         } else {
@@ -318,6 +320,8 @@ ring_vax_bp_sim <- function(## Transmission Parameters
           }
         }
       }
+    } else {
+      tdf$n_offspring_post_pruning[idx] <- 0
     }
     susc <- susc - n_offspring
   }

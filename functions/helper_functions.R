@@ -416,3 +416,59 @@ convert_array_time_to_n <- function(arr, scenario, pathogen, R0_scan, vaccine_ef
   
   return(df)
 }
+
+convert_array_Reff <- function(arr, scenario, pathogen, R0_scan, vaccine_efficacy_transmission_scan, vaccine_efficacy_infection_scan, quarantine_efficacy_scan) {
+  
+  df <- as.data.frame.table(arr, responseName = "time_to_n")
+  # Rename the Var* columns to something more meaningful
+  colnames(df) <- c("iteration_i", "R0_i", "vaccine_efficacy_i", "quarantine_efficacy_i", "Reff")
+  
+  # Map these integer indices back to their actual values
+  df <- df %>%
+    mutate(
+      iteration           = as.integer(iteration_i),
+      scenario            = scenario,
+      pathogen            = pathogen,
+      R0                  = R0_scan[R0_i],
+      vaccine_efficacy_infection = vaccine_efficacy_infection_scan[vaccine_efficacy_i], 
+      vaccine_efficacy_transmission = vaccine_efficacy_transmission_scan[vaccine_efficacy_i], 
+      quarantine_efficacy = quarantine_efficacy_scan[quarantine_efficacy_i]
+    ) %>%
+    # Keep columns in a nice order
+    dplyr::select(iteration, scenario, pathogen, R0, vaccine_efficacy_infection, vaccine_efficacy_transmission, quarantine_efficacy, Reff)
+  
+  return(df)
+}
+
+convert_array_R0 <- function(arr, scenario, pathogen, R0_scan, vaccine_efficacy_transmission_scan, vaccine_efficacy_infection_scan, quarantine_efficacy_scan) {
+  
+  df <- as.data.frame.table(arr, responseName = "time_to_n")
+  # Rename the Var* columns to something more meaningful
+  colnames(df) <- c("iteration_i", "R0_i", "vaccine_efficacy_i", "quarantine_efficacy_i", "R0_actual")
+  
+  # Map these integer indices back to their actual values
+  df <- df %>%
+    mutate(
+      iteration           = as.integer(iteration_i),
+      scenario            = scenario,
+      pathogen            = pathogen,
+      R0                  = R0_scan[R0_i],
+      vaccine_efficacy_infection = vaccine_efficacy_infection_scan[vaccine_efficacy_i], 
+      vaccine_efficacy_transmission = vaccine_efficacy_transmission_scan[vaccine_efficacy_i], 
+      quarantine_efficacy = quarantine_efficacy_scan[quarantine_efficacy_i]
+    ) %>%
+    # Keep columns in a nice order
+    dplyr::select(iteration, scenario, pathogen, R0, vaccine_efficacy_infection, vaccine_efficacy_transmission, quarantine_efficacy, R0_actual)
+  
+  return(df)
+}
+
+calculate_R0 <- function(tdf) {
+  R0 <- mean(tdf$n_offspring, na.rm = TRUE)
+  return(R0)
+}
+
+calculate_Reff <- function(tdf) {
+  Reff <- mean(tdf$n_offspring_post_pruning, na.rm = TRUE)
+  return(Reff)
+}
