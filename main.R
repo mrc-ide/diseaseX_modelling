@@ -1,6 +1,7 @@
 
 library(rstudioapi)
 library(squire)
+library(fitdistrplus)
 library(nimue)
 library(squire.page.sarsX) 
 library(data.table)
@@ -22,13 +23,14 @@ library(officer)
 library(tictoc)
 library(egg)
 library(monochromeR)
-library(bpmodels)
+# library(bpmodels)
 library(bobfunctions2)
 library(magick)
 library(pdftools)
 library(cowplot)
 library(ggnewscale)
 library(viridis)
+library(doParallel)
 
 # colours
 

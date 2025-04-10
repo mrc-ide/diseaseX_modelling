@@ -370,11 +370,11 @@ linear_interpolate <- function(df) {
   return(new_df)
 }
 
-convert_array <- function(arr, scenario, pathogen, R0_scan, quarantine_efficacy_scan) {
+convert_array <- function(arr, scenario, pathogen, R0_scan, vaccine_efficacy_transmission_scan, vaccine_efficacy_infection_scan, quarantine_efficacy_scan) {
   
   df <- as.data.frame.table(arr, responseName = "epidemic_size")
   # Rename the Var* columns to something more meaningful
-  colnames(df) <- c("iteration_i", "R0_i", "quarantine_efficacy_i", "epidemic_size")
+  colnames(df) <- c("iteration_i", "R0_i", "vaccine_efficacy_i", "quarantine_efficacy_i", "epidemic_size")
   
   # Map these integer indices back to their actual values
   df <- df %>%
@@ -383,20 +383,22 @@ convert_array <- function(arr, scenario, pathogen, R0_scan, quarantine_efficacy_
       scenario            = scenario,
       pathogen            = pathogen,
       R0                  = R0_scan[R0_i],
+      vaccine_efficacy_infection = vaccine_efficacy_transmission_scan[vaccine_efficacy_i], 
+      vaccine_efficacy_transmission = vaccine_efficacy_infection_scan[vaccine_efficacy_i], 
       quarantine_efficacy = quarantine_efficacy_scan[quarantine_efficacy_i]
     ) %>%
     # Keep columns in a nice order
-    select(iteration, scenario, pathogen, R0, quarantine_efficacy, epidemic_size)
+    dplyr::select(iteration, scenario, pathogen, R0, quarantine_efficacy, epidemic_size)
   
   
   return(df)
 }
 
-convert_array_time_to_n <- function(arr, scenario, pathogen, R0_scan, quarantine_efficacy_scan) {
+convert_array_time_to_n <- function(arr, scenario, pathogen, R0_scan, vaccine_efficacy_transmission_scan, vaccine_efficacy_infection_scan, quarantine_efficacy_scan) {
   
   df <- as.data.frame.table(arr, responseName = "time_to_n")
   # Rename the Var* columns to something more meaningful
-  colnames(df) <- c("iteration_i", "R0_i", "quarantine_efficacy_i", "time_to_n")
+  colnames(df) <- c("iteration_i", "R0_i", "vaccine_efficacy_i", "quarantine_efficacy_i", "time_to_n")
   
   # Map these integer indices back to their actual values
   df <- df %>%
@@ -405,10 +407,12 @@ convert_array_time_to_n <- function(arr, scenario, pathogen, R0_scan, quarantine
       scenario            = scenario,
       pathogen            = pathogen,
       R0                  = R0_scan[R0_i],
+      vaccine_efficacy_infection = vaccine_efficacy_transmission_scan[vaccine_efficacy_i], 
+      vaccine_efficacy_transmission = vaccine_efficacy_infection_scan[vaccine_efficacy_i], 
       quarantine_efficacy = quarantine_efficacy_scan[quarantine_efficacy_i]
     ) %>%
     # Keep columns in a nice order
-    select(iteration, scenario, pathogen, R0, quarantine_efficacy, time_to_n)
+    dplyr::select(iteration, scenario, pathogen, R0, quarantine_efficacy, time_to_n)
   
   return(df)
 }
