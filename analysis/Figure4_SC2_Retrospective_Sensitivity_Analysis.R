@@ -429,3 +429,11 @@ full_plot_alt <- cowplot::plot_grid(row1_alt, row2_alt, nrow = 2,
 ggsave(filename = "figures/Figure_3_BPSV_SC2_Impact/Fig3_SC_BPSVImpact_Overall.pdf",
        plot = full_plot_alt,
        width = 10.27, height = 6)
+
+c_alt2 <- cowplot::plot_grid(a_alt + theme(legend.position = "none"), 
+                             b_alt + theme(legend.position = "none"), 
+                             a_bar + theme(legend.position = "none"), nrow = 1, align = "v")
+ggsave(filename = "figures/CEPI_report_SC2_retrospective_split1.pdf",
+       plot = c_alt2,
+       width = 12.5,
+       height = 4)

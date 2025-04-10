@@ -434,9 +434,9 @@ if (fresh_run_R0_sensitivity_analysis) {
     left_join(bind_rows(
       df_SC1_nothing_time_to_n, df_SC1_2weeks_time_to_n, df_SC1_1week_time_to_n, df_SC1_2days_time_to_n, df_SC1_instant_time_to_n,
       df_SC2_nothing_time_to_n, df_SC2_2weeks_time_to_n, df_SC2_1week_time_to_n, df_SC2_2days_time_to_n, df_SC2_instant_time_to_n), 
-      by = c("iteration", "scenario", "pathogen", "R0", "quarantine_efficacy"))
+      by = c("iteration", "scenario", "pathogen", "R0", "vaccine_efficacy_infection", "vaccine_efficacy_transmission", "quarantine_efficacy"))
   
-  saveRDS(object = overall_bd_df,
+  saveRDS(object = overall_bp_df,
           file = "outputs/Figure1_branchingProcess_Containment/New_Fig1_ringVaccination_paramScan.rds")
 } else {
   overall_bp_df <- readRDS("outputs/Figure1_branchingProcess_Containment/New_Fig1_ringVaccination_paramScan.rds")
@@ -445,7 +445,7 @@ if (fresh_run_R0_sensitivity_analysis) {
 ## Plotting the proportion of outbreaks controlled
 containment_df <- overall_bp_df %>%
   mutate(contained = ifelse(epidemic_size < (0.9 * check_final_size), 1, 0)) %>%
-  group_by(R0, scenario, pathogen, quarantine_efficacy) %>%
+  group_by(R0, scenario, pathogen, vaccine_efficacy_infection, quarantine_efficacy) %>%
   summarise(proportion_contained = sum(contained) / iterations) %>%
   mutate(proportion_contained = ifelse(R0 == 1.00, 1, proportion_contained)) %>%
   mutate(scenario = ifelse(scenario == "no_vaccination", "zno_vaccination", scenario)) %>%
@@ -458,11 +458,12 @@ containment_df$scenario <- factor(containment_df$scenario,
                                              "evacc_2weeks_protectDelay", "zno_vaccination"))
 containment_df2 <- containment_df %>%
   arrange(scenario) 
-containment_plot <- ggplot(containment_df2, aes(x = R0, y = 100 * proportion_contained, col = scenario)) +
+containment_plot <- ggplot(subset(containment_df2, pathogen == "SARS-CoV-2"), 
+                           aes(x = R0, y = 100 * proportion_contained, col = scenario)) +
   geom_line() +
   geom_point() +
   theme_bw() +
-  facet_grid(quarantine_efficacy~pathogen) + 
+  facet_grid(quarantine_efficacy~vaccine_efficacy_infection) + 
   scale_colour_manual(values = c("#CA2E6B", "#88C5EE", "#236897", "#13496E", "black"), 
                       labels = c("No Delay", "2 Days", "1 Week", "2 Weeks", "No Vaccination"),
                       name = "Vaccine\nProtection\nDelay",
@@ -470,13 +471,32 @@ containment_plot <- ggplot(containment_df2, aes(x = R0, y = 100 * proportion_con
   labs(x = "R0", y = "% Outbreaks Contained") +
   theme(strip.background = element_rect(fill = "white"))
 
+## Plotting the increased control relative to no vaccine
+# containment_relative <- containment_df %>%
+#   group_by(R0, pathogen, vaccine_efficacy_infection, quarantine_efficacy) %>%
+#   mutate(extra_control_absolute = proportion_contained - proportion_contained[scenario == "zno_vaccination"]) %>%
+#   ungroup()
+# ggplot(subset(containment_relative, pathogen == "SARS-CoV-2"), 
+#        aes(x = R0, y = 100 * extra_control_absolute, col = scenario)) +
+#   geom_line() +
+#   geom_point() +
+#   theme_bw() +
+#   facet_grid(quarantine_efficacy~vaccine_efficacy_infection) + 
+#   scale_colour_manual(values = c("#CA2E6B", "#88C5EE", "#236897", "#13496E", "black"), 
+#                       labels = c("No Delay", "2 Days", "1 Week", "2 Weeks", "No Vaccination"),
+#                       name = "Vaccine\nProtection\nDelay",
+#                       guide = guide_legend(reverse = TRUE)) +
+#   labs(x = "R0", y = "% Outbreaks Contained") +
+#   theme(strip.background = element_rect(fill = "white"))
+
 ## Plotting the increased time to N cases
 time_to_n_df <- overall_bp_df %>%
   mutate(contained = ifelse(epidemic_size < (0.9 * check_final_size), 1, 0)) %>%
-  mutate(time_to_n_2 = ifelse(is.na(time_to_n), 200, time_to_n)) %>%
-  group_by(R0, scenario, pathogen, quarantine_efficacy) %>%
+  mutate(time_to_n_2 = ifelse(is.na(time_to_n), 250, time_to_n)) %>%
+  group_by(R0, scenario, pathogen, vaccine_efficacy_infection, quarantine_efficacy) %>%
   summarise(proportion_contained = sum(contained) / iterations,
-            time_to_n = mean(time_to_n, na.rm = TRUE)) %>%
+            time_to_n = mean(time_to_n, na.rm = TRUE),
+            time_to_n_2 = mean(time_to_n_2, na.rm = TRUE)) %>%
   mutate(proportion_contained = ifelse(R0 == 1.00, 1, proportion_contained)) %>%
   mutate(scenario = ifelse(scenario == "no_vaccination", "zno_vaccination", scenario)) %>%
   mutate(scenario = ifelse(scenario == "2days_delay", "bvacc_2days_protectDelay", scenario)) %>%
@@ -484,12 +504,12 @@ time_to_n_df <- overall_bp_df %>%
   mutate(scenario = ifelse(scenario == "2weeks_delay", "evacc_2weeks_protectDelay", scenario)) %>%
   mutate(scenario = ifelse(scenario == "no_delay", "avacc_no_delay", scenario)) 
 
-time_to_n_plot <- ggplot(subset(time_to_n_df, proportion_contained < 0.25), 
-       aes(x = R0, y = time_to_n, col = scenario)) +
+time_to_n_plot <- ggplot(subset(time_to_n_df, pathogen == "SARS-CoV-2"), 
+       aes(x = R0, y = time_to_n_2, col = scenario)) +
   geom_line() +
   geom_point() +
   theme_bw() +
-  facet_grid(quarantine_efficacy~pathogen,
+  facet_grid(quarantine_efficacy~vaccine_efficacy_infection,
              scales = "free_y") + 
   lims(y = c(0, NA)) +
   scale_colour_manual(values = c("#CA2E6B", "#88C5EE", "#236897", "#13496E", "black"), 
@@ -533,7 +553,7 @@ if (fresh_run_vaccination_heatmaps) {
   
   ## Sensitivity Analysis - R0 vs Ratio of Tg to Protection Delay
   Tg_ratio_seq <- seq(1, 4, 0.5)
-  storage_R0_TgRatio_sensitivity <- array(data = NA, dim = c(length(R0_seq), length(Tg_ratio_seq), length(quarantine_efficacy_scan), iterations))
+  storage_R0_TgRatio_sensitivity <- array(data = NA, dim = c(length(R0_seq), length(Tg_ratio_seq), length(vaccine_efficacy_infection_scan), length(quarantine_efficacy_scan), iterations))
   for (i in 1:length(R0_seq)) {
     for (j in 1:length(Tg_ratio_seq)) {
       for (k in 1:length(quarantine_efficacy_scan)) {

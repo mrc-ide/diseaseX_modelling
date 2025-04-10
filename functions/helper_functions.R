@@ -383,12 +383,12 @@ convert_array <- function(arr, scenario, pathogen, R0_scan, vaccine_efficacy_tra
       scenario            = scenario,
       pathogen            = pathogen,
       R0                  = R0_scan[R0_i],
-      vaccine_efficacy_infection = vaccine_efficacy_transmission_scan[vaccine_efficacy_i], 
-      vaccine_efficacy_transmission = vaccine_efficacy_infection_scan[vaccine_efficacy_i], 
+      vaccine_efficacy_infection = vaccine_efficacy_infection_scan[vaccine_efficacy_i], 
+      vaccine_efficacy_transmission = vaccine_efficacy_transmission_scan[vaccine_efficacy_i], 
       quarantine_efficacy = quarantine_efficacy_scan[quarantine_efficacy_i]
     ) %>%
     # Keep columns in a nice order
-    dplyr::select(iteration, scenario, pathogen, R0, quarantine_efficacy, epidemic_size)
+    dplyr::select(iteration, scenario, pathogen, R0, vaccine_efficacy_infection, vaccine_efficacy_transmission, quarantine_efficacy, epidemic_size)
   
   
   return(df)
@@ -407,12 +407,12 @@ convert_array_time_to_n <- function(arr, scenario, pathogen, R0_scan, vaccine_ef
       scenario            = scenario,
       pathogen            = pathogen,
       R0                  = R0_scan[R0_i],
-      vaccine_efficacy_infection = vaccine_efficacy_transmission_scan[vaccine_efficacy_i], 
-      vaccine_efficacy_transmission = vaccine_efficacy_infection_scan[vaccine_efficacy_i], 
+      vaccine_efficacy_infection = vaccine_efficacy_infection_scan[vaccine_efficacy_i], 
+      vaccine_efficacy_transmission = vaccine_efficacy_transmission_scan[vaccine_efficacy_i], 
       quarantine_efficacy = quarantine_efficacy_scan[quarantine_efficacy_i]
     ) %>%
     # Keep columns in a nice order
-    dplyr::select(iteration, scenario, pathogen, R0, quarantine_efficacy, time_to_n)
+    dplyr::select(iteration, scenario, pathogen, R0, vaccine_efficacy_infection, vaccine_efficacy_transmission, quarantine_efficacy, time_to_n)
   
   return(df)
 }
