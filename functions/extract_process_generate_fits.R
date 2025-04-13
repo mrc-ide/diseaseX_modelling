@@ -73,6 +73,16 @@ get_deaths_infections_hosps_time <- function(out){
 }
 
 # Using overall Rt and seeding cases as inputs to re-running squire.page to recreate the deaths curves
+# init <- seed_infections(excess$squire_model, excess$parameters$country, out$samples[[index]]$initial_infections)
+# squire_model <- excess$squire_model
+# country <- excess$parameters$country
+# seeding_cases <- out$samples[[index]]$initial_infections
+# do.call(squire_model$parameter_func, list(country = country))
+# library(squire.page.sarsX)
+# library(squire.page)
+# environment(squire_model$parameter_func) <- asNamespace("squire.page.sarsX")
+# parameters_booster_min <- squire.page:::parameters_booster_min
+# do.call(squire_model$parameter_func, list(country = country))
 seed_infections <- function(squire_model, country, seeding_cases){
   init <- squire.page.sarsX:::assign_infections(do.call(squire_model$parameter_func, list(country = country)), seeding_cases)
   init_vars <- str_subset(names(init), "_0")

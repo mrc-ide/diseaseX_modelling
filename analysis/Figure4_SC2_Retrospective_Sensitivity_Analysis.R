@@ -1,5 +1,5 @@
 # Load required libraries
-library(tidyverse); library(rnaturalearth); library(sf); 
+library(tidyverse); library(rnaturalearth); library(sf); library(doParallel)
 
 # Sourcing required functions
 source("functions/extract_process_generate_fits.R")
@@ -23,12 +23,18 @@ vaccination_rate_summarised <- wb_income_strata %>%
             weekly_median_vaccination_rate = 7 * median_vaccination_rate) %>%
   filter(income_level_iso3c != "INX")
 
+vaccination_rate_summarised_overall <- wb_income_strata %>%
+  summarise(mean_vaccination_rate = mean(daily_percent_vaccinated, na.rm = TRUE) / 100,
+            median_vaccination_rate = median(daily_percent_vaccinated, na.rm = TRUE) / 100,
+            weekly_mean_vaccination_rate = 7 * mean_vaccination_rate,
+            weekly_median_vaccination_rate = 7 * median_vaccination_rate)
+
 # Extracting unprocessed squire.page fits (required for Linux desktop to run as it struggles with download
 # call in grab_fit)
 fresh_run_fits <- FALSE
 if (fresh_run_fits) {
   country_ISOs <- unique(squire::population$iso3c)
-  for (i in 199:length(country_ISOs)) {
+  for (i in 1:length(country_ISOs)) {
     # Getting squire.page country fit draws 
     excess <- grab_fit(country_ISOs[i], TRUE, TRUE)
     
@@ -84,13 +90,15 @@ bpsv_start_dates_df <- data.frame(start_trigger = c("1Deaths", "10Deaths", "100D
 deaths_df <- data.frame(start_trigger = rep(NA_character_, 1),
                         coverage_scenario = rep(NA_character_, 1),
                         coverage = rep(NA_real_, 1),
+                        vaccination_rate_scenario = rep(NA_character_, 1),
                         deaths_BPSV = rep(NA_real_, 1),
                         empirical_deaths = rep(NA_real_, 1), 
                         iso = rep(NA_character_, 1))
                         
 ## Running All the Different Scenarios and Looping Over Country
-new_run <- FALSE
-for (i in 1:length(iso_list)) {
+new_run <- TRUE
+last_time <- Sys.time()
+for (i in 170:length(iso_list)) {
   iso <- iso_list[i]
   if (new_run) {
     
@@ -110,7 +118,10 @@ for (i in 1:length(iso_list)) {
     income_group <- income_strata$income_level_iso3c
     
     ## Defining vaccination rate (based on which income group the country belongs to)
-    vaccination_rate <- vaccination_rate_summarised$weekly_mean_vaccination_rate[vaccination_rate_summarised$income_level_iso3c == income_group]
+    vaccination_rate_income_strata <- vaccination_rate_summarised$weekly_mean_vaccination_rate[vaccination_rate_summarised$income_level_iso3c == income_group]
+    vaccination_rate_overall <- vaccination_rate_summarised_overall$weekly_mean_vaccination_rate
+    vaccination_rates_df <- data.frame(vaccination_rate_scenario = c("incomeStrata_vaxRate", "globalAverage_vaxRate"),
+                                       vaccination_rate = c(vaccination_rate_income_strata, vaccination_rate_overall))
     
     ## Defining coverage rate (for use in the scenario where coverage is variable by income strata)
     low_coverage <- coverage_df$low_coverage[coverage_df$income_level_iso3c == income_group]
@@ -124,27 +135,57 @@ for (i in 1:length(iso_list)) {
     temp <- readRDS(paste0("outputs/Figure3_SC2_Counterfactual_Impact/raw/raw_", iso_list[i], "_fit.rds"))
     
     ## Setting up parallelisation of all of the scenarios
-    num_cores <- 16
-    scenarios_df <- expand.grid(bpsv_start_date = bpsv_start_dates, coverage_scenario = c("low", "mid", "high", "variable")) %>%
+    num_cores <- 11
+    scenarios_df <- expand.grid(bpsv_start_date = bpsv_start_dates, 
+                                coverage_scenario = c("low", "mid", "high", "variable"),
+                                vaccination_rate_scenario = c("incomeStrata_vaxRate", "globalAverage_vaxRate")) %>%
       left_join(bpsv_start_dates_df, "bpsv_start_date") %>%
-      left_join(run_coverage_df, "coverage_scenario") 
+      left_join(run_coverage_df, "coverage_scenario") %>%
+      left_join(vaccination_rates_df, "vaccination_rate_scenario")
     
     ## Running the scenarios
-    x <- parallel::mclapply(1:nrow(scenarios_df), mc.cores = num_cores, function(scenario) {
-      temp_evaluation <- evaluate_country_impact2(original_fit = temp, country_iso = iso, 
-                                                  vaccination_rate = vaccination_rate, 
-                                                  bpsv_start_date = scenarios_df$bpsv_start_date[scenario], 
-                                                  coverage = scenarios_df$coverage[scenario])
-      temp_evaluation$start_trigger <- scenarios_df$start_trigger[scenario]
-      temp_evaluation$coverage_scenario <- scenarios_df$coverage_scenario[scenario]
-      temp_evaluation$coverage <- scenarios_df$coverage[scenario]
+    if (.Platform$OS.type == "windows") {
       
-      file_string <- paste0("Detect", scenarios_df$start_trigger[scenario], "_", scenarios_df$coverage_scenario[scenario], "VaccCoverage")
-      saveRDS(object = temp_evaluation, 
-              file = paste0("outputs/Figure3_SC2_Counterfactual_Impact/", file_string, "_", iso, "_fit.rds"))
+      cl <- parallel::makeCluster(num_cores)
+      registerDoParallel(cl)
       
-      return(temp_evaluation)
-    })
+      x <- foreach(scenario = seq_len(nrow(scenarios_df)), .combine = 'list', .packages = c("lubridate", "dplyr", "stringr", "purrr", 
+                                                                                            "tidyr", "squire.page.sarsX")) %dopar% {
+        temp_evaluation <- evaluate_country_impact2(original_fit = temp, 
+                                                    country_iso = iso,
+                                                    vaccination_rate = scenarios_df$vaccination_rate[scenario],  
+                                                    bpsv_start_date = scenarios_df$bpsv_start_date[scenario], 
+                                                    coverage = scenarios_df$coverage[scenario])
+        temp_evaluation$start_trigger <- scenarios_df$start_trigger[scenario]
+        temp_evaluation$coverage_scenario <- scenarios_df$coverage_scenario[scenario]
+        temp_evaluation$coverage <- scenarios_df$coverage[scenario]
+        temp_evaluation$vaccination_rate_scenario <- scenarios_df$vaccination_rate_scenario[scenario]
+        file_string <- paste0("Detect", scenarios_df$start_trigger[scenario], "_", scenarios_df$coverage_scenario[scenario], "VaccCoverage", "_", scenarios_df$vaccination_rate_scenario[scenario])
+        saveRDS(object = temp_evaluation, file = paste0("outputs/Figure3_SC2_Counterfactual_Impact/", file_string, "_", iso, "_fit.rds"))
+        return(temp_evaluation)
+      }
+      # Stop cluster
+      stopCluster(cl)
+
+    } else {
+      x <- parallel::mclapply(1:nrow(scenarios_df), mc.cores = num_cores, function(scenario) {
+        temp_evaluation <- evaluate_country_impact2(original_fit = temp, country_iso = iso, 
+                                                    vaccination_rate = scenarios_df$vaccination_rate[scenario], 
+                                                    bpsv_start_date = scenarios_df$bpsv_start_date[scenario], 
+                                                    coverage = scenarios_df$coverage[scenario])
+        temp_evaluation$start_trigger <- scenarios_df$start_trigger[scenario]
+        temp_evaluation$coverage_scenario <- scenarios_df$coverage_scenario[scenario]
+        temp_evaluation$coverage <- scenarios_df$coverage[scenario]
+        temp_evaluation$vaccination_rate_scenario <- scenarios_df$vaccination_rate_scenario[scenario]
+        
+        file_string <- paste0("Detect", scenarios_df$start_trigger[scenario], "_", scenarios_df$coverage_scenario[scenario], "VaccCoverage", "_", scenarios_df$vaccination_rate_scenario)
+        saveRDS(object = temp_evaluation, 
+                file = paste0("outputs/Figure3_SC2_Counterfactual_Impact/", file_string, "_", iso, "_fit.rds"))
+        
+        return(temp_evaluation)
+      })
+    }
+    
   } 
   if (iso_list[i] == "GUF") {
     iso <- "GUY"
@@ -155,19 +196,20 @@ for (i in 1:length(iso_list)) {
     map_dfr(readRDS)
   if (min(deaths$date) <= as.Date("2020-12-01")) {
     deaths <- deaths %>%
-      group_by(start_trigger, coverage_scenario, coverage, scenario) %>%
+      group_by(start_trigger, coverage_scenario, coverage, vaccination_rate_scenario, scenario) %>%
       summarise(med = sum(med)) %>%
       pivot_wider(names_from = scenario, values_from = med) %>%
       rename(empirical_deaths = no_bpsv_deaths, deaths_BPSV = bpsv_deaths)
     deaths$iso <- iso_list[i]
     deaths_df <- rbind(deaths_df, deaths)
   }
-  print(i)
+  print(paste("Finished i =", i, "of", length(iso_list), ": ISO was", iso, ". Time taken: ", round(as.numeric(Sys.time() - last_time) / 60, 2), " minutes"))
+  last_time <- Sys.time()
 }
 
 ## Overall deaths averted
 overall_deaths_averted <- deaths_df %>%
-  group_by(start_trigger, coverage_scenario) %>%
+  group_by(start_trigger, coverage_scenario, vaccination_rate_scenario) %>%
   summarise(total_bpsv_deaths = sum(deaths_BPSV),
             total_empirical_deaths = sum(empirical_deaths)) %>%
   filter(!is.na(start_trigger)) %>%
@@ -194,13 +236,13 @@ for (i in 1:length(iso_list)) {
 impact_deaths_df <- bind_rows(data_list)
 
 overall_impact_deaths <- impact_deaths_df %>%
-  group_by(scenario, date, start_trigger, coverage_scenario) %>%
+  group_by(scenario, date, start_trigger, coverage_scenario, vaccination_rate_scenario) %>%
   filter(date <= as.Date("2020-12-01")) %>%
   dplyr::summarise(total_deaths = sum(med, na.rm = TRUE), 
                    total_low = sum(`025`, na.rm = TRUE),
                    total_high = sum(`975`, na.rm = TRUE)) %>%
   ungroup() %>%
-  group_by(scenario, start_trigger, coverage_scenario) %>%
+  group_by(scenario, start_trigger, coverage_scenario, vaccination_rate_scenario) %>%
   mutate(cumulative = cumsum(total_deaths),
          cumulative_low = cumsum(total_low),
          cumulative_high = cumsum(total_high)) %>%
@@ -208,7 +250,7 @@ overall_impact_deaths <- impact_deaths_df %>%
               values_from = c("total_deaths", "total_low", "total_high", "cumulative", "cumulative_low", "cumulative_high"))
 
 perc_red <- overall_impact_deaths %>%
-  group_by(start_trigger, coverage_scenario) %>%
+  group_by(start_trigger, coverage_scenario, vaccination_rate_scenario) %>%
   summarise(total_bpsv_deaths = sum(total_deaths_bpsv_deaths),
             lower_bpsv_deaths = sum(total_low_bpsv_deaths),
             upper_bpsv_deaths = sum(total_high_bpsv_deaths),
@@ -232,7 +274,7 @@ ggsave(filename = "figures/Figure_3_BPSV_SC2_Impact/SuppFigure_VaryingStartTrigg
        plot = supp_figure,
        width = 10, height = 3)
 
-a <- ggplot(subset(overall_impact_deaths, coverage_scenario == "mid" & start_trigger == "1000Deaths")) +
+a <- ggplot(subset(overall_impact_deaths, coverage_scenario == "mid" & start_trigger == "1000Deaths" & vaccination_rate_scenario == "incomeStrata_vaxRate")) +
   geom_line(aes(x = date, y = cumulative_no_bpsv_deaths), colour = "#748386", linewidth = 1) +
   geom_line(aes(x = date, y = cumulative_bpsv_deaths), colour = "#E9614F", linewidth = 1) +
   geom_ribbon(aes(x = date, ymin = cumulative_bpsv_deaths, ymax = cumulative_no_bpsv_deaths), 
@@ -242,7 +284,7 @@ a <- ggplot(subset(overall_impact_deaths, coverage_scenario == "mid" & start_tri
   scale_y_continuous(labels = c("1M", "2M", "3M", "4M", "5M", "6M"),
                      breaks = c(1e6, 2e6, 3e6, 4e6, 5e6, 6e6))
 
-b <- ggplot(subset(overall_impact_deaths, coverage_scenario == "mid" & start_trigger == "1000Deaths" & date < as.Date("2020-11-28"))) +
+b <- ggplot(subset(overall_impact_deaths, coverage_scenario == "mid" & start_trigger == "1000Deaths" & date < as.Date("2020-11-28") & vaccination_rate_scenario == "incomeStrata_vaxRate")) +
   geom_line(aes(x = date, y = total_deaths_no_bpsv_deaths), colour = "#748386", linewidth = 1) +
   geom_line(aes(x = date, y = total_deaths_bpsv_deaths), colour = "#E9614F", linewidth = 1) +
   geom_ribbon(aes(x = date, ymin = total_deaths_bpsv_deaths, ymax = total_deaths_no_bpsv_deaths), 
