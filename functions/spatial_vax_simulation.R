@@ -187,8 +187,8 @@ spatial_vax_bp_sim <- function(## Transmission Parameters
     time_vaccinated <- tdf$time_vaccinated[idx]                                            # when the index case (the "parent") was vaccinated
     time_protected <- tdf$time_protected[idx]                                              # when the index case (the "parent") was protected
     onset_time_index_case <- infection_to_onset(n = 1)                                     # generate the time from infection to symptom onset for the index case
-    tdf$time_onset[idx] <- ifelse(index_asymptomatic == 0, onset_time_index_case, NA)      # --
     index_asymptomatic <- tdf$asymptomatic[idx]                                            # whether or not the index case (the "parent") is asymptomatic (influences whether contacts get ring vaccinated or not)
+    tdf$time_onset[idx] <- ifelse(index_asymptomatic == 0, onset_time_index_case, NA)      # --
     total_hospitalised <- sum(tdf$hospitalised, na.rm = TRUE)                              # total number of individuals hospitalised (used as spatial vaccination trigger)
     
     ## Calculating whether or not the individual isolates/quarantines
@@ -257,7 +257,7 @@ spatial_vax_bp_sim <- function(## Transmission Parameters
       
       # Updating number offspring, their infection times and characteristics to reflect removals due to quarantining
       n_offspring <- index_n_offspring$updated_n_offspring
-      new_times <- index_n_offspring$updated_infection_times
+      new_times <- index_n_offspring$updated_infection_times - time_infection_index
       
     }
     tdf$n_offspring_quarantine[idx] <- n_offspring

@@ -468,7 +468,11 @@ calculate_R0 <- function(tdf) {
   return(R0)
 }
 
-calculate_Reff <- function(tdf) {
-  Reff <- mean(tdf$n_offspring_post_pruning, na.rm = TRUE)
+calculate_Reff <- function(tdf, type = "not_spatial_vax") {
+  if (type == "spatial_vax") {
+    Reff <- mean(tdf$n_offspring_new_new, na.rm = TRUE)
+  } else {
+    Reff <- mean(tdf$n_offspring_post_pruning, na.rm = TRUE)
+  }
   return(Reff)
 }
