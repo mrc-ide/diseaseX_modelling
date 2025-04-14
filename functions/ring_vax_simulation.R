@@ -39,7 +39,7 @@ ring_vax_bp_sim <- function(## Transmission Parameters
   susc <- population - initial_immune
   
   ## Setting up the offspring distribution
-  ### Note that the modification for susceptible depletion can sometimes give some weird results around R=1
+  ### Note that the modification for susceptible depletion can sometimes give some slightly off results around R=1
   offspring <- match.arg(offspring)
   if (offspring == "pois") {
     offspring_fun <- function(n, susc) {
@@ -126,7 +126,7 @@ ring_vax_bp_sim <- function(## Transmission Parameters
     time_vaccinated <- tdf$time_vaccinated[idx]                                            # when the index case (the "parent") was vaccinated
     time_protected <- tdf$time_protected[idx]                                              # when the index case (the "parent") was protected
     onset_time_index_case <- infection_to_onset(n = 1)                                     # generate the time from infection to symptom onset for the index case
-    tdf$time_onset[idx] <- onset_time_index_case                                           # --
+    tdf$time_onset[idx] <- ifelse(index_asymptomatic == 0, onset_time_index_case, NA)      # --
     index_asymptomatic <- tdf$asymptomatic[idx]                                            # whether or not the index case (the "parent") is asymptomatic (influences whether contacts get ring vaccinated or not)
 
     ## Calculating whether or not the individual isolates/quarantines

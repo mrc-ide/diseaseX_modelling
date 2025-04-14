@@ -1,9 +1,31 @@
 # Load required libraries
 source(here::here("main.R"))
+library(parallel)
 
 # Load required functions
-source(here::here("functions/run_sars_x.R"))
-source(here::here("functions/branching_process_spatial_vaccination.R"))
+source(here::here("functions/spatial_vax_simulation.R"))
+source(here::here("functions/implement_quarantine.R"))
+source(here::here("functions/helper_functions.R"))
+source(here::here("functions/time_to_nth_infection.R"))
+
+### Fixed Model Parameters
+
+### Quarantine time (based on Kucharksi et al: https://pmc.ncbi.nlm.nih.gov/articles/PMC7511527/?utm_source=chatgpt.com#cesec10)
+days <- 1:6
+p <- c(0.20, 0.20, 0.20, 0.20, 0.20, 0.20)
+sampled_quarantine_times <- sample(days, size = 1000, replace = TRUE, prob = p)
+fit_gamma_fdplus <- fitdist(sampled_quarantine_times, "gamma")
+quarantine_time_closure <- function(quarantine_time_shape, quarantine_time_rate) {
+  function(n) {
+    rgamma(n, shape = quarantine_time_shape, rate = quarantine_time_rate)
+  }
+}
+quarantine_time <- quarantine_time_closure(quarantine_time_shape = 3.342, #eval(fit_gamma_fdplus$estimate["shape"]
+                                           quarantine_time_rate = 0.951) # eval(fit_gamma_fdplus$estimate["rate"])
+prob_quarantine_contact_traced <- 0.47 # from the same article as above - ~53% traced (via app-like) * 90% adhering. 
+                                       # assuming tracing is via app-like hence this is lower than vaccine coverage (also contingent on tracing)
+prob_quarantine_symptoms <- 0.9        # from the same article as above 
+quarantine_efficacy_scan <- c(0, 0.35, 0.65) # from the same article as above
 
 ### SC1 parameters
 SC1_generation_time <- function(n) { rgamma(n, shape = 24, rate = 2) } # from https://www.ncbi.nlm.nih.gov/pmc/articles/PMC7169193/
@@ -42,40 +64,56 @@ seeding_cases <- 3
 ### Sensitivity analysis parameters
 R0_scan <- c(0.75, 1, 1.25, 1.5, 1.75, 2, 2.25, 2.5)
 surveillance_scan <- c(1, 10, 25, 50, 75, 100)
-iterations <- 100
+iterations <- 5
 
-library(parallel)
-no_cores <- 40
+no_cores <- 10
 cl <- makeCluster(no_cores)
+set.seed(2000)
+seeds <- runif(n = iterations, min = 1, max = 10^9)
 clusterExport(cl, list("mu", "R0_scan", "SC1_generation_time", "spatial_kernel",
                        "check_final_size", "seeding_cases", "SC1_prop_asymptomatic",
                        "SC1_prob_hosp", "SC1_hospitalisation_delay", "surveillance_scan",
                        "vaccine_coverage", "vaccine_efficacy_infection_scan", "vaccine_efficacy_transmission_scan",
                        "vaccine_efficacy_disease", "vaccine_logistical_delay", "vaccine_protection_delay",
-                       "spatial_ratio_scan", "spatial_bp_geog_vacc", "spatial_calc",
-                       "SC2_generation_time", "SC2_prop_asymptomatic", "SC2_prob_hosp", "SC2_hospitalisation_delay"))
+                       "spatial_ratio_scan", "spatial_vax_bp_sim", "spatial_calc", "seeds", "pop",
+                       "SC2_generation_time", "SC2_prop_asymptomatic", "SC2_prob_hosp", "SC2_hospitalisation_delay",
+                       "quarantine_time", "quarantine_efficacy_scan", "prob_quarantine_symptoms", "prob_quarantine_contact_traced", "quarantine_efficacy_scan"))
 
-SC1_storage <- array(data = NA, dim = c(iterations, length(R0_scan), length(surveillance_scan), length(spatial_ratio_scan), length(vaccine_efficacy_infection_scan)))
-SC2_storage <- array(data = NA, dim = c(iterations, length(R0_scan), length(surveillance_scan), length(spatial_ratio_scan), length(vaccine_efficacy_infection_scan)))
+SC1_size_storage <- array(data = NA, dim = c(iterations, length(R0_scan), length(surveillance_scan), length(spatial_ratio_scan), length(vaccine_efficacy_infection_scan), length(quarantine_efficacy_scan)))
+SC2_size_storage <- array(data = NA, dim = c(iterations, length(R0_scan), length(surveillance_scan), length(spatial_ratio_scan), length(vaccine_efficacy_infection_scan), length(quarantine_efficacy_scan)))
+SC1_timetoN_storage <- array(data = NA, dim = c(iterations, length(R0_scan), length(surveillance_scan), length(spatial_ratio_scan), length(vaccine_efficacy_infection_scan), length(quarantine_efficacy_scan)))
+SC2_timetoN_storage <- array(data = NA, dim = c(iterations, length(R0_scan), length(surveillance_scan), length(spatial_ratio_scan), length(vaccine_efficacy_infection_scan), length(quarantine_efficacy_scan)))
+SC1_Reff_storage <- array(data = NA, dim = c(iterations, length(R0_scan), length(surveillance_scan), length(spatial_ratio_scan), length(vaccine_efficacy_infection_scan), length(quarantine_efficacy_scan)))
+SC2_Reff_storage <- array(data = NA, dim = c(iterations, length(R0_scan), length(surveillance_scan), length(spatial_ratio_scan), length(vaccine_efficacy_infection_scan), length(quarantine_efficacy_scan)))
+SC1_R0_storage <- array(data = NA, dim = c(iterations, length(R0_scan), length(surveillance_scan), length(spatial_ratio_scan), length(vaccine_efficacy_infection_scan), length(quarantine_efficacy_scan)))
+SC2_R0_storage <- array(data = NA, dim = c(iterations, length(R0_scan), length(surveillance_scan), length(spatial_ratio_scan), length(vaccine_efficacy_infection_scan), length(quarantine_efficacy_scan)))
+
+n <- 2000
 for (i in 1:length(R0_scan)) {
   for (j in 1:length(surveillance_scan)) {
     for (k in 1:length(spatial_ratio_scan)) {
       for (l in 1:length(vaccine_efficacy_infection_scan)) {
-        
-        clusterExport(cl, list("i", "j", "k", "l"))
-        
-        # Setup parallel processing for the iterations
-        results <- parLapply(cl, 1:iterations, function(m) {
-          vaccination_radius <- spatial_ratio_scan[k] * mu
+        for (m in 1:length(quarantine_efficacy_scan)) {
           
-          # SARS-CoV-1 Pathogen Archetype
-          SC1_temp <- spatial_bp_geog_vacc(mn_offspring = R0_scan[i],
+          clusterExport(cl, list("i", "j", "k", "l", "m"))
+          
+          # Setup parallel processing for the iterations
+          results <- parLapply(cl, 1:iterations, function(n) {
+            
+            this_seed <- seeds[n]
+            vaccination_radius <- spatial_ratio_scan[k] * mu
+            
+            # SARS-CoV-1 Pathogen Archetype
+            SC1_temp <- spatial_vax_bp_sim(offspring = "pois",
+                                           mn_offspring = R0_scan[i],
                                            generation_time = SC1_generation_time,
                                            spatial_kernel = spatial_kernel,
                                            t0 = 0, tf = Inf,
+                                           initial_immune = 0,
                                            check_final_size = check_final_size,
                                            seeding_cases = seeding_cases,
                                            prop_asymptomatic = SC1_prop_asymptomatic,
+                                           infection_to_onset = SC1_infection_to_onset,
                                            prob_hosp = SC1_prob_hosp,
                                            hospitalisation_delay = SC1_hospitalisation_delay,
                                            detection_threshold = surveillance_scan[j],
@@ -85,36 +123,72 @@ for (i in 1:length(R0_scan)) {
                                            vaccine_efficacy_transmission = vaccine_efficacy_transmission_scan[l],
                                            vaccine_efficacy_disease = vaccine_efficacy_disease,
                                            vaccine_logistical_delay = vaccine_logistical_delay,
-                                           vaccine_protection_delay = vaccine_protection_delay)
-          SC1_count <- sum(!is.na(SC1_temp$time_infection))
+                                           vaccine_protection_delay = vaccine_protection_delay,
+                                           seed = this_seed,
+                                           population = pop,
+                                           time_to_quarantine = quarantine_time,
+                                           prob_quarantine_contact_traced = prob_quarantine_contact_traced,
+                                           prob_quarantine_symptoms = prob_quarantine_symptoms,
+                                           quarantine_efficacy = quarantine_efficacy_scan[m])
+            SC1_count <- sum(!is.na(SC1_temp$time_infection))
+            SC1_time_to_n <- time_to_nth_infection(tdf = SC1_temp, n = n)[[1]]
+            SC1_Reff <- calculate_Reff(SC1_temp)
+            SC1_R0 <- calculate_R0(SC1_temp)
+            
+            # SARS-CoV-2 Pathogen Archetype
+            SC2_temp <- spatial_vax_bp_sim(offspring = "pois",
+                                           mn_offspring = R0_scan[i],
+                                             generation_time = SC2_generation_time,
+                                             spatial_kernel = spatial_kernel,
+                                             t0 = 0, tf = Inf,
+                                             initial_immune = 0,
+                                             check_final_size = check_final_size,
+                                             seeding_cases = seeding_cases,
+                                             prop_asymptomatic = SC2_prop_asymptomatic,
+                                             infection_to_onset = SC2_infection_to_onset,
+                                             prob_hosp = SC2_prob_hosp,
+                                             hospitalisation_delay = SC2_hospitalisation_delay,
+                                             detection_threshold = surveillance_scan[j],
+                                             vaccine_campaign_radius = vaccination_radius,
+                                             vaccine_coverage = vaccine_coverage,
+                                             vaccine_efficacy_infection = vaccine_efficacy_infection_scan[l],
+                                             vaccine_efficacy_transmission = vaccine_efficacy_transmission_scan[l],
+                                             vaccine_efficacy_disease = vaccine_efficacy_disease,
+                                             vaccine_logistical_delay = vaccine_logistical_delay,
+                                             vaccine_protection_delay = vaccine_protection_delay,
+                                             seed = this_seed,
+                                             population = pop,
+                                             time_to_quarantine = quarantine_time,
+                                             prob_quarantine_contact_traced = prob_quarantine_contact_traced,
+                                             prob_quarantine_symptoms = prob_quarantine_symptoms,
+                                             quarantine_efficacy = quarantine_efficacy_scan[m])
+            SC2_count <- sum(!is.na(SC2_temp$time_infection))
+            SC2_time_to_n <- time_to_nth_infection(tdf = SC2_temp, n = n)[[1]]
+            SC2_Reff <- calculate_Reff(SC2_temp)
+            SC2_R0 <- calculate_R0(SC2_temp)
+            
+            list(SC1_count = SC1_count, SC2_count = SC2_count,
+                 SC1_time_to_n = SC1_time_to_n, SC2_time_to_n = SC2_time_to_n,
+                 SC1_Reff = SC1_Reff, SC2_Reff = SC2_Reff,
+                 SC1_R0 = SC1_R0, SC2_R0 = SC2_R0)
+          })
           
-          # SARS-CoV-2 Pathogen Archetype
-          SC2_temp <- spatial_bp_geog_vacc(mn_offspring = R0_scan[i],
-                                           generation_time = SC2_generation_time,
-                                           spatial_kernel = spatial_kernel,
-                                           t0 = 0, tf = Inf,
-                                           check_final_size = check_final_size,
-                                           seeding_cases = seeding_cases,
-                                           prop_asymptomatic = SC2_prop_asymptomatic,
-                                           prob_hosp = SC2_prob_hosp,
-                                           hospitalisation_delay = SC2_hospitalisation_delay,
-                                           detection_threshold = surveillance_scan[j],
-                                           vaccine_campaign_radius = vaccination_radius,
-                                           vaccine_coverage = vaccine_coverage,
-                                           vaccine_efficacy_infection = vaccine_efficacy_infection_scan[l],
-                                           vaccine_efficacy_transmission = vaccine_efficacy_transmission_scan[l],
-                                           vaccine_efficacy_disease = vaccine_efficacy_disease,
-                                           vaccine_logistical_delay = vaccine_logistical_delay,
-                                           vaccine_protection_delay = vaccine_protection_delay)
-          SC2_count <- sum(!is.na(SC2_temp$time_infection))
-          
-          list(SC1_count = SC1_count, SC2_count = SC2_count)
-        })
+        }
+        
         
         # Extract results and store them in the respective storage arrays
-        for (m in 1:iterations) {
-          SC1_storage[m, i, j, k, l] <- results[[m]]$SC1_count
-          SC2_storage[m, i, j, k, l] <- results[[m]]$SC2_count
+        for (n in 1:iterations) {
+          SC1_size_storage[n, i, j, k, l, m] <- results[[n]]$SC1_count
+          SC2_size_storage[n, i, j, k, l, m] <- results[[n]]$SC2_count
+          
+          SC1_timetoN_storage[n, i, j, k, l, m] <- results[[n]]$SC1_time_to_n
+          SC2_timetoN_storage[n, i, j, k, l, m] <- results[[n]]$SC2_time_to_n
+          
+          SC1_Reff_storage[n, i, j, k, l, m] <- results[[n]]$SC1_Reff
+          SC2_Reff_storage[n, i, j, k, l, m] <- results[[n]]$SC2_Reff
+          
+          SC1_R0_storage[n, i, j, k, l, m] <- results[[n]]$SC1_R0
+          SC2_R0_storage[n, i, j, k, l, m] <- results[[n]]$SC2_R0
         }
         print(paste0("i = ", i, ", j = ", j, ", k = ", k, ", l = " , l))
       }
@@ -122,8 +196,8 @@ for (i in 1:length(R0_scan)) {
   }
 }
 stopCluster(cl)
-saveRDS(SC1_storage, "outputs/Figure1_branchingProcess_Containment/raw_branchingProcess_spatialVaccination_SC1.rds")
-saveRDS(SC2_storage, "outputs/Figure1_branchingProcess_Containment/raw_branchingProcess_spatialVaccination_SC2.rds")
+saveRDS(SC1_storage, "outputs/Figure1_branchingProcess_Containment/Fig2_spatialVaccination_SC1_paramScan.rds")
+saveRDS(SC2_storage, "outputs/Figure1_branchingProcess_Containment/Fig2_spatialVaccination_SC2_paramScan.rds")
 
 SC1_no_vaccination <- data.frame(expand_grid(R0_scan, iterations = 1:iterations), surveillance = 0, spatial_ratio = 0, vaccine_efficacy = 0, outbreak_size = NA_real_, vaccine = "no_vaccine")
 SC2_no_vaccination <- data.frame(expand_grid(R0_scan, iterations = 1:iterations), surveillance = 0, spatial_ratio = 0, vaccine_efficacy = 0, outbreak_size = NA_real_, vaccine = "no_vaccine")

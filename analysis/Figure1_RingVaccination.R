@@ -241,7 +241,7 @@ if (fresh_run_R0_sensitivity_analysis) {
             sc2_1w_size <- sum(!is.na(SC2_vacc_1week$time_infection))
             sc2_1w_to_n  <- time_to_nth_infection(tdf = SC2_vacc_1week, n = n)[[1]]
             sc2_1w_Reff <- calculate_Reff(SC2_vacc_1week)
-            sc2_1w_R0 <- calculate_Reff(SC2_vacc_1week)
+            sc2_1w_R0 <- calculate_R0(SC2_vacc_1week)
             
             # ----------------------------------------------------------------
             # SC1_vacc_2days
@@ -269,7 +269,7 @@ if (fresh_run_R0_sensitivity_analysis) {
             sc1_2d_size <- sum(!is.na(SC1_vacc_2days$time_infection))
             sc1_2d_to_n  <- time_to_nth_infection(tdf = SC1_vacc_2days, n = n)[[1]]
             sc1_2d_Reff <- calculate_Reff(SC1_vacc_2days)
-            sc1_2d_R0 <- calculate_Reff(SC1_vacc_2days)
+            sc1_2d_R0 <- calculate_R0(SC1_vacc_2days)
           
             # ----------------------------------------------------------------
             # SC2_vacc_2days
@@ -297,7 +297,7 @@ if (fresh_run_R0_sensitivity_analysis) {
             sc2_2d_size <- sum(!is.na(SC2_vacc_2days$time_infection))
             sc2_2d_to_n  <- time_to_nth_infection(tdf = SC2_vacc_2days, n = n)[[1]]
             sc2_2d_Reff <- calculate_Reff(SC2_vacc_2days)
-            sc2_2d_R0 <- calculate_Reff(SC2_vacc_2days)
+            sc2_2d_R0 <- calculate_R0(SC2_vacc_2days)
             
             # ----------------------------------------------------------------
             # SC1_vacc_instant
@@ -325,7 +325,7 @@ if (fresh_run_R0_sensitivity_analysis) {
             sc1_inst_size <- sum(!is.na(SC1_vacc_instant$time_infection))
             sc1_inst_to_n  <- time_to_nth_infection(tdf = SC1_vacc_instant, n = n)[[1]]
             sc1_inst_Reff <- calculate_Reff(SC1_vacc_instant)
-            sc1_inst_R0 <- calculate_Reff(SC1_vacc_instant)
+            sc1_inst_R0 <- calculate_R0(SC1_vacc_instant)
             
             # ----------------------------------------------------------------
             # SC2_vacc_instant
@@ -353,7 +353,7 @@ if (fresh_run_R0_sensitivity_analysis) {
             sc2_inst_size <- sum(!is.na(SC2_vacc_instant$time_infection))
             sc2_inst_to_n  <- time_to_nth_infection(tdf = SC2_vacc_instant, n = n)[[1]]
             sc2_inst_Reff <- calculate_Reff(SC2_vacc_instant)
-            sc2_inst_R0 <- calculate_Reff(SC2_vacc_instant)
+            sc2_inst_R0 <- calculate_R0(SC2_vacc_instant)
             
             # ----------------------------------------------------------------
             # SC1_no_vacc
@@ -381,7 +381,7 @@ if (fresh_run_R0_sensitivity_analysis) {
             sc1_nothing_size <- sum(!is.na(SC1_no_vacc$time_infection))
             sc1_nothing_to_n  <- time_to_nth_infection(tdf = SC1_no_vacc, n = n)[[1]]
             sc1_nothing_Reff <- calculate_Reff(SC1_no_vacc)
-            sc1_nothing_R0 <- calculate_Reff(SC1_no_vacc)
+            sc1_nothing_R0 <- calculate_R0(SC1_no_vacc)
             
             # ----------------------------------------------------------------
             # SC2_no_vacc
@@ -409,7 +409,7 @@ if (fresh_run_R0_sensitivity_analysis) {
             sc2_nothing_size <- sum(!is.na(SC2_no_vacc$time_infection))
             sc2_nothing_to_n  <- time_to_nth_infection(tdf = SC2_no_vacc, n = n)[[1]]
             sc2_nothing_Reff <- calculate_Reff(SC2_no_vacc)
-            sc2_nothing_R0 <- calculate_Reff(SC2_no_vacc)
+            sc2_nothing_R0 <- calculate_R0(SC2_no_vacc)
             
             # Return a small named list with everything needed
             x <- list(sc1_2w_size = sc1_2w_size, sc1_2w_to_n = sc1_2w_to_n, sc1_2w_Reff = sc1_2w_Reff, sc1_2w_R0 = sc1_2w_R0, 
