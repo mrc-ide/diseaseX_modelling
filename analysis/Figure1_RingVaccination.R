@@ -676,7 +676,8 @@ if (fresh_run_vaccination_heatmaps) {
   cl <- makeCluster(num_cores)
   registerDoParallel(cl)
   Tg_ratio_seq <- seq(1, 4, 0.5)
-  storage_R0_TgRatio_sensitivity <- array(data = NA, dim = c(length(R0_seq), length(Tg_ratio_seq), length(vaccine_efficacy_infection_scan), length(quarantine_efficacy_scan), iterations))
+  storage_R0_TgRatio_sensitivity <- array(data = NA, dim = c(length(R0_seq), length(Tg_ratio_seq), 
+                                                             length(vaccine_efficacy_infection_scan), length(quarantine_efficacy_scan), iterations))
   for (i in 1:length(R0_seq)) {
     for (j in 1:length(Tg_ratio_seq)) {
       for (m in seq_along(vaccine_efficacy_infection_scan)) {
