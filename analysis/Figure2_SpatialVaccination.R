@@ -57,7 +57,7 @@ pop <- 10^10
 check_final_size <- 2500
 initial_immune <- 0
 seeding_cases <- 3
-iterations <- 5
+iterations <- 20
 
 #########################################################################
 ## R0 sensitivity analysis (Figure 2B)
@@ -72,6 +72,7 @@ quarantine_efficacy_scan <- c(0, 0.35, 0.65) # from the same article as above
 
 fresh_run_R0_sensitivity_analysis <- TRUE
 n <- 2000
+tic()
 if (fresh_run_R0_sensitivity_analysis) {
   
   ## Setting up the cluster to support the parallel runs
@@ -102,7 +103,6 @@ if (fresh_run_R0_sensitivity_analysis) {
         for (l in 1:length(vaccine_efficacy_infection_scan)) {
           for (m in 1:length(quarantine_efficacy_scan)) {
             
-            tic()
             # Setup parallel processing for the iterations
             clusterExport(cl, list("i", "j", "k", "l", "m"))
             results <- parLapply(cl, 1:iterations, function(n) {
@@ -195,7 +195,6 @@ if (fresh_run_R0_sensitivity_analysis) {
               SC2_storage[n, i, j, k, l, m, 4] <- results[[n]]$SC2_R0
             }
             print(paste0("i = ", i, ", j = ", j, ", k = ", k, ", l = " , l, ", m = ", m))
-            toc()
           }
         }
       }
@@ -284,21 +283,20 @@ if (fresh_run_R0_sensitivity_analysis) {
              SC1_R0 = SC1_R0, SC2_R0 = SC2_R0)
         
       })
-      print(paste0("i = ", i, ", j = ", j))
-      
+
       # Extract results and store them in the respective storage arrays
       for (k in 1:iterations) {
-        SC1_no_vaccine_storage[k, i, j, 1] <- results[[n]]$SC1_count
-        SC2_no_vaccine_storage[k, i, j, 1] <- results[[n]]$SC2_count
+        SC1_no_vaccine_storage[k, i, 1, 1, 1, j, 1] <- results[[n]]$SC1_count
+        SC2_no_vaccine_storage[k, i, 1, 1, 1, j, 1] <- results[[n]]$SC2_count
 
-        SC1_no_vaccine_storage[k, i, j, 2] <- results[[n]]$SC1_time_to_n
-        SC2_no_vaccine_storage[k, i, j, 2] <- results[[n]]$SC2_time_to_n
+        SC1_no_vaccine_storage[k, i, 1, 1, 1, j, 2] <- results[[n]]$SC1_time_to_n
+        SC2_no_vaccine_storage[k, i, 1, 1, 1, j, 2] <- results[[n]]$SC2_time_to_n
         
-        SC1_no_vaccine_storage[k, i, j, 3] <- results[[n]]$SC1_Reff
-        SC2_no_vaccine_storage[k, i, j, 3] <- results[[n]]$SC2_Reff
+        SC1_no_vaccine_storage[k, i, 1, 1, 1, j, 3] <- results[[n]]$SC1_Reff
+        SC2_no_vaccine_storage[k, i, 1, 1, 1, j, 3] <- results[[n]]$SC2_Reff
         
-        SC1_no_vaccine_storage[k, i, j, 4] <- results[[n]]$SC1_R0
-        SC2_no_vaccine_storage[k, i, j, 4] <- results[[n]]$SC2_R0
+        SC1_no_vaccine_storage[k, i, 1, 1, 1, j, 4] <- results[[n]]$SC1_R0
+        SC2_no_vaccine_storage[k, i, 1, 1, 1, j, 4] <- results[[n]]$SC2_R0
       }
       
       print(paste0("i = ", i, ", j = ", j))
@@ -394,49 +392,13 @@ if (fresh_run_R0_sensitivity_analysis) {
   SC2_reshaped2 <- readRDS("outputs/Figure1_branchingProcess_Containment/Fig2_spatialVaccination_SC2_paramScan.rds")
   
 }
-
-# Results Plotting
-overall <- rbind(SC1_reshaped2, SC2_reshaped2) %>%
-  mutate(contained = ifelse(outbreak_size < (0.9 * check_final_size), 1, 0)) %>%
-  group_by(R0, surveillance, spatial_ratio, vaccine_efficacy_infection, quarantine_efficacy, vaccine, pathogen) %>%
-  summarise(proportion_contained = sum(contained) / iterations,
-            avg_time_to_n = mean(time_to_n, na.rm = TRUE),
-            avg_R0 = mean(R0),
-            avg_Reff = mean(Reff))
-
-### Plotting the output
-vaccine_efficacy_index <- which(vaccine_efficacy_infection_scan == 0.35)
-spatial_ratio_index <- which(spatial_ratio_scan == 50)
-surveillance_scan_index <- which(surveillance_scan == 10)
-surveillance_scan_exclude <- which(surveillance_scan == 25)
-
-overall2 <- overall %>%
-  filter(vaccine_efficacy == vaccine_efficacy_index | vaccine_efficacy == 0 ,
-         spatial_ratio == spatial_ratio_index | spatial_ratio == 0,
-         surveillance != surveillance_scan_exclude) %>%
-  mutate(R0 = ifelse(vaccine == "no_vaccine", R0, R0_scan[R0]))
-
-fig1HI <- ggplot(overall2, aes(x = R0, y = 100 * proportion_contained, col = factor(surveillance))) +
-  geom_line() +
-  geom_point() +
-  theme_bw() +
-  facet_grid(. ~ pathogen,
-             labeller = as_labeller(c(`SARS-CoV-1` = "SARS-CoV-1",
-                                      `SARS-CoV-2` = "SARS-CoV-2"))) +
-  scale_colour_manual(labels = c("No\nVaccine", paste0(surveillance_scan, " Hosp.")),
-                      values = c("#474747", c("#E3AFCB", "#D474A4", "#B52F7B", "#9C105A", "#6B0045")),
-                      name = "Surveillance\nThreshold\nTrigger") +
-  labs(y = "% Outbreaks Contained") +
-  theme_bw() +
-  theme(strip.background = element_rect(fill = "white"))
-ggsave(filename = "figures/Figure_1_BranchingProcess/Fig1HI_SpatialVaccination_ContainmentPlot.pdf", 
-       plot = fig1c, 
-       width = 8, height = 3.1)
+toc()
 
 #########################################################################
 ## Parameter scan sensitivity analyses (Figure 2C-E)
 #########################################################################
 fresh_run_vaccination_heatmaps <- TRUE
+tic()
 if (fresh_run_vaccination_heatmaps) {
   
   # Generating the seeds
@@ -554,8 +516,8 @@ if (fresh_run_vaccination_heatmaps) {
   #######################################################################
   
   ## Parameter scan arguments
-  vaccine_efficacy_scan_full <- c(1, 10, 25, 50, 75, 100)
-  storage_R0_SpatialRadius_sensitivity <- array(data = NA, dim = c(iterations, length(R0_seq), length(spatial_ratio_scan_full), length(vaccine_efficacy_infection_scan), length(quarantine_efficacy_scan), 4))
+  vaccine_efficacy_scan_full <- seq(0.3, 0.9, 0.1)
+  storage_R0_VaccineEff_sensitivity <- array(data = NA, dim = c(iterations, length(R0_seq), length(vaccine_efficacy_scan_full), length(quarantine_efficacy_scan), 4))
   
   ## Setting up the cluster to support the parallel runs
   no_cores <- min(iterations, 10)
@@ -566,7 +528,7 @@ if (fresh_run_vaccination_heatmaps) {
                          "check_final_size", "seeding_cases", "SC1_prop_asymptomatic", "time_to_nth_infection", "spatial_ratio_fixed",
                          "SC1_prob_hosp", "SC1_hospitalisation_delay", "surveillance_scan", "n",
                          "SC1_infection_to_onset", "SC2_infection_to_onset", "implement_quarantine",
-                         "vaccine_coverage", "vaccine_efficacy_infection_scan", "vaccine_efficacy_transmission_scan",
+                         "vaccine_coverage", "vaccine_efficacy_scan_full", "vaccine_efficacy_scan_full",
                          "vaccine_efficacy_disease", "vaccine_logistical_delay", "vaccine_protection_delay",
                          "spatial_ratio_scan", "spatial_vax_bp_sim", "spatial_calc", "seeds", "pop",
                          "SC2_generation_time", "SC2_prop_asymptomatic", "SC2_prob_hosp", "SC2_hospitalisation_delay",
@@ -577,9 +539,8 @@ if (fresh_run_vaccination_heatmaps) {
   })
   
   ## Running the simulations
-  storage_R0_VaccineEff_sensitivity <- array(data = NA, dim = c(iterations, length(R0_seq), length(vaccine_efficacy_infection_scan), length(quarantine_efficacy_scan), 4))
   for (i in 1:length(R0_seq)) {
-    for (k in 1:length(vaccine_efficacy_infection_scan)) {
+    for (k in 1:length(vaccine_efficacy_scan_full)) {
       for (l in 1:length(quarantine_efficacy_scan)) {
         
         # Setup parallel processing for the iterations
@@ -602,8 +563,8 @@ if (fresh_run_vaccination_heatmaps) {
                                          detection_threshold = surveillance_threshold_fixed,
                                          vaccine_campaign_radius = spatial_ratio_fixed * mu,
                                          vaccine_coverage = vaccine_coverage,
-                                         vaccine_efficacy_infection = vaccine_efficacy_infection_scan[k],
-                                         vaccine_efficacy_transmission = vaccine_efficacy_transmission_scan[k],
+                                         vaccine_efficacy_infection = vaccine_efficacy_scan_full[k],
+                                         vaccine_efficacy_transmission = vaccine_efficacy_scan_full[k],
                                          vaccine_efficacy_disease = vaccine_efficacy_disease,
                                          vaccine_logistical_delay = vaccine_logistical_delay,
                                          vaccine_protection_delay = vaccine_protection_delay,
@@ -639,8 +600,8 @@ if (fresh_run_vaccination_heatmaps) {
   reshaped_R0_VaccineEff_sensitivity <- reshaped_R0_VaccineEff_sensitivity %>%
     mutate(iteration = as.integer(iteration),
            input_R0 = R0_scan[R0],
-           vaccine_efficacy_infection = vaccine_efficacy_infection_scan[vaccine_efficacy], 
-           vaccine_efficacy_transmission = vaccine_efficacy_transmission_scan[vaccine_efficacy], 
+           vaccine_efficacy_infection = vaccine_efficacy_scan_full[vaccine_efficacy], 
+           vaccine_efficacy_transmission = vaccine_efficacy_scan_full[vaccine_efficacy], 
            quarantine_efficacy = quarantine_efficacy_scan[quarantine_efficacy],
            outcome = outcome_names[outcome]) %>% 
     dplyr::select(iteration, input_R0, -R0, vaccine_efficacy_infection, vaccine_efficacy_transmission, 
@@ -662,7 +623,7 @@ if (fresh_run_vaccination_heatmaps) {
   seeds <- runif(n = iterations, min = 1, max = 10^9)
   clusterExport(cl, list("mu", "R0_seq", "SC1_generation_time", "spatial_kernel", "calculate_Reff", "calculate_R0", "surveillance_threshold_fixed",
                          "check_final_size", "seeding_cases", "SC1_prop_asymptomatic", "time_to_nth_infection", "spatial_ratio_scan_full",
-                         "SC1_prob_hosp", "SC1_hospitalisation_delay", "surveillance_scan", "n",
+                         "SC1_prob_hosp", "SC1_hospitalisation_delay", "surveillance_scan", "n", "spatial_ratio_fixed",
                          "SC1_infection_to_onset", "SC2_infection_to_onset", "implement_quarantine",
                          "vaccine_coverage", "vaccine_efficacy_infection_scan", "vaccine_efficacy_transmission_scan",
                          "vaccine_efficacy_disease", "vaccine_logistical_delay", "vaccine_protection_delay",
@@ -743,7 +704,7 @@ if (fresh_run_vaccination_heatmaps) {
            vaccine_efficacy_transmission = vaccine_efficacy_transmission_scan[vaccine_efficacy], 
            quarantine_efficacy = quarantine_efficacy_scan[quarantine_efficacy],
            outcome = outcome_names[outcome]) %>% 
-    dplyr::select(iteration, input_R0, -R0, spatial_ratio, vaccine_efficacy_infection, vaccine_efficacy_transmission, 
+    dplyr::select(iteration, input_R0, -R0, surveillance_threshold, vaccine_efficacy_infection, vaccine_efficacy_transmission, 
                   quarantine_efficacy, outcome, value, -vaccine_efficacy) %>%
     pivot_wider(names_from = "outcome", values_from = value)
   saveRDS(object = reshaped_R0_SurvThreshold_sensitivity, file = "outputs/Figure1_branchingProcess_Containment/Fig1_spatialVaccination_R0SurvThreshold.rds")
@@ -755,8 +716,47 @@ if (fresh_run_vaccination_heatmaps) {
   reshaped_R0_SurvThreshold_sensitivity <- readRDS(file = "outputs/Figure1_branchingProcess_Containment/Fig1_spatialVaccination_R0SurvThreshold.rds")
   
 }
+toc()
          
 ### Old plotting figures
+
+# Results Plotting
+overall <- rbind(SC1_reshaped2, SC2_reshaped2) %>%
+  mutate(contained = ifelse(outbreak_size < (0.9 * check_final_size), 1, 0)) %>%
+  group_by(R0, surveillance, spatial_ratio, vaccine_efficacy_infection, quarantine_efficacy, vaccine, pathogen) %>%
+  summarise(proportion_contained = sum(contained) / iterations,
+            avg_time_to_n = mean(time_to_n, na.rm = TRUE),
+            avg_R0 = mean(R0),
+            avg_Reff = mean(Reff))
+
+### Plotting the output
+vaccine_efficacy_index <- which(vaccine_efficacy_infection_scan == 0.35)
+spatial_ratio_index <- which(spatial_ratio_scan == 50)
+surveillance_scan_index <- which(surveillance_scan == 10)
+surveillance_scan_exclude <- which(surveillance_scan == 25)
+
+overall2 <- overall %>%
+  filter(vaccine_efficacy == vaccine_efficacy_index | vaccine_efficacy == 0 ,
+         spatial_ratio == spatial_ratio_index | spatial_ratio == 0,
+         surveillance != surveillance_scan_exclude) %>%
+  mutate(R0 = ifelse(vaccine == "no_vaccine", R0, R0_scan[R0]))
+
+fig1HI <- ggplot(overall2, aes(x = R0, y = 100 * proportion_contained, col = factor(surveillance))) +
+  geom_line() +
+  geom_point() +
+  theme_bw() +
+  facet_grid(. ~ pathogen,
+             labeller = as_labeller(c(`SARS-CoV-1` = "SARS-CoV-1",
+                                      `SARS-CoV-2` = "SARS-CoV-2"))) +
+  scale_colour_manual(labels = c("No\nVaccine", paste0(surveillance_scan, " Hosp.")),
+                      values = c("#474747", c("#E3AFCB", "#D474A4", "#B52F7B", "#9C105A", "#6B0045")),
+                      name = "Surveillance\nThreshold\nTrigger") +
+  labs(y = "% Outbreaks Contained") +
+  theme_bw() +
+  theme(strip.background = element_rect(fill = "white"))
+ggsave(filename = "figures/Figure_1_BranchingProcess/Fig1HI_SpatialVaccination_ContainmentPlot.pdf", 
+       plot = fig1c, 
+       width = 8, height = 3.1)
 
 R0_surveillance <- overall %>%
   mutate(R0 = ifelse(vaccine == "no_vaccine", R0, R0_scan[R0])) %>%
