@@ -57,7 +57,7 @@ pop <- 10^10
 check_final_size <- 2500
 initial_immune <- 0
 seeding_cases <- 3
-iterations <- 20
+iterations <- 50
 
 #########################################################################
 ## R0 sensitivity analysis (Figure 2B)
@@ -68,11 +68,11 @@ vaccine_efficacy_infection_scan <- c(0.35, 0.75)
 vaccine_efficacy_transmission_scan <- c(0.35, 0.75) 
 spatial_ratio_scan <- c(50, 100)
 quarantine_efficacy_scan <- c(0, 0.35, 0.65) # from the same article as above
-# length(R0_scan) * length(surveillance_scan) * length(vaccine_efficacy_infection_scan) * length(spatial_ratio_scan) * length(quarantine_efficacy_scan) * (150 / (60 * 60)) 
+length(R0_scan) * length(surveillance_scan) * length(vaccine_efficacy_infection_scan) * length(spatial_ratio_scan) * length(quarantine_efficacy_scan) * (50/ (60 * 60)) 
 
 fresh_run_R0_sensitivity_analysis <- TRUE
-n <- 2000
 tic()
+n <- 2000
 if (fresh_run_R0_sensitivity_analysis) {
   
   ## Setting up the cluster to support the parallel runs
@@ -104,6 +104,7 @@ if (fresh_run_R0_sensitivity_analysis) {
           for (m in 1:length(quarantine_efficacy_scan)) {
             
             # Setup parallel processing for the iterations
+            # tic()
             clusterExport(cl, list("i", "j", "k", "l", "m"))
             results <- parLapply(cl, 1:iterations, function(n) {
               
@@ -195,6 +196,7 @@ if (fresh_run_R0_sensitivity_analysis) {
               SC2_storage[n, i, j, k, l, m, 4] <- results[[n]]$SC2_R0
             }
             print(paste0("i = ", i, ", j = ", j, ", k = ", k, ", l = " , l, ", m = ", m))
+            # toc()
           }
         }
       }
