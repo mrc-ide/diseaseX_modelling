@@ -502,7 +502,7 @@ if (fresh_run_vaccination_heatmaps) {
   colnames(reshaped_R0_SpatialRadius_sensitivity) <- c("iteration", "R0", "spatial_ratio", "vaccine_efficacy", "quarantine_efficacy", "outcome", "value")
   reshaped_R0_SpatialRadius_sensitivity <- reshaped_R0_SpatialRadius_sensitivity %>%
     mutate(iteration = as.integer(iteration),
-           input_R0 = R0_scan[R0],
+           input_R0 = R0_seq[R0],
            spatial_ratio = spatial_ratio_scan_full[spatial_ratio], 
            vaccine_efficacy_infection = vaccine_efficacy_infection_scan[vaccine_efficacy], 
            vaccine_efficacy_transmission = vaccine_efficacy_transmission_scan[vaccine_efficacy], 
@@ -601,7 +601,7 @@ if (fresh_run_vaccination_heatmaps) {
   colnames(reshaped_R0_VaccineEff_sensitivity) <- c("iteration", "R0", "vaccine_efficacy", "quarantine_efficacy", "outcome", "value")
   reshaped_R0_VaccineEff_sensitivity <- reshaped_R0_VaccineEff_sensitivity %>%
     mutate(iteration = as.integer(iteration),
-           input_R0 = R0_scan[R0],
+           input_R0 = R0_seq[R0],
            vaccine_efficacy_infection = vaccine_efficacy_scan_full[vaccine_efficacy], 
            vaccine_efficacy_transmission = vaccine_efficacy_scan_full[vaccine_efficacy], 
            quarantine_efficacy = quarantine_efficacy_scan[quarantine_efficacy],
@@ -700,7 +700,7 @@ if (fresh_run_vaccination_heatmaps) {
   colnames(reshaped_R0_SurvThreshold_sensitivity) <- c("iteration", "R0", "surveillance_threshold", "vaccine_efficacy", "quarantine_efficacy", "outcome", "value")
   reshaped_R0_SurvThreshold_sensitivity <- reshaped_R0_SurvThreshold_sensitivity %>%
     mutate(iteration = as.integer(iteration),
-           input_R0 = R0_scan[R0],
+           input_R0 = R0_seq[R0],
            surveillance_threshold = surveillance_scan[surveillance_threshold], 
            vaccine_efficacy_infection = vaccine_efficacy_infection_scan[vaccine_efficacy], 
            vaccine_efficacy_transmission = vaccine_efficacy_transmission_scan[vaccine_efficacy], 

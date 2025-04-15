@@ -49,7 +49,7 @@ pop <- 10^10
 check_final_size <- 2500
 initial_immune <- 0
 seeding_cases <- 5
-iterations <- 250
+iterations <- 5
 R0_scan <- c(0.75, 1, 1.25, 1.5, 1.75, 2, 2.25, 2.5)
 
 ### Setting up the cluster for parallel running
@@ -664,6 +664,7 @@ if (fresh_run_vaccination_heatmaps) {
   
   set.seed(2000)
   seeds <- runif(n = iterations, min = 1, max = 10^9)
+  outcome_names <- c("epidemic_size", "time_to_n", "Reff", "R0")
   
   ## R0 sensitivity analysis for all the runs
   R0_seq <- R0_scan[R0_scan > 1]
@@ -672,22 +673,20 @@ if (fresh_run_vaccination_heatmaps) {
   #######################################################################
   ## Sensitivity Analysis - R0 vs Ratio of Tg to Protection Delay
   #######################################################################
-  num_cores <- parallel::detectCores() - 1
+  num_cores <- min(iterations, parallel::detectCores() - 1)
   cl <- makeCluster(num_cores)
   registerDoParallel(cl)
   Tg_ratio_seq <- seq(1, 4, 0.5)
-  storage_R0_TgRatio_sensitivity <- array(data = NA, dim = c(length(R0_seq), length(Tg_ratio_seq), 
-                                                             length(vaccine_efficacy_infection_scan), length(quarantine_efficacy_scan), iterations))
+  storage_R0_TgRatio_sensitivity <- array(data = NA, dim = c(iterations, length(R0_seq), length(Tg_ratio_seq), 
+                                                             length(vaccine_efficacy_infection_scan), length(quarantine_efficacy_scan), 4))
   for (i in 1:length(R0_seq)) {
     for (j in 1:length(Tg_ratio_seq)) {
       for (m in seq_along(vaccine_efficacy_infection_scan)) {
         for (k in 1:length(quarantine_efficacy_scan)) {
           
           # Parallelize over l (iterations) with foreach
-          out_vec <- foreach(
+          out_list <- foreach(
             l = seq_len(iterations),
-            .combine      = 'c',      # returns a numeric vector of length=iterations
-            .multicombine = TRUE,
             .export       = c("ring_vax_bp_sim", "quarantine_time_closure"),
             .packages     = c("stats", "dplyr", "tidyr")  # 'stats' for rgamma, if needed
           ) %dopar% {
@@ -712,29 +711,44 @@ if (fresh_run_vaccination_heatmaps) {
                                       prob_quarantine_contact_traced = prob_quarantine_contact_traced,
                                       prob_quarantine_symptoms = prob_quarantine_symptoms,
                                       quarantine_efficacy = quarantine_efficacy_scan[k])
-            sum(!is.na(bp_out$time_infection))
+            size <- sum(!is.na(bp_out$time_infection))
+            to_n <- time_to_nth_infection(tdf = bp_out, n = n)[[1]]
+            Reff <- calculate_Reff(bp_out)
+            R0 <- calculate_R0(bp_out)
+            
+            x <- list(size = size, to_n = to_n, Reff = Reff, R0 = R0)
+            return(x)
           }
-          storage_R0_TgRatio_sensitivity[i, j, m, k, ] <- out_vec
+          
+          for (l in seq_len(iterations)) {
+            tmp <- out_list[[l]]
+            storage_R0_TgRatio_sensitivity[l, i, j, m, k, 1] <- tmp$size
+            storage_R0_TgRatio_sensitivity[l, i, j, m, k, 2] <- tmp$to_n
+            storage_R0_TgRatio_sensitivity[l, i, j, m, k, 3] <- tmp$Reff
+            storage_R0_TgRatio_sensitivity[l, i, j, m, k, 4] <- tmp$R0
+          }
         }
       }
     }
     print(paste("Finished i =", i, "of", length(R0_seq)))
   }
   stopCluster(cl)
-  storage_R0_TgRatio_df <- reshape2::melt(storage_R0_TgRatio_sensitivity)
-  names(storage_R0_TgRatio_df)[1:5] <- c("i", "j", "m", "k", "iter")
-  storage_R0_TgRatio_df <- storage_R0_TgRatio_df %>%
-    mutate(R0 = R0_seq[i],
-           TgRatio = Tg_ratio_seq[j],
-           vaccine_efficacy_infection = vaccine_efficacy_infection_scan[m],
-           quarantine_efficacy = quarantine_efficacy_scan[k],
-           iteration = iter) %>%
-    rename(final_size = value) %>%
-    dplyr::select(-i, -j, -m, -k, -iter) %>%
-    mutate(contained = ifelse(final_size < (0.95 * check_final_size), 1, 0)) %>%
-    group_by(R0, TgRatio, vaccine_efficacy_infection, quarantine_efficacy) %>%
-    summarise(proportion_contained = sum(contained) / n(), .groups = "drop")
-  saveRDS(object = storage_R0_TgRatio_df, file = "outputs/Figure1_branchingProcess_Containment/Fig1_ringVaccination_R0TgRatio.rds")
+  
+  ## Processing the simulations
+  reshaped_R0_TgRatio_sensitivity <- reshape2::melt(storage_R0_TgRatio_sensitivity)
+  colnames(reshaped_R0_TgRatio_sensitivity) <- c("iteration", "R0", "TgRatio", "vaccine_efficacy", "quarantine_efficacy", "outcome", "value")
+  reshaped_R0_TgRatio_sensitivity <- reshaped_R0_TgRatio_sensitivity %>%
+    mutate(iteration = as.integer(iteration),
+           input_R0 = R0_seq[R0],
+           Tg_Ratio = Tg_ratio_seq[TgRatio],
+           vaccine_efficacy_infection = vaccine_efficacy_infection_scan[vaccine_efficacy], 
+           vaccine_efficacy_transmission = vaccine_efficacy_infection_scan[vaccine_efficacy], 
+           quarantine_efficacy = quarantine_efficacy_scan[quarantine_efficacy],
+           outcome = outcome_names[outcome]) %>% 
+    dplyr::select(iteration, input_R0, -R0, Tg_Ratio, vaccine_efficacy_infection, vaccine_efficacy_transmission, 
+                  quarantine_efficacy, outcome, value, -vaccine_efficacy) %>%
+    pivot_wider(names_from = "outcome", values_from = value)
+  saveRDS(object = reshaped_R0_TgRatio_sensitivity, file = "outputs/Figure1_branchingProcess_Containment/Fig1_ringVaccination_R0TgRatio.rds")
   
   #######################################################################
   ## Sensitivity Analysis - R0 vs Vaccine Efficacy
@@ -747,16 +761,15 @@ if (fresh_run_vaccination_heatmaps) {
   generation_time <- function(n) { rgamma(n, shape = 2 * vaccine_protection_delay * Tg_ratio_fixed, rate = 2) }
   infection_to_onset <- function(n) { rgamma(n, shape = (2 * vaccine_protection_delay * Tg_ratio_fixed)/3, rate = 2) }
   vaccine_efficacy_seq <- seq(0.3, 0.9, 0.1)
-  storage_R0_efficacy_sensitivity <- array(data = NA, dim = c(length(R0_seq), length(vaccine_efficacy_seq), length(quarantine_efficacy_scan), iterations))
+  storage_R0_efficacy_sensitivity <- array(data = NA, dim = c(iterations, length(R0_seq), length(vaccine_efficacy_seq), 
+                                                              length(quarantine_efficacy_scan), 4))
   for (i in 1:length(R0_seq)) {
     for (j in 1:length(vaccine_efficacy_seq)) {
       for (k in 1:length(quarantine_efficacy_scan)) {
         
         # Parallelize over l (iterations) with foreach
-        out_vec <- foreach(
+        out_list <- foreach(
           l = seq_len(iterations),
-          .combine      = 'c',      # returns a numeric vector of length=iterations
-          .multicombine = TRUE,
           .export       = c("SC2_isolation_Tg_fraction", "ring_vax_bp_sim", "quarantine_time_closure"),
           .packages     = c("stats", "dplyr", "tidyr")  # 'stats' for rgamma, if needed
         ) %dopar% {
@@ -779,29 +792,43 @@ if (fresh_run_vaccination_heatmaps) {
                                     prob_quarantine_contact_traced = prob_quarantine_contact_traced,
                                     prob_quarantine_symptoms = prob_quarantine_symptoms,
                                     quarantine_efficacy = quarantine_efficacy_scan[k])
-          sum(!is.na(bp_out$time_infection))
+          size <- sum(!is.na(bp_out$time_infection))
+          to_n <- time_to_nth_infection(tdf = bp_out, n = n)[[1]]
+          Reff <- calculate_Reff(bp_out)
+          R0 <- calculate_R0(bp_out)
+          
+          x <- list(size = size, to_n = to_n, Reff = Reff, R0 = R0)
+          return(x)
         }
-        storage_R0_efficacy_sensitivity[i, j, k, ] <- out_vec
+        
+        for (l in seq_len(iterations)) {
+          tmp <- out_list[[l]]
+          storage_R0_efficacy_sensitivity[l, i, j, k, 1] <- tmp$size
+          storage_R0_efficacy_sensitivity[l, i, j, k, 2] <- tmp$to_n
+          storage_R0_efficacy_sensitivity[l, i, j, k, 3] <- tmp$Reff
+          storage_R0_efficacy_sensitivity[l, i, j, k, 4] <- tmp$R0
+        }
       }
     }
     print(paste("Finished i =", i, "of", length(R0_seq)))
   }
   stopCluster(cl)
   
-  storage_R0_efficacy_df <- reshape2::melt(storage_R0_efficacy_sensitivity)
-  names(storage_R0_efficacy_df)[1:4] <- c("i", "j", "k", "iter")
-  storage_R0_efficacy_df <- storage_R0_efficacy_df %>%
-    mutate(R0 = R0_seq[i],
-           vaccine_efficacy = vaccine_efficacy_seq[j],
-           quarantine_efficacy = quarantine_efficacy_scan[k],
-           iteration = iter) %>%
-    rename(final_size = value) %>%
-    dplyr::select(-i, -j, -k, -iter) %>%
-    mutate(contained = ifelse(final_size < (0.95 * check_final_size), 1, 0)) %>%
-    group_by(R0, vaccine_efficacy, quarantine_efficacy) %>%
-    summarise(proportion_contained = sum(contained) / n(), .groups = "drop")
-  saveRDS(object = storage_R0_efficacy_df, file = "outputs/Figure1_branchingProcess_Containment/Fig1_ringVaccination_R0Efficacy.rds")
-
+  ## Processing the simulations
+  reshaped_R0_efficacy_sensitivity <- reshape2::melt(storage_R0_efficacy_sensitivity)
+  colnames(reshaped_R0_efficacy_sensitivity) <- c("iteration", "R0", "vaccine_efficacy", "quarantine_efficacy", "outcome", "value")
+  reshaped_R0_efficacy_sensitivity <- reshaped_R0_efficacy_sensitivity %>%
+    mutate(iteration = as.integer(iteration),
+           input_R0 = R0_seq[R0],
+           vaccine_efficacy_infection = vaccine_efficacy_seq[vaccine_efficacy], 
+           vaccine_efficacy_transmission = vaccine_efficacy_seq[vaccine_efficacy], 
+           quarantine_efficacy = quarantine_efficacy_scan[quarantine_efficacy],
+           outcome = outcome_names[outcome]) %>% 
+    dplyr::select(iteration, input_R0, -R0, vaccine_efficacy_infection, vaccine_efficacy_transmission, 
+                  quarantine_efficacy, outcome, value, -vaccine_efficacy) %>%
+    pivot_wider(names_from = "outcome", values_from = value)
+  saveRDS(object = reshaped_R0_efficacy_sensitivity, file = "outputs/Figure1_branchingProcess_Containment/Fig1_ringVaccination_R0Efficacy.rds")
+  
   #######################################################################
   ## Sensitivity Analysis - R0 vs Presymptomatic Transmission Proportion
   #######################################################################
@@ -812,17 +839,16 @@ if (fresh_run_vaccination_heatmaps) {
   Tg_ratio_fixed <- 2.5
   generation_time <- function(n) { rgamma(n, shape = 2 * vaccine_protection_delay * Tg_ratio_fixed, rate = 2) } 
   proportion_presymptomatic_seq <- seq(0.1, 0.7, 0.1)
-  storage_R0_preSymp_sensitivity <- array(data = NA, dim = c(length(R0_seq), length(proportion_presymptomatic_seq), length(vaccine_efficacy_infection_scan), length(quarantine_efficacy_scan), iterations))
+  storage_R0_preSymp_sensitivity <- array(data = NA, dim = c(iterations, length(R0_seq), length(proportion_presymptomatic_seq), 
+                                                             length(vaccine_efficacy_infection_scan), length(quarantine_efficacy_scan), 4))
   for (i in 1:length(R0_seq)) {
     for (j in 1:length(proportion_presymptomatic_seq)) {
       for (m in seq_along(vaccine_efficacy_infection_scan)) {
         for (k in 1:length(quarantine_efficacy_scan)) {
           
           # Parallelize over l (iterations) with foreach
-          out_vec <- foreach(
+          out_list <- foreach(
             l = seq_len(iterations),
-            .combine      = 'c',      # returns a numeric vector of length=iterations
-            .multicombine = TRUE,
             .export       = c("SC2_isolation_Tg_fraction", "ring_vax_bp_sim", "quarantine_time_closure"),
             .packages     = c("stats", "dplyr", "tidyr")  # 'stats' for rgamma, if needed
           ) %dopar% {
@@ -846,9 +872,22 @@ if (fresh_run_vaccination_heatmaps) {
                                       prob_quarantine_contact_traced = prob_quarantine_contact_traced,
                                       prob_quarantine_symptoms = prob_quarantine_symptoms,
                                       quarantine_efficacy = quarantine_efficacy_scan[k])
-            sum(!is.na(bp_out$time_infection))
+            size <- sum(!is.na(bp_out$time_infection))
+            to_n <- time_to_nth_infection(tdf = bp_out, n = n)[[1]]
+            Reff <- calculate_Reff(bp_out)
+            R0 <- calculate_R0(bp_out)
+            
+            x <- list(size = size, to_n = to_n, Reff = Reff, R0 = R0)
+            return(x)
           }
-          storage_R0_preSymp_sensitivity[i, j, m, k, ] <- out_vec
+          
+          for (l in seq_len(iterations)) {
+            tmp <- out_list[[l]]
+            storage_R0_preSymp_sensitivity[l, i, j, m, k, 1] <- tmp$size
+            storage_R0_preSymp_sensitivity[l, i, j, m, k, 2] <- tmp$to_n
+            storage_R0_preSymp_sensitivity[l, i, j, m, k, 3] <- tmp$Reff
+            storage_R0_preSymp_sensitivity[l, i, j, m, k, 4] <- tmp$R0
+          }
         }
       }
     }
@@ -856,20 +895,21 @@ if (fresh_run_vaccination_heatmaps) {
   }
   stopCluster(cl)
   
-  storage_R0_preSymp_df <- reshape2::melt(storage_R0_preSymp_sensitivity)
-  names(storage_R0_preSymp_df)[1:5] <- c("i", "j", "m", "k", "iter")
-  storage_R0_preSymp_df <- storage_R0_preSymp_df %>%
-    mutate(R0 = R0_seq[i],
-           prop_preSymp = proportion_presymptomatic_seq[j],
-           vaccine_efficacy_infection = vaccine_efficacy_infection_scan[m],
-           quarantine_efficacy = quarantine_efficacy_scan[k],
-           iteration = iter) %>%
-    rename(final_size = value) %>%
-    dplyr::select(-i, -j, -m, -k, -iter) %>%
-    mutate(contained = ifelse(final_size < (0.95 * check_final_size), 1, 0)) %>%
-    group_by(R0, prop_preSymp, vaccine_efficacy_infection, quarantine_efficacy) %>%
-    summarise(proportion_contained = sum(contained) / n(), .groups = "drop")
-  saveRDS(object = storage_R0_preSymp_df, file = "outputs/Figure1_branchingProcess_Containment/Fig1_ringVaccination_R0preSymp.rds")
+  ## Processing the simulations
+  reshaped_R0_preSymp_sensitivity <- reshape2::melt(storage_R0_preSymp_sensitivity)
+  colnames(reshaped_R0_preSymp_sensitivity) <- c("iteration", "R0", "preSymp", "vaccine_efficacy", "quarantine_efficacy", "outcome", "value")
+  reshaped_R0_preSymp_sensitivity <- reshaped_R0_preSymp_sensitivity %>%
+    mutate(iteration = as.integer(iteration),
+           input_R0 = R0_seq[R0],
+           prop_preSymp = proportion_presymptomatic_seq[preSymp],
+           vaccine_efficacy_infection = vaccine_efficacy_infection_scan[vaccine_efficacy], 
+           vaccine_efficacy_transmission = vaccine_efficacy_infection_scan[vaccine_efficacy], 
+           quarantine_efficacy = quarantine_efficacy_scan[quarantine_efficacy],
+           outcome = outcome_names[outcome]) %>% 
+    dplyr::select(iteration, input_R0, -R0, prop_preSymp, vaccine_efficacy_infection, vaccine_efficacy_transmission, 
+                  quarantine_efficacy, outcome, value, -vaccine_efficacy) %>%
+    pivot_wider(names_from = "outcome", values_from = value)
+  saveRDS(object = reshaped_R0_preSymp_sensitivity, file = "outputs/Figure1_branchingProcess_Containment/Fig1_ringVaccination_R0preSymp.rds")
   
 } else {
   storage_R0_TgRatio_df <- readRDS("outputs/Figure1_branchingProcess_Containment/Fig1_ringVaccination_R0TgRatio.rds")

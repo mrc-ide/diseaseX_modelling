@@ -126,8 +126,8 @@ ring_vax_bp_sim <- function(## Transmission Parameters
     time_vaccinated <- tdf$time_vaccinated[idx]                                            # when the index case (the "parent") was vaccinated
     time_protected <- tdf$time_protected[idx]                                              # when the index case (the "parent") was protected
     onset_time_index_case <- infection_to_onset(n = 1)                                     # generate the time from infection to symptom onset for the index case
-    tdf$time_onset[idx] <- ifelse(index_asymptomatic == 0, onset_time_index_case, NA)      # --
     index_asymptomatic <- tdf$asymptomatic[idx]                                            # whether or not the index case (the "parent") is asymptomatic (influences whether contacts get ring vaccinated or not)
+    tdf$time_onset[idx] <- ifelse(index_asymptomatic == 0, onset_time_index_case, NA)      # --
 
     ## Calculating whether or not the individual isolates/quarantines
     ### note that here I swap from using "parent" to refer to "index" and instead as the prior infector. Need to sort this at some point.
