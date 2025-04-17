@@ -565,8 +565,9 @@ make_stacked_plot_Reff <- function(df, patho, qe,
              width    = bar_width) +              # <- give bars exact width
     geom_errorbar(aes(ymin = Reff_lower, ymax = Reff_upper),
                   position = pd,
-                  width    = bar_width * 0.8) +
-    geom_hline(yintercept = 1, linetype = "dashed") +
+                  width    = bar_width * 0.8,
+                  size = 0.35) +
+    geom_hline(yintercept = 1, linetype = "dashed", size = 0.25) +
     scale_fill_manual(values = rev(palette), guide = "none") +
     scale_x_continuous(breaks = x_breaks,
                        limits = x_limits,

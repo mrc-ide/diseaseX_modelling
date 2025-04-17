@@ -605,7 +605,7 @@ time_to_n_plot <- ggplot(subset(containment_df2, quarantine_efficacy != 0.35),
                       guide = guide_legend(reverse = TRUE)) +
   labs(x = "R0", y = "Fold Increase in Time to Epidemic Threshold") +
   theme(strip.background = element_rect(fill = "white"))
-time_to_n_plot
+ggsave(plot = time_to_n_plot, filename = "figures/Figure_1_BranchingProcess/FigS1_ParamScan_timetoN.pdf", height = 8.5, width = 8)
 
 ####################################################################################################################################
 ## Vaccination-Related Sensitivity Analyses Heatmaps
@@ -1190,7 +1190,8 @@ Fig1FGH <- cowplot::plot_grid(main_contained_R0_TgRatio_plot + theme(legend.posi
                               main_contained_R0_efficacy_plot + theme(legend.position = "none"), 
                               main_contained_R0_preSymp_plot + theme(legend.position = "none"),
                               nrow = 1,
-                              labels = c("F", "G", "H"), rel_widths = c(1, 1, 1.08))
+                              labels = c("F", "G", "H"), rel_widths = c(1, 1, 1.12))
+overall_figure1 <- cowplot::plot_grid(Fig1BCDE, Fig1FGH, nrow = 2, rel_heights = c(1.25, 1))
+ggsave(file = "figures/Figure_1_BranchingProcess/Fig1_Overall.pdf", plot = overall_figure1, width = 8, height = 9.5)
 
-cowplot::plot_grid(Fig1BCDE, Fig1FGH, nrow = 2, rel_heights = c(1.2, 1))
 
