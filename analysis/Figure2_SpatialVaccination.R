@@ -63,14 +63,14 @@ iterations <- 100
 ## R0 sensitivity analysis (Figure 2B)
 #########################################################################
 R0_scan <- c(0.75, 1, 1.25, 1.5, 1.75, 2, 2.25, 2.5)
-surveillance_scan <- c(1, 10, 25, 50, 75, 100)
+surveillance_scan <- c(1, 10, 25, 50, 75)
 vaccine_efficacy_infection_scan <- c(0.35, 0.75) 
-vaccine_efficacy_transmission_scan <- c(0.35, 0.75) 
+vaccine_efficacy_transmission_scan <- c(0.35, 0.5) 
 spatial_ratio_scan <- c(50, 100)
 quarantine_efficacy_scan <- c(0, 0.35, 0.65) # from the same article as above
 length(R0_scan) * length(surveillance_scan) * length(vaccine_efficacy_infection_scan) * length(spatial_ratio_scan) * length(quarantine_efficacy_scan) * (50/ (60 * 60)) 
 
-fresh_run_R0_sensitivity_analysis <- TRUE
+fresh_run_R0_sensitivity_analysis <- FALSE
 tic()
 n <- 2000
 if (fresh_run_R0_sensitivity_analysis) {
@@ -396,6 +396,53 @@ if (fresh_run_R0_sensitivity_analysis) {
 }
 toc()
 
+## Plotting the proportion of outbreaks controlled
+SC1_no_vaccine_higher_efficacy_dummy_df <- SC1_reshaped2 %>%
+  filter(vaccine == "no_vaccine") %>%
+  mutate(vaccine_efficacy_infection = 0.75)
+SC2_no_vaccine_higher_efficacy_dummy_df <- SC2_reshaped2 %>%
+  filter(vaccine == "no_vaccine") %>%
+  mutate(vaccine_efficacy_infection = 0.75)
+
+overall_spatial_vax_df <- rbind(SC1_reshaped2, SC2_reshaped2, SC1_no_vaccine_higher_efficacy_dummy_df, SC2_no_vaccine_higher_efficacy_dummy_df) %>%
+  filter(surveillance != 100) %>%
+  filter(spatial_ratio == 50) %>%
+  mutate(contained = ifelse(epidemic_size < (0.9 * check_final_size), 1, 0)) %>%
+  group_by(input_R0, pathogen, quarantine_efficacy) %>%
+  mutate(time_to_n_relative = time_to_n / time_to_n[vaccine == "no_vaccine"]) %>%
+  group_by(input_R0, pathogen, vaccine, vaccine_efficacy_infection, quarantine_efficacy, surveillance, spatial_ratio) %>%
+  summarise(proportion_contained = sum(contained) / iterations,
+            R0_actual = mean(input_R0, na.rm = TRUE),
+            Reff_mean = median(Reff, na.rm = TRUE),
+            Reff_lower = quantile(Reff, 0.1, na.rm = TRUE),
+            Reff_upper = quantile(Reff, 0.9, na.rm = TRUE),
+            time_to_n = mean(time_to_n, na.rm = TRUE),
+            time_to_n_relative = mean(time_to_n_relative, na.rm = TRUE)) %>%
+  mutate(proportion_contained = ifelse(input_R0 == 1.00, 1, proportion_contained)) 
+
+combo_tbl  <- expand_grid(pathogen =  c("SARS-CoV-2", "SARS-CoV-1"), quarantine_efficacy = c(0, 0.65))
+combo_plot <- combo_tbl %>% 
+  mutate(p = map2(pathogen, quarantine_efficacy, ~ make_stacked_plot_Reff_spatialvax(overall_spatial_vax_df, .x, .y, 0.35, c(1, 2))))
+
+Fig1BCDE <- plot_grid(plotlist = list(combo_plot$p[[3]], combo_plot$p[[1]], combo_plot$p[[4]], combo_plot$p[[2]]),
+                      nrow = length(c(0, 0.65)), ncol  = 2,
+                      labels = c("B", "C", "D", "E"), label_size = 10)
+
+## Plotting Supplementary Figure looking at time to epidemic threshold
+overall_spatial_vax_df$vaccine_quarantine_elision <- paste0("Vaccine Efficacy = ", overall_spatial_vax_df$vaccine_efficacy_infection, "\nQuarantine Efficacy = ", overall_spatial_vax_df$quarantine_efficacy)
+time_to_n_plot <- ggplot(subset(overall_spatial_vax_df, quarantine_efficacy != 0.35),
+                         aes(x = input_R0, y = time_to_n_relative, col = interaction(vaccine, factor(surveillance)))) +
+  geom_line() +
+  geom_point() +
+  theme_bw() +
+  facet_grid(vaccine_quarantine_elision~pathogen) + 
+  scale_colour_manual(labels = c("No\nVaccine", paste0(surveillance_scan, " Hosp.")),
+                      values = palette,
+                      name = "Surveillance\nThreshold\nTrigger") +
+  labs(x = "R0", y = "Fold Increase in Time to Epidemic Threshold") +
+  theme(strip.background = element_rect(fill = "white"))
+ggsave(plot = time_to_n_plot, filename = "figures/Figure_1_BranchingProcess/FigS2_ParamScan_timetoN.pdf", height = 8.5, width = 8)
+
 #########################################################################
 ## Parameter scan sensitivity analyses (Figure 2C-E)
 #########################################################################
@@ -411,6 +458,10 @@ if (fresh_run_vaccination_heatmaps) {
   R0_seq <- R0_scan[R0_scan > 1]
   surveillance_threshold_fixed <- 10
   spatial_ratio_fixed <- 50
+  vaccine_efficacy_infection_scan <- c(0, 0.35, 0.75)
+  vaccine_efficacy_transmission_scan <- c(0, 0.35, 0.5)
+  outcome_names <- c("epidemic_size", "time_to_n", "Reff", "R0")
+  time_to_n_indicator <- 2000
   
   #######################################################################
   ## Sensitivity Analysis - R0 vs Spatial Vax Radius
@@ -446,7 +497,7 @@ if (fresh_run_vaccination_heatmaps) {
         for (l in 1:length(quarantine_efficacy_scan)) {
           
           # Setup parallel processing for the iterations
-          clusterExport(cl, list("i", "j", "k", "l", "m"))
+          clusterExport(cl, list("i", "j", "k", "l"))
           results <- parLapply(cl, 1:iterations, function(m) {
             
             # SARS-CoV-2 Pathogen Archetype
@@ -477,7 +528,7 @@ if (fresh_run_vaccination_heatmaps) {
                                            prob_quarantine_symptoms = prob_quarantine_symptoms,
                                            quarantine_efficacy = quarantine_efficacy_scan[l])
             count <- sum(!is.na(SC2_temp$time_infection))
-            time_to_n <- time_to_nth_infection(tdf = SC2_temp, n = n)[[1]]
+            time_to_n <- time_to_nth_infection(tdf = SC2_temp, n = time_to_n_indicator)[[1]]
             Reff <- calculate_Reff(SC2_temp, "spatial_vax")
             R0 <- calculate_R0(SC2_temp)
             
@@ -511,7 +562,7 @@ if (fresh_run_vaccination_heatmaps) {
     dplyr::select(iteration, input_R0, -R0, spatial_ratio, vaccine_efficacy_infection, vaccine_efficacy_transmission, 
                   quarantine_efficacy, outcome, value, -vaccine_efficacy) %>%
     pivot_wider(names_from = "outcome", values_from = value)
-  saveRDS(object = reshaped_R0_SpatialRadius_sensitivity, file = "outputs/Figure1_branchingProcess_Containment/Fig1_spatialVaccination_R0SpatialScan.rds")
+  saveRDS(object = reshaped_R0_SpatialRadius_sensitivity, file = "outputs/Figure1_branchingProcess_Containment/Fig2_spatialVaccination_R0SpatialScan.rds")
   
   #######################################################################
   ## Sensitivity Analysis - R0 vs Vaccine Efficacy
@@ -546,7 +597,7 @@ if (fresh_run_vaccination_heatmaps) {
       for (l in 1:length(quarantine_efficacy_scan)) {
         
         # Setup parallel processing for the iterations
-        clusterExport(cl, list("i", "k", "l", "m"))
+        clusterExport(cl, list("i", "k", "l"))
         results <- parLapply(cl, 1:iterations, function(m) {
           
           # SARS-CoV-2 Pathogen Archetype
@@ -577,7 +628,7 @@ if (fresh_run_vaccination_heatmaps) {
                                          prob_quarantine_symptoms = prob_quarantine_symptoms,
                                          quarantine_efficacy = quarantine_efficacy_scan[l])
           count <- sum(!is.na(SC2_temp$time_infection))
-          time_to_n <- time_to_nth_infection(tdf = SC2_temp, n = n)[[1]]
+          time_to_n <- time_to_nth_infection(tdf = SC2_temp, n = time_to_n_indicator)[[1]]
           Reff <- calculate_Reff(SC2_temp, "spatial_vax")
           R0 <- calculate_R0(SC2_temp)
           
@@ -609,7 +660,7 @@ if (fresh_run_vaccination_heatmaps) {
     dplyr::select(iteration, input_R0, -R0, vaccine_efficacy_infection, vaccine_efficacy_transmission, 
                   quarantine_efficacy, outcome, value, -vaccine_efficacy) %>%
     pivot_wider(names_from = "outcome", values_from = value)
-  saveRDS(object = reshaped_R0_VaccineEff_sensitivity, file = "outputs/Figure1_branchingProcess_Containment/Fig1_spatialVaccination_R0Efficacy.rds")
+  saveRDS(object = reshaped_R0_VaccineEff_sensitivity, file = "outputs/Figure1_branchingProcess_Containment/Fig2_spatialVaccination_R0Efficacy.rds")
   
   #######################################################################
   ## Sensitivity Analysis - R0 vs Surveillance Threshold
@@ -644,7 +695,7 @@ if (fresh_run_vaccination_heatmaps) {
         for (l in 1:length(quarantine_efficacy_scan)) {
           
           # Setup parallel processing for the iterations
-          clusterExport(cl, list("i", "j", "k", "l", "m"))
+          clusterExport(cl, list("i", "j", "k", "l"))
           results <- parLapply(cl, 1:iterations, function(m) {
             
             # SARS-CoV-2 Pathogen Archetype
@@ -675,7 +726,7 @@ if (fresh_run_vaccination_heatmaps) {
                                            prob_quarantine_symptoms = prob_quarantine_symptoms,
                                            quarantine_efficacy = quarantine_efficacy_scan[l])
             count <- sum(!is.na(SC2_temp$time_infection))
-            time_to_n <- time_to_nth_infection(tdf = SC2_temp, n = n)[[1]]
+            time_to_n <- time_to_nth_infection(tdf = SC2_temp, n = time_to_n_indicator)[[1]]
             Reff <- calculate_Reff(SC2_temp, "spatial_vax")
             R0 <- calculate_R0(SC2_temp)
             
@@ -709,16 +760,58 @@ if (fresh_run_vaccination_heatmaps) {
     dplyr::select(iteration, input_R0, -R0, surveillance_threshold, vaccine_efficacy_infection, vaccine_efficacy_transmission, 
                   quarantine_efficacy, outcome, value, -vaccine_efficacy) %>%
     pivot_wider(names_from = "outcome", values_from = value)
-  saveRDS(object = reshaped_R0_SurvThreshold_sensitivity, file = "outputs/Figure1_branchingProcess_Containment/Fig1_spatialVaccination_R0SurvThreshold.rds")
+  saveRDS(object = reshaped_R0_SurvThreshold_sensitivity, file = "outputs/Figure1_branchingProcess_Containment/Fig2_spatialVaccination_R0SurvThreshold.rds")
   
 } else {
   
-  reshaped_R0_SpatialRadius_sensitivity <- readRDS(file = "outputs/Figure1_branchingProcess_Containment/Fig1_spatialVaccination_R0SpatialScan.rds")
-  reshaped_R0_VaccineEff_sensitivity <- readRDS(file = "outputs/Figure1_branchingProcess_Containment/Fig1_spatialVaccination_R0Efficacy.rds")
-  reshaped_R0_SurvThreshold_sensitivity <- readRDS(file = "outputs/Figure1_branchingProcess_Containment/Fig1_spatialVaccination_R0SurvThreshold.rds")
+  reshaped_R0_SpatialRadius_sensitivity <- readRDS(file = "outputs/Figure1_branchingProcess_Containment/Fig2_spatialVaccination_R0SpatialScan.rds")
+  reshaped_R0_VaccineEff_sensitivity <- readRDS(file = "outputs/Figure1_branchingProcess_Containment/Fig2_spatialVaccination_R0Efficacy.rds")
+  reshaped_R0_SurvThreshold_sensitivity <- readRDS(file = "outputs/Figure1_branchingProcess_Containment/Fig2_spatialVaccination_R0SurvThreshold.rds")
   
 }
 toc()
+
+## need to re run these with the new vaccine efficacy scans (that include 0) in them
+## Creating Vaccination-Related Heatmaps
+
+### R0_SpatialRadius
+# R0_SpatialRadius_df <- reshaped_R0_SpatialRadius_sensitivity %>% 
+#   ungroup() %>% 
+#   mutate(contained  = (epidemic_size < 0.9 * check_final_size),
+#          time_to_n_2 = ifelse(is.na(time_to_n),
+#                               max(time_to_n, na.rm = TRUE),
+#                               time_to_n)) %>% 
+#   filter(input_R0 == 1.25, spatial_ratio == 100, quarantine_efficacy == 0) %>%
+#   group_by(iteration, input_R0, spatial_ratio, quarantine_efficacy) %>%  # ← add iteration
+#   mutate(
+#     time_to_n_relative   = time_to_n  / time_to_n[vaccine_efficacy_infection < 0.01],
+#     time_to_n_2_relative = time_to_n_2 / time_to_n_2[vaccine_efficacy_infection < 0.01])
+
+
+R0_SpatialRadius_df <- reshaped_R0_SpatialRadius_sensitivity %>%
+  ungroup() %>%
+  mutate(contained = ifelse(epidemic_size < (0.9 * check_final_size), 1, 0)) %>%
+  mutate(time_to_n_2 = ifelse(is.na(time_to_n), max(time_to_n, na.rm = TRUE), time_to_n)) %>%
+  group_by(iteration, input_R0, spatial_ratio, quarantine_efficacy) %>%
+  mutate(time_to_n_check = time_to_n[vaccine_efficacy_infection == 0],
+         time_to_n_relative = time_to_n / time_to_n[vaccine_efficacy_infection == 0],
+         time_to_n_2_relative = time_to_n_2 / time_to_n_2[vaccine_efficacy_infection == 0]) %>%
+  ungroup() %>%
+  group_by(input_R0, spatial_ratio, vaccine_efficacy_infection, quarantine_efficacy) %>%
+  summarise(proportion_contained = sum(contained) / iterations,
+            avg_time_to_n = mean(time_to_n, na.rm = TRUE),
+            avg_time_to_n_2 = mean(time_to_n_2, na.rm = TRUE),
+            avg_time_to_n_relative = mean(time_to_n_relative, na.rm = TRUE),
+            avg_time_to_n_2_relative = mean(time_to_n_2_relative, na.rm = TRUE),
+            avg_R0 = mean(R0),
+            avg_Reff = mean(Reff)) %>%
+  mutate(avg_time_to_n_2_relative_plot = ifelse(proportion_contained < 0.9, avg_time_to_n_2_relative, NA))
+
+
+
+
+
+
          
 ### Old plotting figures
 
