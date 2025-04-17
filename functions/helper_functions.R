@@ -548,7 +548,7 @@ make_stacked_plot_Reff <- function(df, patho, qe,
                         labels = c("No Delay", "2 Days", "1 Week", "2 Weeks", "No Vaccination"),
                         name = "Vaccine\nProtection\nDelay",
                         guide = guide_legend(reverse = TRUE)) +
-    labs(x = "R0", y = "% Outbreaks Contained") +
+    labs(x = "R0", y = "% Outbreaks\nContained") +
     theme(strip.background = element_rect(fill = "white"),
           plot.margin = margin(t = -10, r = 5, b = 0, l = 5),
           legend.position = "none")
