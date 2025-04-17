@@ -57,7 +57,7 @@ pop <- 10^10
 check_final_size <- 2500
 initial_immune <- 0
 seeding_cases <- 3
-iterations <- 50
+iterations <- 100
 
 #########################################################################
 ## R0 sensitivity analysis (Figure 2B)
