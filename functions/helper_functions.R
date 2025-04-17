@@ -518,6 +518,82 @@ make_stacked_plot_timetoN <- function(df, patho, qe,
 }
 
 
+make_stacked_plot_Reff_spatialvax <- function(df, patho, qe, vaccine_efficacy_infection_value, 
+                                              rel_heights = c(1, 3),
+                                              palette      = c("#474747", c("#E3AFCB", "#D474A4", "#B52F7B", "#9C105A", "#6B0045"))) {
+  
+  df_sub <- df %>% 
+    filter(vaccine_efficacy_infection == vaccine_efficacy_infection_value,
+           quarantine_efficacy        == qe,
+           pathogen                   == patho)
+  
+  # constant to make sure everything's aligned
+  x_breaks_raw   <- seq(0.75, 2.50, 0.25)   # tick marks
+  x_breaks <- seq(1, 2.5, 0.5)
+  bar_width  <- 0.2                    # <- same width you pass to geom_bar
+  half_bw    <- bar_width / 1.8
+  x_limits   <- range(x_breaks_raw) + c(-half_bw, half_bw)
+  pd <- position_dodge(width = bar_width)   # shared dodge
+  
+  ## bottom panel – containment
+  p_cont <- ggplot(df_sub,
+                   aes(input_R0, 100 * proportion_contained, colour = interaction(vaccine, factor(surveillance)))) +
+    geom_line() +
+    geom_point() +
+    theme_bw() +
+    scale_x_continuous(breaks = x_breaks,
+                       limits = x_limits,
+                       expand = c(0, 0)) +
+    scale_colour_manual(labels = c("No\nVaccine", paste0(surveillance_scan, " Hosp.")),
+                        values = palette,
+                        name = "Surveillance\nThreshold\nTrigger") +
+    labs(x = "R0", y = "% Outbreaks\nContained") +
+    theme(strip.background = element_rect(fill = "white"),
+          plot.margin = margin(t = -10, r = 5, b = 0, l = 5),
+          legend.position = "none")
+  
+  ## top panel – Reff
+  df_sub2 <- df_sub %>%
+    mutate(plot_bar = ifelse(proportion_contained > 0.25, 0, 1)) %>%
+    mutate(Reff_plot = ifelse(plot_bar == 1, Reff_mean, 0))
+  p_Reff <- ggplot(df_sub2,
+                   aes(input_R0, Reff_mean, fill = interaction(vaccine, factor(surveillance)))) +
+    geom_bar(stat = "identity",
+             position = pd,
+             width    = bar_width) +              # <- give bars exact width
+    geom_errorbar(aes(ymin = Reff_lower, ymax = Reff_upper),
+                  position = pd,
+                  width    = bar_width * 0.8,
+                  size = 0.35) +
+    geom_hline(yintercept = 1, linetype = "dashed", size = 0.25) +
+    scale_fill_manual(values = palette, guide = "none") +
+    scale_x_continuous(breaks = x_breaks,
+                       limits = x_limits,
+                       expand = c(0, 0)) +
+    theme_bw() +
+    labs(x = "", y = "REff") +
+    theme(strip.background = element_rect(fill = "white"),
+          axis.text.x = element_blank(),
+          axis.ticks.x = element_blank(),
+          plot.margin = margin(t = 10, r = 5, b = 0, l = 5),
+          legend.position = "none")
+  
+  ## bottom panel - time to N
+  # p_timetoN <- ggplot(df_sub2, aes(R0, time_to_n_relative, colour = scenario)) + 
+  #   geom_line() +
+  #   geom_point() +
+  #   theme_bw() +
+  #   scale_colour_manual(values = rev(palette), 
+  #                       labels = c("No Delay", "2 Days", "1 Week", "2 Weeks", "No Vaccination"),
+  #                       name = "Vaccine\nProtection\nDelay",
+  #                       guide = "none") +
+  #   labs(x = "R0", y = "Fold extra time to\nreach epidemic threshold") +
+  #   theme(strip.background = element_rect(fill = "white"))
+  
+  plot_grid(p_Reff, p_cont, nrow = 2, rel_heights = rel_heights,
+            align = "v", axis = "l")
+}
+
 make_stacked_plot_Reff <- function(df, patho, qe,
                                    rel_heights = c(1, 3),
                                    palette      = c("#CA2E6B", "#88C5EE", "#236897", "#13496E", "black")) {

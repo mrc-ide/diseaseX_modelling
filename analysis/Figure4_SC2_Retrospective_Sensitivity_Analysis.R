@@ -96,9 +96,11 @@ deaths_df <- data.frame(start_trigger = rep(NA_character_, 1),
                         iso = rep(NA_character_, 1))
                         
 ## Running All the Different Scenarios and Looping Over Country
-new_run <- TRUE
+new_run <- FALSE
 last_time <- Sys.time()
-for (i in 170:length(iso_list)) {
+initial_index <- 1:length(iso_list)
+index <- initial_index[-c()]
+for (i in 1:length(iso_list)) {
   iso <- iso_list[i]
   if (new_run) {
     
@@ -264,15 +266,26 @@ perc_red <- overall_impact_deaths %>%
 supp_figure <- ggplot(overall_impact_deaths) +
   geom_line(aes(x = date, y = cumulative_no_bpsv_deaths), colour = "#748386", linewidth = 1) +
   geom_line(aes(x = date, y = cumulative_bpsv_deaths, colour = coverage_scenario), linewidth = 1) +
-  facet_grid(. ~ start_trigger) +
-  scale_colour_manual(values = c("#A82C14", "#F2B592", "#D85F46", "#03B5AA")) +
+  facet_grid(vaccination_rate_scenario ~ start_trigger,
+             labeller = labeller(
+               start_trigger = c(
+                 `1Deaths`     = "Trigger: 1 Death",
+                 `10Deaths`   = "Trigger: 10 Deaths",
+                 `100Deaths`  = "Trigger: 100 Deaths",
+                 `1000Deaths` = "Trigger: 1,000 Deaths"),
+               vaccination_rate_scenario = c(
+                 `globalAverage_vaxRate`    = "Global Average Vax Rate",
+                 `incomeStrata_vaxRate`     = "Income Strata Specific Vax Rate"))) +
+  scale_colour_manual(values = c("#A82C14", "#F2B592", "#D85F46", "#03B5AA"),
+                      labels = c("High", "Low", "Mid", "Variable"),
+                      name = "Coverage\nScenario") +
   labs(x = "", y = "Cumulative COVID-19 Deaths") +
   theme_bw() +
   scale_y_continuous(labels = c("1M", "2M", "3M", "4M", "5M", "6M"),
                      breaks = c(1e6, 2e6, 3e6, 4e6, 5e6, 6e6))
-ggsave(filename = "figures/Figure_3_BPSV_SC2_Impact/SuppFigure_VaryingStartTrigger.pdf",
+ggsave(filename = "figures/Figure_3_BPSV_SC2_Impact/SuppFigure_VaryingStartTrigger_VaryingVaxRate.pdf",
        plot = supp_figure,
-       width = 10, height = 3)
+       width = 10, height = 6)
 
 a <- ggplot(subset(overall_impact_deaths, coverage_scenario == "mid" & start_trigger == "1000Deaths" & vaccination_rate_scenario == "incomeStrata_vaxRate")) +
   geom_line(aes(x = date, y = cumulative_no_bpsv_deaths), colour = "#748386", linewidth = 1) +
@@ -305,6 +318,7 @@ a_alt <- ggplot(subset(overall_impact_deaths, start_trigger == "1000Deaths")) +
 
 bar_plot_df <- overall_impact_deaths %>%
   filter(start_trigger == "1000Deaths") %>%
+  filter(vaccination_rate_scenario == "incomeStrata_vaxRate") %>%
   filter(date == max(date))
 bar_plot_df$coverage_scenario2 <- factor(bar_plot_df$coverage_scenario, 
                                          levels = c("low", "mid", "high", "variable"))
@@ -323,7 +337,8 @@ a_bar <- ggplot(bar_plot_df, aes(x = coverage_scenario2,
   theme_bw() +
   scale_x_discrete(labels = c("Low\nCoverage", "Moderate\nCoverage", "High\nCoverage", "Variable\nCoverage"))
 
-b_alt <- ggplot(subset(overall_impact_deaths, start_trigger == "1000Deaths" & date < as.Date("2020-11-28"))) +
+b_alt <- ggplot(subset(overall_impact_deaths, 
+                       start_trigger == "1000Deaths" & date < as.Date("2020-11-28") & vaccination_rate_scenario == "incomeStrata_vaxRate")) +
   geom_line(aes(x = date, y = total_deaths_no_bpsv_deaths), colour = "#748386") +
   geom_line(aes(x = date, y = total_deaths_bpsv_deaths, colour = coverage_scenario)) +
   labs(x = "", y = "Daily\nCOVID-19 Deaths") +

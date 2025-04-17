@@ -49,18 +49,18 @@ pop <- 10^10
 check_final_size <- 2500
 initial_immune <- 0
 seeding_cases <- 5
-iterations <- 20
+iterations <- 50
 R0_scan <- c(0.75, 1, 1.25, 1.5, 1.75, 2, 2.25, 2.5)
 
-### Setting up the cluster for parallel running
-num_cores <- detectCores() - 1
-cl <- makeCluster(num_cores)
-registerDoParallel(cl)
-
 ## R0 sensitivity analysis (Figure 1B)
-fresh_run_R0_sensitivity_analysis <- TRUE
+fresh_run_R0_sensitivity_analysis <- FALSE
 n <- 2000
 if (fresh_run_R0_sensitivity_analysis) {
+  
+  ### Setting up the cluster for parallel running
+  num_cores <- detectCores() - 1
+  cl <- makeCluster(num_cores)
+  registerDoParallel(cl)
   
   ### Final Epidemic Size - Setting up R0 scan and the storage for each of the different protection delays
   SC1_storage_nothing <- array(data = NA, dim = c(iterations, length(R0_scan), length(vaccine_efficacy_infection_scan), length(quarantine_efficacy_scan)))
@@ -563,7 +563,7 @@ containment_df <- overall_bp_df %>%
   group_by(R0, pathogen, vaccine_efficacy_infection, quarantine_efficacy) %>%
   mutate(time_to_n_relative = time_to_n / time_to_n[scenario == "no_vaccination"]) %>%
   group_by(R0, scenario, pathogen, vaccine_efficacy_infection, quarantine_efficacy) %>%
-  summarise(proportion_contained = sum(contained) / iterations,
+  summarise(proportion_contained = sum(contained) / n(),
             R0_actual = mean(R0_actual, na.rm = TRUE),
             Reff_mean = median(Reff, na.rm = TRUE),
             Reff_lower = quantile(Reff, 0.1, na.rm = TRUE),
@@ -582,17 +582,49 @@ containment_df$scenario <- factor(containment_df$scenario,
 containment_df2 <- containment_df %>%
   arrange(scenario) 
 
+df_sub <- containment_df %>% 
+  dplyr::filter(vaccine_efficacy_infection == 0.35,
+                quarantine_efficacy        == 0.65,
+                pathogen                   == "SARS-CoV-2")
+ggplot(df_sub,
+       aes(R0, 100 * proportion_contained, colour = scenario)) +
+  geom_line() +
+  geom_point() +
+  theme_bw()
+
+x_breaks_raw   <- seq(0.75, 2.50, 0.25)   # tick marks
+x_breaks <- seq(1, 2.5, 0.5)
+bar_width  <- 0.2                    # <- same width you pass to geom_bar
+half_bw    <- bar_width / 1.8
+x_limits   <- range(x_breaks_raw) + c(-half_bw, half_bw)
+pd <- position_dodge(width = bar_width)   # shared dodg
+desired_order <- c("zno_vaccination", "evacc_2weeks_protectDelay", "dvacc_1week_protectDelay", "bvacc_2days_protectDelay",  "avacc_no_delay")
+df_sub2 <- df_sub %>% 
+  mutate(scenario = factor(scenario, levels = desired_order))
+palette      = c("#CA2E6B", "#88C5EE", "#236897", "#13496E", "black")
+ggplot(df_sub2,
+       aes(R0, Reff_mean, fill = scenario)) +
+  geom_bar(stat = "identity",
+           position = pd,
+           width    = bar_width) +              # <- give bars exact width
+  geom_errorbar(aes(ymin = Reff_lower, ymax = Reff_upper),
+                position = pd,
+                width    = bar_width * 0.8,
+                size = 0.35) +
+  geom_hline(yintercept = 1, linetype = "dashed", size = 0.25) +
+  scale_fill_manual(values = rev(palette))
+
 ## Plotting Fig1B - Reff and Proportion of Outbreaks Contained
 combo_tbl  <- expand_grid(pathogen =  c("SARS-CoV-2", "SARS-CoV-1"), quarantine_efficacy = c(0, 0.65))
 combo_plot <- combo_tbl %>% 
   mutate(p = map2(pathogen, quarantine_efficacy, ~ make_stacked_plot_Reff(containment_df2, .x, .y, c(1, 2))))
 
-Fig1BCDE <- plot_grid(plotlist = list(combo_plot$p[[2]], combo_plot$p[[1]], combo_plot$p[[4]], combo_plot$p[[3]]),
-                      nrow = length(c(0, 0.65)), ncol  = length(pathogens),
+Fig1BCDE <- plot_grid(plotlist = list(combo_plot$p[[3]], combo_plot$p[[1]], combo_plot$p[[4]], combo_plot$p[[2]]),
+                      nrow = length(c(0, 0.65)), ncol  = 2,
                       labels = c("B", "C", "D", "E"), label_size = 10)
 
 ## Plotting Supplementary Figure looking at time to epidemic threshold
-containment_df2$vaccine_quarantine_elision <- paste0("Vaccine Effiacy = ", containment_df2$vaccine_efficacy_infection, "\nQuarantine Effiacy = ", containment_df2$quarantine_efficacy)
+containment_df2$vaccine_quarantine_elision <- paste0("Vaccine Efficacy = ", containment_df2$vaccine_efficacy_infection, "\nQuarantine Efficacy = ", containment_df2$quarantine_efficacy)
 time_to_n_plot <- ggplot(subset(containment_df2, quarantine_efficacy != 0.35),
        aes(x = R0, y = time_to_n_relative, col = scenario)) +
   geom_line() +
@@ -623,7 +655,7 @@ if (fresh_run_vaccination_heatmaps) {
   R0_seq <- R0_scan[R0_scan > 1]
   vaccine_protection_delay <- 7
   vaccine_efficacy_infection_scan <- c(0, 0.35, 0.75)
-  vaccine_efficacy_transmission_scan <- c(0, 0.35, 0.75)
+  vaccine_efficacy_transmission_scan <- c(0, 0.35, 0.5)
   
   #######################################################################
   ## Sensitivity Analysis - R0 vs Ratio of Tg to Protection Delay
