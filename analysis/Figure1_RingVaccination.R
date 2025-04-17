@@ -49,7 +49,7 @@ pop <- 10^10
 check_final_size <- 2500
 initial_immune <- 0
 seeding_cases <- 5
-iterations <- 5
+iterations <- 20
 R0_scan <- c(0.75, 1, 1.25, 1.5, 1.75, 2, 2.25, 2.5)
 
 ### Setting up the cluster for parallel running
@@ -560,99 +560,53 @@ if (fresh_run_R0_sensitivity_analysis) {
 ## Plotting the proportion of outbreaks controlled
 containment_df <- overall_bp_df %>%
   mutate(contained = ifelse(epidemic_size < (0.9 * check_final_size), 1, 0)) %>%
+  group_by(R0, pathogen, vaccine_efficacy_infection, quarantine_efficacy) %>%
+  mutate(time_to_n_relative = time_to_n / time_to_n[scenario == "no_vaccination"]) %>%
   group_by(R0, scenario, pathogen, vaccine_efficacy_infection, quarantine_efficacy) %>%
-  summarise(proportion_contained = sum(contained) / iterations) %>%
+  summarise(proportion_contained = sum(contained) / iterations,
+            R0_actual = mean(R0_actual, na.rm = TRUE),
+            Reff_mean = median(Reff, na.rm = TRUE),
+            Reff_lower = quantile(Reff, 0.1, na.rm = TRUE),
+            Reff_upper = quantile(Reff, 0.9, na.rm = TRUE),
+            time_to_n = mean(time_to_n, na.rm = TRUE),
+            time_to_n_relative = mean(time_to_n_relative, na.rm = TRUE)) %>%
   mutate(proportion_contained = ifelse(R0 == 1.00, 1, proportion_contained)) %>%
   mutate(scenario = ifelse(scenario == "no_vaccination", "zno_vaccination", scenario)) %>%
   mutate(scenario = ifelse(scenario == "2days_delay", "bvacc_2days_protectDelay", scenario)) %>%
   mutate(scenario = ifelse(scenario == "1week_delay", "dvacc_1week_protectDelay", scenario)) %>%
   mutate(scenario = ifelse(scenario == "2weeks_delay", "evacc_2weeks_protectDelay", scenario)) %>%
-  mutate(scenario = ifelse(scenario == "no_delay", "avacc_no_delay", scenario)) 
+  mutate(scenario = ifelse(scenario == "no_delay", "avacc_no_delay", scenario))
 containment_df$scenario <- factor(containment_df$scenario, 
                                   levels = c("avacc_no_delay", "bvacc_2days_protectDelay", "dvacc_1week_protectDelay", 
                                              "evacc_2weeks_protectDelay", "zno_vaccination"))
 containment_df2 <- containment_df %>%
   arrange(scenario) 
-containment_plot <- ggplot(subset(containment_df2, pathogen == "SARS-CoV-2"), 
-                           aes(x = R0, y = 100 * proportion_contained, col = scenario)) +
+
+## Plotting Fig1B - Reff and Proportion of Outbreaks Contained
+combo_tbl  <- expand_grid(pathogen =  c("SARS-CoV-2", "SARS-CoV-1"), quarantine_efficacy = c(0, 0.65))
+combo_plot <- combo_tbl %>% 
+  mutate(p = map2(pathogen, quarantine_efficacy, ~ make_stacked_plot_Reff(containment_df2, .x, .y, c(1, 2))))
+
+Fig1B_grid <- plot_grid(plotlist = list(combo_plot$p[[2]], combo_plot$p[[1]], combo_plot$p[[4]], combo_plot$p[[3]]),
+                        nrow = length(c(0, 0.65)), ncol  = length(pathogens),
+                        labels = c("B", "C", "D", "E"), label_size = 10)
+Fig1B_grid
+
+## Plotting Supplementary Figure looking at time to epidemic threshold
+containment_df2$vaccine_quarantine_elision <- paste0("Vaccine Effiacy = ", containment_df2$vaccine_efficacy_infection, "\nQuarantine Effiacy = ", containment_df2$quarantine_efficacy)
+time_to_n_plot <- ggplot(subset(containment_df2, quarantine_efficacy != 0.35),
+       aes(x = R0, y = time_to_n_relative, col = scenario)) +
   geom_line() +
   geom_point() +
   theme_bw() +
-  facet_grid(quarantine_efficacy~vaccine_efficacy_infection) + 
-  scale_colour_manual(values = c("#CA2E6B", "#88C5EE", "#236897", "#13496E", "black"), 
+  facet_grid(vaccine_quarantine_elision~pathogen) + 
+  scale_colour_manual(values = c("#CA2E6B", "#88C5EE", "#236897", "#13496E", "black"),
                       labels = c("No Delay", "2 Days", "1 Week", "2 Weeks", "No Vaccination"),
                       name = "Vaccine\nProtection\nDelay",
                       guide = guide_legend(reverse = TRUE)) +
-  labs(x = "R0", y = "% Outbreaks Contained") +
+  labs(x = "R0", y = "Fold Increase in Time to Epidemic Threshold") +
   theme(strip.background = element_rect(fill = "white"))
-
-## Plotting the increased control relative to no vaccine
-# containment_relative <- containment_df %>%
-#   group_by(R0, pathogen, vaccine_efficacy_infection, quarantine_efficacy) %>%
-#   mutate(extra_control_absolute = proportion_contained - proportion_contained[scenario == "zno_vaccination"]) %>%
-#   ungroup()
-# ggplot(subset(containment_relative, pathogen == "SARS-CoV-2"), 
-#        aes(x = R0, y = 100 * extra_control_absolute, col = scenario)) +
-#   geom_line() +
-#   geom_point() +
-#   theme_bw() +
-#   facet_grid(quarantine_efficacy~vaccine_efficacy_infection) + 
-#   scale_colour_manual(values = c("#CA2E6B", "#88C5EE", "#236897", "#13496E", "black"), 
-#                       labels = c("No Delay", "2 Days", "1 Week", "2 Weeks", "No Vaccination"),
-#                       name = "Vaccine\nProtection\nDelay",
-#                       guide = guide_legend(reverse = TRUE)) +
-#   labs(x = "R0", y = "% Outbreaks Contained") +
-#   theme(strip.background = element_rect(fill = "white"))
-
-## Plotting the increased time to N cases
-time_to_n_df <- overall_bp_df %>%
-  mutate(contained = ifelse(epidemic_size < (0.9 * check_final_size), 1, 0)) %>%
-  mutate(time_to_n_2 = ifelse(is.na(time_to_n), 250, time_to_n)) %>%
-  group_by(R0, scenario, pathogen, vaccine_efficacy_infection, quarantine_efficacy) %>%
-  summarise(proportion_contained = sum(contained) / iterations,
-            time_to_n = mean(time_to_n, na.rm = TRUE),
-            time_to_n_2 = mean(time_to_n_2, na.rm = TRUE)) %>%
-  mutate(proportion_contained = ifelse(R0 == 1.00, 1, proportion_contained)) %>%
-  mutate(scenario = ifelse(scenario == "no_vaccination", "zno_vaccination", scenario)) %>%
-  mutate(scenario = ifelse(scenario == "2days_delay", "bvacc_2days_protectDelay", scenario)) %>%
-  mutate(scenario = ifelse(scenario == "1week_delay", "dvacc_1week_protectDelay", scenario)) %>%
-  mutate(scenario = ifelse(scenario == "2weeks_delay", "evacc_2weeks_protectDelay", scenario)) %>%
-  mutate(scenario = ifelse(scenario == "no_delay", "avacc_no_delay", scenario)) 
-
-time_to_n_plot <- ggplot(subset(time_to_n_df, pathogen == "SARS-CoV-2"), 
-       aes(x = R0, y = time_to_n_2, col = scenario)) +
-  geom_line() +
-  geom_point() +
-  theme_bw() +
-  facet_grid(quarantine_efficacy~vaccine_efficacy_infection,
-             scales = "free_y") + 
-  lims(y = c(0, NA)) +
-  scale_colour_manual(values = c("#CA2E6B", "#88C5EE", "#236897", "#13496E", "black"), 
-                      labels = c("No Delay", "2 Days", "1 Week", "2 Weeks", "No Vaccination"),
-                      name = "Vaccine\nProtection\nDelay",
-                      guide = guide_legend(reverse = TRUE)) +
-  labs(x = "R0", y = "Time to 2000 Cases") +
-  theme(strip.background = element_rect(fill = "white"))
-
-time_to_n_df_relative <- time_to_n_df %>%
-  filter(proportion_contained < 0.25) %>%
-  group_by(R0, pathogen, quarantine_efficacy) %>%
-  mutate(relative_time_to_n_noVax = time_to_n / time_to_n[scenario == "zno_vaccination"]) %>%
-  ungroup()
-
-ggplot(time_to_n_df_relative, aes(x = R0, y = relative_time_to_n_noVax, col = scenario)) +
-  geom_line() +
-  geom_point() +
-  theme_bw() +
-  facet_wrap(quarantine_efficacy~pathogen,
-             scales = "free_y") + 
-  lims(y = c(0, NA)) +
-  scale_colour_manual(values = c("#CA2E6B", "#88C5EE", "#236897", "#13496E", "black"), 
-                      labels = c("No Delay", "2 Days", "1 Week", "2 Weeks", "No Vaccination"),
-                      name = "Vaccine\nProtection\nDelay",
-                      guide = guide_legend(reverse = TRUE)) +
-  labs(x = "R0", y = "Time to n Cases Relative to No Vaccination") +
-  theme(strip.background = element_rect(fill = "white"))
+time_to_n_plot
 
 ####################################################################################################################################
 ## Vaccination-Related Sensitivity Analyses Heatmaps
@@ -669,6 +623,8 @@ if (fresh_run_vaccination_heatmaps) {
   ## R0 sensitivity analysis for all the runs
   R0_seq <- R0_scan[R0_scan > 1]
   vaccine_protection_delay <- 7
+  vaccine_efficacy_infection_scan <- c(0, 0.35, 0.75)
+  vaccine_efficacy_transmission_scan <- c(0, 0.35, 0.75)
   
   #######################################################################
   ## Sensitivity Analysis - R0 vs Ratio of Tg to Protection Delay
@@ -749,6 +705,7 @@ if (fresh_run_vaccination_heatmaps) {
                   quarantine_efficacy, outcome, value, -vaccine_efficacy) %>%
     pivot_wider(names_from = "outcome", values_from = value)
   saveRDS(object = reshaped_R0_TgRatio_sensitivity, file = "outputs/Figure1_branchingProcess_Containment/Fig1_ringVaccination_R0TgRatio.rds")
+  storage_R0_TgRatio_df <- reshaped_R0_TgRatio_sensitivity
   
   #######################################################################
   ## Sensitivity Analysis - R0 vs Vaccine Efficacy
@@ -760,7 +717,7 @@ if (fresh_run_vaccination_heatmaps) {
   Tg_ratio_fixed <- 2.5
   generation_time <- function(n) { rgamma(n, shape = 2 * vaccine_protection_delay * Tg_ratio_fixed, rate = 2) }
   infection_to_onset <- function(n) { rgamma(n, shape = (2 * vaccine_protection_delay * Tg_ratio_fixed)/3, rate = 2) }
-  vaccine_efficacy_seq <- seq(0.3, 0.9, 0.1)
+  vaccine_efficacy_seq <- c(0, seq(0.3, 0.9, 0.1))
   storage_R0_efficacy_sensitivity <- array(data = NA, dim = c(iterations, length(R0_seq), length(vaccine_efficacy_seq), 
                                                               length(quarantine_efficacy_scan), 4))
   for (i in 1:length(R0_seq)) {
@@ -828,7 +785,8 @@ if (fresh_run_vaccination_heatmaps) {
                   quarantine_efficacy, outcome, value, -vaccine_efficacy) %>%
     pivot_wider(names_from = "outcome", values_from = value)
   saveRDS(object = reshaped_R0_efficacy_sensitivity, file = "outputs/Figure1_branchingProcess_Containment/Fig1_ringVaccination_R0Efficacy.rds")
-  
+  storage_R0_efficacy_df <- reshaped_R0_efficacy_sensitivity
+    
   #######################################################################
   ## Sensitivity Analysis - R0 vs Presymptomatic Transmission Proportion
   #######################################################################
@@ -910,6 +868,7 @@ if (fresh_run_vaccination_heatmaps) {
                   quarantine_efficacy, outcome, value, -vaccine_efficacy) %>%
     pivot_wider(names_from = "outcome", values_from = value)
   saveRDS(object = reshaped_R0_preSymp_sensitivity, file = "outputs/Figure1_branchingProcess_Containment/Fig1_ringVaccination_R0preSymp.rds")
+  storage_R0_preSymp_df <- reshaped_R0_preSymp_sensitivity
   
 } else {
   storage_R0_TgRatio_df <- readRDS("outputs/Figure1_branchingProcess_Containment/Fig1_ringVaccination_R0TgRatio.rds")
@@ -918,50 +877,331 @@ if (fresh_run_vaccination_heatmaps) {
 }
 
 ## Creating Vaccination-Related Heatmaps
-### Test with proportion asymptomatic 0.2 and see if you recapitulate results
 
 ### Tg Ratio
-R0_TgRatio_plot <- ggplot(storage_R0_TgRatio_df, aes(x = R0, y = TgRatio, fill = proportion_contained)) +
-  geom_tile(colour = "black") +
-  scale_fill_viridis_c(option = "mako", limits = c(0, 1), begin = 0.175, end = 1, name = "Proportion\nContained",
-                       direction = -1) +
-  labs(x = "R0",
-       y = "Ratio of Tg to Vaccine Protection Delay") +
-  facet_grid(. ~ quarantine_efficacy) +
-  theme(axis.text = element_text(angle = 0),
-        plot.title = element_text(hjust = 0.5, size = 20, face = "bold"),
-        legend.title = element_text(size = 12),
-        legend.text = element_text(size = 12),
-        legend.position = "none",
-        panel.border = element_rect(linetype = "solid", fill = NA, linewidth = 0.5)) +  # Add black border
-  coord_cartesian(expand = FALSE)
-ggsave(file = "figures/Figure_1_BranchingProcess/Fig1C_TgRatio_Sensitivity_Analysis.pdf", plot = R0_TgRatio_plot, width = 2.4, height = 2.4)
+R0_TgRatio_df <- storage_R0_TgRatio_df %>%
+  ungroup() %>%
+  mutate(contained = ifelse(epidemic_size < (0.9 * check_final_size), 1, 0)) %>%
+  mutate(time_to_n_2 = ifelse(is.na(time_to_n), max(time_to_n, na.rm = TRUE), time_to_n)) %>%
+  group_by(input_R0, Tg_Ratio, quarantine_efficacy) %>%
+  mutate(time_to_n_relative = time_to_n / time_to_n[vaccine_efficacy_infection == 0],
+         time_to_n_2_relative = time_to_n_2 / time_to_n_2[vaccine_efficacy_infection == 0]) %>%
+  ungroup() %>%
+  group_by(input_R0, Tg_Ratio, vaccine_efficacy_infection, quarantine_efficacy) %>%
+  summarise(proportion_contained = sum(contained) / iterations,
+            avg_time_to_n = mean(time_to_n, na.rm = TRUE),
+            avg_time_to_n_2 = mean(time_to_n_2, na.rm = TRUE),
+            avg_time_to_n_relative = mean(time_to_n_relative, na.rm = TRUE),
+            avg_time_to_n_2_relative = mean(time_to_n_2_relative, na.rm = TRUE),
+            avg_R0 = mean(R0),
+            avg_Reff = mean(Reff)) %>%
+  mutate(avg_time_to_n_2_relative_plot = ifelse(proportion_contained < 0.9, avg_time_to_n_2_relative, NA))
 
 ### Vaccine Efficacy
-R0_vaccine_efficacy_plot <- ggplot(storage_R0_efficacy_df, aes(x = R0, y = 100 * vaccine_efficacy, fill = proportion_contained)) +
+R0_efficacy_df <- storage_R0_efficacy_df %>%
+  mutate(contained = ifelse(epidemic_size < (0.9 * check_final_size), 1, 0)) %>%
+  mutate(time_to_n_2 = ifelse(is.na(time_to_n), max(time_to_n, na.rm = TRUE), time_to_n)) %>%
+  group_by(input_R0, quarantine_efficacy) %>%
+  mutate(time_to_n_relative = time_to_n / time_to_n[vaccine_efficacy_infection == 0],
+         time_to_n_2_relative = time_to_n_2 / time_to_n_2[vaccine_efficacy_infection == 0]) %>%
+  ungroup() %>%
+  group_by(input_R0, vaccine_efficacy_infection, quarantine_efficacy) %>%
+  summarise(proportion_contained = sum(contained) / iterations,
+            avg_time_to_n = mean(time_to_n, na.rm = TRUE),
+            avg_time_to_n_2 = mean(time_to_n_2, na.rm = TRUE),
+            avg_time_to_n_relative = mean(time_to_n_relative, na.rm = TRUE),
+            avg_time_to_n_2_relative = mean(time_to_n_2_relative, na.rm = TRUE),
+            avg_R0 = mean(R0),
+            avg_Reff = mean(Reff)) %>%
+  mutate(avg_time_to_n_2_relative_plot = ifelse(proportion_contained < 0.9, avg_time_to_n_2_relative, NA))
+
+### Proportion of Presymptomatic Transmission
+R0_preSymp_df <- storage_R0_preSymp_df %>%
+  mutate(contained = ifelse(epidemic_size < (0.9 * check_final_size), 1, 0)) %>%
+  mutate(time_to_n_2 = ifelse(is.na(time_to_n), max(time_to_n, na.rm = TRUE), time_to_n)) %>%
+  group_by(input_R0, prop_preSymp, quarantine_efficacy) %>%
+  mutate(time_to_n_relative = time_to_n / time_to_n[vaccine_efficacy_infection == 0],
+         time_to_n_2_relative = time_to_n_2 / time_to_n_2[vaccine_efficacy_infection == 0]) %>%
+  ungroup() %>%
+  group_by(input_R0, prop_preSymp, vaccine_efficacy_infection, quarantine_efficacy) %>%
+  summarise(proportion_contained = sum(contained) / iterations,
+            avg_time_to_n = mean(time_to_n, na.rm = TRUE),
+            avg_time_to_n_2 = mean(time_to_n_2, na.rm = TRUE),
+            avg_time_to_n_relative = mean(time_to_n_relative, na.rm = TRUE),
+            avg_time_to_n_2_relative = mean(time_to_n_2_relative, na.rm = TRUE),
+            avg_R0 = mean(R0),
+            avg_Reff = mean(Reff)) %>%
+  mutate(avg_time_to_n_2_relative_plot = ifelse(proportion_contained < 0.9, avg_time_to_n_2_relative, NA))
+
+
+############################################################
+### Parameter Scan Figure Plots
+############################################################
+
+############################################################
+### R0 / Tg Ratio Parameter Scans
+############################################################
+main_contained_R0_TgRatio_plot <- ggplot(subset(R0_TgRatio_df, quarantine_efficacy != 0.35 & vaccine_efficacy_infection == 0.35), aes(x = input_R0, y = Tg_Ratio, fill = proportion_contained)) +
   geom_tile(colour = "black") +
   scale_fill_viridis_c(option = "mako", limits = c(0, 1), begin = 0.175, end = 1, name = "Proportion\nContained",
                        direction = -1) +
-  labs(x = "R0",
-       y = "Vaccine Efficacy (%)") +
-  facet_grid(. ~ quarantine_efficacy) +
+  labs(x = "R0", y = "Ratio of Tg to Vaccine Protection Delay") +
+  facet_grid(quarantine_efficacy ~ .,
+             labeller = labeller(vaccine_efficacy_infection = c(`0` = "No Vaccine", 
+                                                                `0.35` = "Vaccine Efficacy = 35%", 
+                                                                `0.75` = "Vaccine Efficacy = 75%"),
+                                 quarantine_efficacy = c(`0`   = "No Quarantine", 
+                                                         `0.35` = "Quarantine Efficacy = 35%", 
+                                                         `0.65`   = "Quarantine Efficacy = 65%"))) +  
   theme(axis.text = element_text(angle = 0),
         plot.title = element_text(hjust = 0.5, size = 20, face = "bold"),
         legend.title = element_text(size = 12),
         legend.text = element_text(size = 12),
-        legend.position = "none",
-        panel.border = element_rect(linetype = "solid", color = "black", fill = NA, linewidth = 0.5)) +  # Add black border
+        strip.background = element_rect(fill = "white", colour = "black"),
+        panel.border = element_rect(linetype = "solid", fill = NA, linewidth = 0.5)) +  # Add black border
   coord_cartesian(expand = FALSE)
-ggsave(filename = "figures/Figure_1_BranchingProcess/Fig1D_VaccineEfficacy_Sensitivity_Analysis.pdf", plot = R0_vaccine_efficacy_plot, width = 2.4, height = 2.4)
 
-### Proportion of Presymptomatic Transmission
-R0_preSymp_plot <- ggplot(storage_R0_preSymp_df, aes(x = R0, y = 100 * prop_preSymp, fill = proportion_contained)) +
+SI_contained_R0_TgRatio_plot <- ggplot(subset(R0_TgRatio_df, quarantine_efficacy != 0.35), aes(x = input_R0, y = Tg_Ratio, fill = proportion_contained)) +
+  geom_tile(colour = "black") +
+  scale_fill_viridis_c(option = "mako", limits = c(0, 1), begin = 0.175, end = 1, name = "Proportion\nContained",
+                       direction = -1) +
+  labs(x = "R0", y = "Ratio of Tg to Vaccine Protection Delay") +
+  facet_grid(vaccine_efficacy_infection ~ quarantine_efficacy,
+             labeller = labeller(vaccine_efficacy_infection = c(`0` = "No Vaccine", 
+                                                                `0.35` = "Vaccine Efficacy = 35%", 
+                                                                `0.75` = "Vaccine Efficacy = 75%"),
+                                 quarantine_efficacy = c(`0`   = "No Quarantine", 
+                                                         `0.35` = "Quarantine Efficacy = 35%", 
+                                                         `0.65`   = "Quarantine Efficacy = 65%"))) +  
+  theme(axis.text = element_text(angle = 0),
+        plot.title = element_text(hjust = 0.5, size = 20, face = "bold"),
+        legend.title = element_text(size = 12),
+        legend.text = element_text(size = 12),
+        strip.background = element_rect(fill = "white", colour = "black"),
+        panel.border = element_rect(linetype = "solid", fill = NA, linewidth = 0.5)) +  # Add black border
+  coord_cartesian(expand = FALSE)
+ggsave(file = "figures/Figure_1_BranchingProcess/FigS1_R0TgRatio_ParameterScan_ContainedPlot.pdf", plot = SI_contained_R0_TgRatio_plot, width = 9, height = 7.2)
+
+SI_Reff_R0_TgRatio_plot <- ggplot(subset(R0_TgRatio_df, quarantine_efficacy != 0.35), aes(x = input_R0, y = Tg_Ratio, fill = 100 * (1 - (avg_Reff / avg_R0)))) +
+  geom_tile(colour = "black") +
+  scale_fill_viridis_c(option = "mako", limits = c(0, 70), begin = 0.175, end = 1,
+                       name = "% Red.\nin R0",
+                       direction = 1) +
+  labs(x = "R0",
+       y = "Ratio of Tg to Vaccine Protection Delay") +
+  facet_grid(vaccine_efficacy_infection ~ quarantine_efficacy,
+             labeller = labeller(vaccine_efficacy_infection = c(`0` = "No Vaccine", 
+                                                                `0.35` = "Vaccine Efficacy = 35%", 
+                                                                `0.75` = "Vaccine Efficacy = 75%"),
+                                 quarantine_efficacy = c(`0`   = "No Quarantine", 
+                                                         `0.35` = "Quarantine Efficacy = 35%", 
+                                                         `0.65`   = "Quarantine Efficacy = 65%"))) +  
+  theme(axis.text = element_text(angle = 0),
+        plot.title = element_text(hjust = 0.5, size = 20, face = "bold"),
+        legend.title = element_text(size = 12),
+        legend.text = element_text(size = 12),
+        strip.background = element_rect(fill = "white", colour = "black"),
+        panel.border = element_rect(linetype = "solid", fill = NA, linewidth = 0.5)) +  # Add black border
+  coord_cartesian(expand = FALSE)
+ggsave(file = "figures/Figure_1_BranchingProcess/FigS1_R0TgRatio_ParameterScan_ReffPlot.pdf", plot = SI_Reff_R0_TgRatio_plot, width = 9, height = 7.2)
+
+SI_timetoN_R0_TgRatio_plot <- ggplot(subset(R0_TgRatio_df, quarantine_efficacy != 0.35 & vaccine_efficacy_infection != 0), 
+       aes(x = input_R0, y = Tg_Ratio, fill = avg_time_to_n_relative, alpha = 100 * (1 - proportion_contained))) +
+  geom_tile(colour = "black") +
+  scale_fill_viridis_c(option = "mako", limits = c(0.9, 1.5), begin = 0.175, end = 1,
+                       breaks = c(1, 1.1, 1.2, 1.3, 1.4, 1.5),
+                       name = "Fold Increase\nin Time to Epidemic\nThreshold",
+                       direction = 1) +
+  scale_alpha(name = "% Outbreaks\nNot Contained") +
+  labs(x = "R0", y = "Ratio of Tg to Vaccine Protection Delay") +
+  facet_grid(vaccine_efficacy_infection ~ quarantine_efficacy,
+             labeller = labeller(vaccine_efficacy_infection = c(`0.35` = "Vaccine Efficacy = 35%", 
+                                                                `0.75` = "Vaccine Efficacy = 75%"),
+                                 quarantine_efficacy = c(`0`   = "No Quarantine", 
+                                                         `0.35` = "Quarantine Efficacy = 35%", 
+                                                         `0.65`   = "Quarantine Efficacy = 65%"))) +  
+  theme(axis.text = element_text(angle = 0),
+        plot.title = element_text(hjust = 0.5, size = 20, face = "bold"),
+        legend.title = element_text(size = 12),
+        legend.text = element_text(size = 12),
+        panel.background = element_blank(),
+        strip.background = element_rect(fill = "white", colour = "black"),
+        panel.border = element_rect(linetype = "solid", fill = NA, linewidth = 0.5)) +  # Add black border
+  coord_cartesian(expand = FALSE)
+ggsave(file = "figures/Figure_1_BranchingProcess/FigS1_R0TgRatio_ParameterScan_timetoNPlot.pdf", plot = SI_timetoN_R0_TgRatio_plot, width = 9, height = 4.8)
+
+
+############################################################
+### R0 / Vaccine Efficacy Parameter Scans
+############################################################
+main_contained_R0_efficacy_plot <- ggplot(subset(R0_efficacy_df, quarantine_efficacy != 0.35 & vaccine_efficacy_infection != 0.0), aes(x = input_R0, y = 100 * vaccine_efficacy_infection, fill = proportion_contained)) +
+  geom_tile(colour = "black") +
+  scale_fill_viridis_c(option = "mako", limits = c(0, 1), begin = 0.175, end = 1, name = "Proportion\nContained",
+                       direction = -1) +
+  labs(x = "R0", y = "Vaccine Efficacy (%)") +
+  facet_grid(quarantine_efficacy ~ .,
+             labeller = labeller(quarantine_efficacy = c(`0`   = "No Quarantine", 
+                                                         `0.35` = "Quarantine Efficacy = 35%", 
+                                                         `0.65`   = "Quarantine Efficacy = 65%"))) +  
+  theme(axis.text = element_text(angle = 0),
+        plot.title = element_text(hjust = 0.5, size = 20, face = "bold"),
+        legend.title = element_text(size = 12),
+        legend.text = element_text(size = 12),
+        strip.background = element_rect(fill = "white", colour = "black"),
+        panel.border = element_rect(linetype = "solid", fill = NA, linewidth = 0.5)) +  # Add black border
+  coord_cartesian(expand = FALSE)
+
+SI_Reff_R0_efficacy_plot <- ggplot(subset(R0_efficacy_df, quarantine_efficacy != 0.35 & vaccine_efficacy_infection != 0.0), aes(x = input_R0, y = 100 * vaccine_efficacy_infection, fill = 100 * (1 - (avg_Reff / avg_R0)))) +
+  geom_tile(colour = "black") +
+  scale_fill_viridis_c(option = "mako", limits = c(20, 70), begin = 0.175, end = 1,
+                       name = "% Red.\nin R0",
+                       direction = 1) +
+  labs(x = "R0", y = "Vaccine Efficacy (%)") +
+  facet_grid(. ~ quarantine_efficacy,
+             labeller = labeller(quarantine_efficacy = c(`0`   = "No Quarantine", 
+                                                         `0.35` = "Quarantine Efficacy = 35%", 
+                                                         `0.65`   = "Quarantine Efficacy = 65%"))) +  
+  theme(axis.text = element_text(angle = 0),
+        plot.title = element_text(hjust = 0.5, size = 20, face = "bold"),
+        legend.title = element_text(size = 12),
+        legend.text = element_text(size = 12),
+        strip.background = element_rect(fill = "white", colour = "black"),
+        panel.border = element_rect(linetype = "solid", fill = NA, linewidth = 0.5)) +  # Add black border
+  coord_cartesian(expand = FALSE)
+ggsave(file = "figures/Figure_1_BranchingProcess/FigS1_R0VaxEff_ParameterScan_ReffPlot.pdf", plot = SI_Reff_R0_efficacy_plot, width = 6, height = 2.4)
+
+SI_timetoN_R0_efficacy_plot <- ggplot(subset(R0_efficacy_df, quarantine_efficacy != 0.35 & vaccine_efficacy_infection != 0), 
+                                     aes(x = input_R0, y = 100 * vaccine_efficacy_infection, fill = avg_time_to_n_relative, alpha = 100 * (1 - proportion_contained))) +
+  geom_tile(colour = "black") +
+  scale_fill_viridis_c(option = "mako", limits = c(0.9, 1.5), begin = 0.175, end = 1,
+                       breaks = c(1, 1.1, 1.2, 1.3, 1.4, 1.5),
+                       name = "Fold Increase\nin Time to Epidemic\nThreshold",
+                       direction = 1) +
+  scale_alpha(name = "% Outbreaks\nNot Contained") +
+  labs(x = "R0", y = "Vaccine Efficacy (%)") +
+  facet_grid(. ~ quarantine_efficacy,
+             labeller = labeller(quarantine_efficacy = c(`0`   = "No Quarantine", 
+                                                         `0.35` = "Quarantine Efficacy = 35%", 
+                                                         `0.65`   = "Quarantine Efficacy = 65%"))) +  
+  theme(axis.text = element_text(angle = 0),
+        plot.title = element_text(hjust = 0.5, size = 20, face = "bold"),
+        legend.title = element_text(size = 12),
+        legend.text = element_text(size = 12),
+        panel.background = element_blank(),
+        strip.background = element_rect(fill = "white", colour = "black"),
+        panel.border = element_rect(linetype = "solid", fill = NA, linewidth = 0.5)) +  # Add black border
+  coord_cartesian(expand = FALSE)
+ggsave(file = "figures/Figure_1_BranchingProcess/FigS1_R0TgRatio_ParameterScan_timetoNPlot.pdf", plot = SI_timetoN_R0_efficacy_plot, width = 6, height = 2.4)
+
+#################################################################
+### R0 / Proportion Presymptomatic Transmission Parameter Scans
+#################################################################
+main_contained_R0_preSymp_plot <- ggplot(subset(R0_preSymp_df, quarantine_efficacy != 0.35 & vaccine_efficacy_infection == 0.35), aes(x = input_R0, y = 100 * prop_preSymp, fill = proportion_contained)) +
+  geom_tile(colour = "black") +
+  scale_fill_viridis_c(option = "mako", limits = c(0, 1), begin = 0.175, end = 1, name = "Proportion\nContained",
+                       direction = -1) +
+  labs(x = "R0", y = "% Presymptomatic\nTransmission") +
+  facet_grid(quarantine_efficacy ~ .,
+             labeller = labeller(vaccine_efficacy_infection = c(`0` = "No Vaccine", 
+                                                                `0.35` = "Vaccine Efficacy = 35%", 
+                                                                `0.75` = "Vaccine Efficacy = 75%"),
+                                 quarantine_efficacy = c(`0`   = "No Quarantine", 
+                                                         `0.35` = "Quarantine Efficacy = 35%", 
+                                                         `0.65`   = "Quarantine Efficacy = 65%"))) +  
+  theme(axis.text = element_text(angle = 0),
+        plot.title = element_text(hjust = 0.5, size = 20, face = "bold"),
+        legend.title = element_text(size = 12),
+        legend.text = element_text(size = 12),
+        strip.background = element_rect(fill = "white", colour = "black"),
+        panel.border = element_rect(linetype = "solid", fill = NA, linewidth = 0.5)) +  # Add black border
+  coord_cartesian(expand = FALSE)
+
+SI_contained_R0_preSymp_plot <- ggplot(subset(R0_preSymp_df, quarantine_efficacy != 0.35), aes(x = input_R0, y = 100 * prop_preSymp, fill = proportion_contained)) +
+  geom_tile(colour = "black") +
+  scale_fill_viridis_c(option = "mako", limits = c(0, 1), begin = 0.175, end = 1, name = "Proportion\nContained",
+                       direction = -1) +
+  labs(x = "R0", y = "% Presymptomatic\nTransmission") +
+  facet_grid(vaccine_efficacy_infection ~ quarantine_efficacy,
+             labeller = labeller(vaccine_efficacy_infection = c(`0` = "No Vaccine", 
+                                                                `0.35` = "Vaccine Efficacy = 35%", 
+                                                                `0.75` = "Vaccine Efficacy = 75%"),
+                                 quarantine_efficacy = c(`0`   = "No Quarantine", 
+                                                         `0.35` = "Quarantine Efficacy = 35%", 
+                                                         `0.65`   = "Quarantine Efficacy = 65%"))) +  
+  theme(axis.text = element_text(angle = 0),
+        plot.title = element_text(hjust = 0.5, size = 20, face = "bold"),
+        legend.title = element_text(size = 12),
+        legend.text = element_text(size = 12),
+        strip.background = element_rect(fill = "white", colour = "black"),
+        panel.border = element_rect(linetype = "solid", fill = NA, linewidth = 0.5)) +  # Add black border
+  coord_cartesian(expand = FALSE)
+ggsave(file = "figures/Figure_1_BranchingProcess/FigS1_R0preSymp_ParameterScan_ContainedPlot.pdf", plot = SI_contained_R0_preSymp_plot, width = 9, height = 7.2)
+
+SI_Reff_R0_preSymp_plot <- ggplot(subset(R0_preSymp_df, quarantine_efficacy != 0.35), aes(x = input_R0, y = 100 * prop_preSymp, fill = 100 * (1 - (avg_Reff / avg_R0)))) +
+  geom_tile(colour = "black") +
+  scale_fill_viridis_c(option = "mako", limits = c(0, 70), begin = 0.175, end = 1,
+                       name = "% Red.\nin R0",
+                       direction = 1) +
+  labs(x = "R0", y = "% Presymptomatic\nTransmission") +
+  facet_grid(vaccine_efficacy_infection ~ quarantine_efficacy,
+             labeller = labeller(vaccine_efficacy_infection = c(`0` = "No Vaccine", 
+                                                                `0.35` = "Vaccine Efficacy = 35%", 
+                                                                `0.75` = "Vaccine Efficacy = 75%"),
+                                 quarantine_efficacy = c(`0`   = "No Quarantine", 
+                                                         `0.35` = "Quarantine Efficacy = 35%", 
+                                                         `0.65`   = "Quarantine Efficacy = 65%"))) +  
+  theme(axis.text = element_text(angle = 0),
+        plot.title = element_text(hjust = 0.5, size = 20, face = "bold"),
+        legend.title = element_text(size = 12),
+        legend.text = element_text(size = 12),
+        strip.background = element_rect(fill = "white", colour = "black"),
+        panel.border = element_rect(linetype = "solid", fill = NA, linewidth = 0.5)) +  # Add black border
+  coord_cartesian(expand = FALSE)
+ggsave(file = "figures/Figure_1_BranchingProcess/FigS1_R0preSymp_ParameterScan_ReffPlot.pdf", plot = SI_Reff_R0_preSymp_plot, width = 9, height = 7.2)
+
+SI_timetoN_R0_preSymp_plot <- ggplot(subset(R0_preSymp_df, quarantine_efficacy != 0.35 & vaccine_efficacy_infection != 0), 
+                                     aes(x = input_R0, y = 100 * prop_preSymp, fill = avg_time_to_n_relative, alpha = 100 * (1 - proportion_contained))) +
+  geom_tile(colour = "black") +
+  scale_fill_viridis_c(option = "mako", limits = c(0.9, 1.5), begin = 0.175, end = 1,
+                       breaks = c(1, 1.1, 1.2, 1.3, 1.4, 1.5),
+                       name = "Fold Increase\nin Time to Epidemic\nThreshold",
+                       direction = 1) +
+  scale_alpha(name = "% Outbreaks\nNot Contained") +
+  labs(x = "R0", y = "% Presymptomatic\nTransmission") +
+  facet_grid(vaccine_efficacy_infection ~ quarantine_efficacy,
+             labeller = labeller(vaccine_efficacy_infection = c(`0.35` = "Vaccine Efficacy = 35%", 
+                                                                `0.75` = "Vaccine Efficacy = 75%"),
+                                 quarantine_efficacy = c(`0`   = "No Quarantine", 
+                                                         `0.35` = "Quarantine Efficacy = 35%", 
+                                                         `0.65`   = "Quarantine Efficacy = 65%"))) +  
+  theme(axis.text = element_text(angle = 0),
+        plot.title = element_text(hjust = 0.5, size = 20, face = "bold"),
+        legend.title = element_text(size = 12),
+        legend.text = element_text(size = 12),
+        panel.background = element_blank(),
+        strip.background = element_rect(fill = "white", colour = "black"),
+        panel.border = element_rect(linetype = "solid", fill = NA, linewidth = 0.5)) +  # Add black border
+  coord_cartesian(expand = FALSE)
+ggsave(file = "figures/Figure_1_BranchingProcess/FigS1_R0preSymp_ParameterScan_timetoNPlot.pdf", plot = SI_timetoN_R0_preSymp_plot, width = 9, height = 4.8)
+
+
+
+
+
+
+
+
+
+
+
+
+R0_preSymp_plot <- ggplot(R0_preSymp_df, aes(x = input_R0, y = 100 * prop_preSymp, fill = proportion_contained)) +
   geom_tile(colour = "black") +
   scale_fill_viridis_c(option = "mako", limits = c(0, 1), begin = 0.175, end = 1, name = "Proportion\nContained",
                        direction = -1) +
   labs(x = "R0",
        y = "% Presymptomatic Transmission") +
-  facet_grid(. ~ quarantine_efficacy) +
+  facet_grid(vaccine_efficacy_infection ~ quarantine_efficacy) +
   theme(axis.text = element_text(angle = 0),
         plot.title = element_text(hjust = 0.5, size = 20, face = "bold"),
         legend.title = element_text(size = 12),
@@ -977,221 +1217,104 @@ legend <- R0_TgRatio_plot + theme(legend.position = "bottom")
 ggsave(file = "figures/Figure_1_BranchingProcess/Legend_ringVaccinationHeatmap.pdf", plot = legend, width = 2.4, height = 2.4)
 
 
-## Old Code
-# for (l in 1:iterations) {
-#   
-#   ## 2 weeks delay
-#   SC1_vacc_2weeks <- ring_vax_bp_sim(offspring = "pois",
-#                                      mn_offspring = R0_scan[i],
-#                                      generation_time = SC1_generation_time,
-#                                      t0 = 0, tf = Inf, population = pop, check_final_size = check_final_size, 
-#                                      initial_immune = initial_immune,
-#                                      seeding_cases = seeding_cases, 
-#                                      seed = seeds[l],
-#                                      prop_asymptomatic = SC1_prop_asymptomatic,
-#                                      infection_to_onset = SC1_infection_to_onset,
-#                                      vaccine_start = vaccine_start, vaccine_coverage = vaccine_coverage,
-#                                      vaccine_efficacy_infection = vaccine_efficacy_infection,
-#                                      vaccine_efficacy_transmission = vaccine_efficacy_transmission,
-#                                      vaccine_logistical_delay = vaccine_logistical_delay,
-#                                      vaccine_protection_delay = 14,
-#                                      time_to_quarantine = quarantine_time,
-#                                      prob_quarantine_contact_traced = prob_quarantine_contact_traced,
-#                                      prob_quarantine_symptoms = prob_quarantine_symptoms,
-#                                      quarantine_efficacy = quarantine_efficacy_scan[k])
-#   SC1_storage_vacc_2weeks[l, i, k] <- sum(!is.na(SC1_vacc_2weeks$time_infection))
-#   SC1_storage_vacc_2weeks_nth_day[l, i, k] <- time_to_nth_infection(tdf = SC1_vacc_2weeks, n = n)[[1]]
-#   
-#   SC2_vacc_2weeks <- ring_vax_bp_sim(offspring = "pois",
-#                                      mn_offspring = R0_scan[i],
-#                                      generation_time = SC2_generation_time,
-#                                      t0 = 0, tf = Inf, pop = pop, check_final_size = check_final_size, 
-#                                      initial_immune = initial_immune,
-#                                      seeding_cases = seeding_cases, 
-#                                      seed = seeds[l],
-#                                      prop_asymptomatic = SC2_prop_asymptomatic,
-#                                      infection_to_onset = SC2_infection_to_onset,
-#                                      vaccine_start = vaccine_start, vaccine_coverage = vaccine_coverage,
-#                                      vaccine_efficacy_infection = vaccine_efficacy_infection,
-#                                      vaccine_efficacy_transmission = vaccine_efficacy_transmission,
-#                                      vaccine_logistical_delay = vaccine_logistical_delay,
-#                                      vaccine_protection_delay = 14,
-#                                      time_to_quarantine = quarantine_time,
-#                                      prob_quarantine_contact_traced = prob_quarantine_contact_traced,
-#                                      prob_quarantine_symptoms = prob_quarantine_symptoms,
-#                                      quarantine_efficacy = quarantine_efficacy_scan[k])
-#   SC2_storage_vacc_2weeks[l, i, k] <- sum(!is.na(SC2_vacc_2weeks$time_infection))
-#   SC2_storage_vacc_2weeks_nth_day[l, i, k] <- time_to_nth_infection(tdf = SC2_vacc_2weeks, n = n)[[1]]
-#   
-#   ## 1 week delay
-#   SC1_vacc_1week <- ring_vax_bp_sim(offspring = "pois",
-#                                     mn_offspring = R0_scan[i],
-#                                     generation_time = SC1_generation_time,
-#                                     t0 = 0, tf = Inf, pop = pop, check_final_size = check_final_size, 
-#                                     initial_immune = initial_immune,
-#                                     seeding_cases = seeding_cases, 
-#                                     seed = seeds[l],
-#                                     prop_asymptomatic = SC1_prop_asymptomatic,
-#                                     infection_to_onset = SC1_infection_to_onset,
-#                                     vaccine_start = vaccine_start, vaccine_coverage = vaccine_coverage,
-#                                     vaccine_efficacy_infection = vaccine_efficacy_infection,
-#                                     vaccine_efficacy_transmission = vaccine_efficacy_transmission,
-#                                     vaccine_logistical_delay = vaccine_logistical_delay,
-#                                     vaccine_protection_delay = 7,
-#                                     time_to_quarantine = quarantine_time,
-#                                     prob_quarantine_contact_traced = prob_quarantine_contact_traced,
-#                                     prob_quarantine_symptoms = prob_quarantine_symptoms,
-#                                     quarantine_efficacy = quarantine_efficacy_scan[k])
-#   SC1_storage_vacc_1week[l, i, k] <- sum(!is.na(SC1_vacc_1week$time_infection))
-#   SC1_storage_vacc_1week_nth_day[l, i, k] <- time_to_nth_infection(tdf = SC1_vacc_1week, n = n)[[1]]
-#   
-#   SC2_vacc_1week <- ring_vax_bp_sim(offspring = "pois",
-#                                     mn_offspring = R0_scan[i],
-#                                     generation_time = SC2_generation_time,
-#                                     t0 = 0, tf = Inf, pop = pop, check_final_size = check_final_size, 
-#                                     initial_immune = initial_immune,
-#                                     seeding_cases = seeding_cases, 
-#                                     seed = seeds[l],
-#                                     prop_asymptomatic = SC2_prop_asymptomatic,
-#                                     infection_to_onset = SC2_infection_to_onset,
-#                                     vaccine_start = vaccine_start, vaccine_coverage = vaccine_coverage,
-#                                     vaccine_efficacy_infection = vaccine_efficacy_infection,
-#                                     vaccine_efficacy_transmission = vaccine_efficacy_transmission,
-#                                     vaccine_logistical_delay = vaccine_logistical_delay,
-#                                     vaccine_protection_delay = 7,
-#                                     time_to_quarantine = quarantine_time,
-#                                     prob_quarantine_contact_traced = prob_quarantine_contact_traced,
-#                                     prob_quarantine_symptoms = prob_quarantine_symptoms,
-#                                     quarantine_efficacy = quarantine_efficacy_scan[k])
-#   SC2_storage_vacc_1week[l, i, k] <- sum(!is.na(SC2_vacc_1week$time_infection))
-#   SC2_storage_vacc_1week_nth_day[l, i, k] <- time_to_nth_infection(tdf = SC2_vacc_1week, n = n)[[1]]
-#   
-#   ## 2 days delay
-#   SC1_vacc_2days <- ring_vax_bp_sim(offspring = "pois",
-#                                     mn_offspring = R0_scan[i],
-#                                     generation_time = SC1_generation_time,
-#                                     t0 = 0, tf = Inf, pop = pop, check_final_size = check_final_size, 
-#                                     initial_immune = initial_immune,
-#                                     seeding_cases = seeding_cases, 
-#                                     seed = seeds[l],
-#                                     prop_asymptomatic = SC1_prop_asymptomatic,
-#                                     infection_to_onset = SC1_infection_to_onset,
-#                                     vaccine_start = vaccine_start, vaccine_coverage = vaccine_coverage,
-#                                     vaccine_efficacy_infection = vaccine_efficacy_infection,
-#                                     vaccine_efficacy_transmission = vaccine_efficacy_transmission,
-#                                     vaccine_logistical_delay = vaccine_logistical_delay,
-#                                     vaccine_protection_delay = 2,
-#                                     time_to_quarantine = quarantine_time,
-#                                     prob_quarantine_contact_traced = prob_quarantine_contact_traced,
-#                                     prob_quarantine_symptoms = prob_quarantine_symptoms,
-#                                     quarantine_efficacy = quarantine_efficacy_scan[k])
-#   SC1_storage_vacc_2days[l, i, k] <- sum(!is.na(SC1_vacc_2days$time_infection))
-#   SC1_storage_vacc_2days_nth_day[l, i, k] <- time_to_nth_infection(tdf = SC1_vacc_2days, n = n)[[1]]
-#   
-#   SC2_vacc_2days <- ring_vax_bp_sim(offspring = "pois",
-#                                     mn_offspring = R0_scan[i],
-#                                     generation_time = SC2_generation_time,
-#                                     t0 = 0, tf = Inf, pop = pop, check_final_size = check_final_size, 
-#                                     initial_immune = initial_immune,
-#                                     seeding_cases = seeding_cases, 
-#                                     seed = seeds[l],
-#                                     prop_asymptomatic = SC2_prop_asymptomatic,
-#                                     infection_to_onset = SC2_infection_to_onset,
-#                                     vaccine_start = vaccine_start, vaccine_coverage = vaccine_coverage,
-#                                     vaccine_efficacy_infection = vaccine_efficacy_infection,
-#                                     vaccine_efficacy_transmission = vaccine_efficacy_transmission,
-#                                     vaccine_logistical_delay = vaccine_logistical_delay,
-#                                     vaccine_protection_delay = 2,
-#                                     time_to_quarantine = quarantine_time,
-#                                     prob_quarantine_contact_traced = prob_quarantine_contact_traced,
-#                                     prob_quarantine_symptoms = prob_quarantine_symptoms,
-#                                     quarantine_efficacy = quarantine_efficacy_scan[k])
-#   SC2_storage_vacc_2days[l, i, k] <- sum(!is.na(SC2_vacc_2days$time_infection))
-#   SC2_storage_vacc_2days_nth_day[l, i, k] <- time_to_nth_infection(tdf = SC2_vacc_2days, n = n)[[1]]
-#   
-#   ## Instant
-#   SC1_vacc_instant <- ring_vax_bp_sim(offspring = "pois",
-#                                       mn_offspring = R0_scan[i],
-#                                       generation_time = SC1_generation_time,
-#                                       t0 = 0, tf = Inf, pop = pop, check_final_size = check_final_size, 
-#                                       initial_immune = initial_immune,
-#                                       seeding_cases = seeding_cases, 
-#                                       seed = seeds[l],
-#                                       prop_asymptomatic = SC1_prop_asymptomatic,
-#                                       infection_to_onset = SC1_infection_to_onset,
-#                                       vaccine_start = vaccine_start, vaccine_coverage = vaccine_coverage,
-#                                       vaccine_efficacy_infection = vaccine_efficacy_infection,
-#                                       vaccine_efficacy_transmission = vaccine_efficacy_transmission,
-#                                       vaccine_logistical_delay = vaccine_logistical_delay,
-#                                       vaccine_protection_delay = 0.01,
-#                                       time_to_quarantine = quarantine_time,
-#                                       prob_quarantine_contact_traced = prob_quarantine_contact_traced,
-#                                       prob_quarantine_symptoms = prob_quarantine_symptoms,
-#                                       quarantine_efficacy = quarantine_efficacy_scan[k])
-#   SC1_storage_vacc_instant[l, i, k] <- sum(!is.na(SC1_vacc_instant$time_infection))
-#   SC1_storage_vacc_instant_nth_day[l, i, k] <- time_to_nth_infection(tdf = SC1_vacc_instant, n = n)[[1]]
-#   
-#   SC2_vacc_instant <- ring_vax_bp_sim(offspring = "pois",
-#                                       mn_offspring = R0_scan[i],
-#                                       generation_time = SC2_generation_time,
-#                                       t0 = 0, tf = Inf, pop = pop, check_final_size = check_final_size, 
-#                                       initial_immune = initial_immune,
-#                                       seeding_cases = seeding_cases, 
-#                                       seed = seeds[l],
-#                                       prop_asymptomatic = SC2_prop_asymptomatic,
-#                                       infection_to_onset = SC2_infection_to_onset,
-#                                       vaccine_start = vaccine_start, vaccine_coverage = vaccine_coverage,
-#                                       vaccine_efficacy_infection = vaccine_efficacy_infection,
-#                                       vaccine_efficacy_transmission = vaccine_efficacy_transmission,
-#                                       vaccine_logistical_delay = vaccine_logistical_delay,
-#                                       vaccine_protection_delay = 0.01,
-#                                       time_to_quarantine = quarantine_time,
-#                                       prob_quarantine_contact_traced = prob_quarantine_contact_traced,
-#                                       prob_quarantine_symptoms = prob_quarantine_symptoms,
-#                                       quarantine_efficacy = quarantine_efficacy_scan[k])
-#   SC2_storage_vacc_instant[l, i, k] <- sum(!is.na(SC2_vacc_instant$time_infection))
-#   SC2_storage_vacc_instant_nth_day[l, i, k] <- time_to_nth_infection(tdf = SC2_vacc_instant, n = n)[[1]]
-#   
-#   ## Nothing
-#   SC1_no_vacc <- ring_vax_bp_sim(offspring = "pois",
-#                                  mn_offspring = R0_scan[i],
-#                                  generation_time = SC1_generation_time,
-#                                  t0 = 0, tf = Inf, pop = pop, check_final_size = check_final_size, initial_immune = initial_immune,
-#                                  seeding_cases = seeding_cases, 
-#                                  seed = seeds[l],
-#                                  prop_asymptomatic = SC1_prop_asymptomatic,
-#                                  infection_to_onset = SC1_infection_to_onset,
-#                                  vaccine_start = 1000, vaccine_coverage = vaccine_coverage,
-#                                  vaccine_efficacy_infection = vaccine_efficacy_infection,
-#                                  vaccine_efficacy_transmission = vaccine_efficacy_transmission,
-#                                  vaccine_logistical_delay = vaccine_logistical_delay,
-#                                  vaccine_protection_delay = 100,
-#                                  time_to_quarantine = quarantine_time,
-#                                  prob_quarantine_contact_traced = prob_quarantine_contact_traced,
-#                                  prob_quarantine_symptoms = prob_quarantine_symptoms,
-#                                  quarantine_efficacy = quarantine_efficacy_scan[k])
-#   SC1_storage_nothing[l, i, k] <- sum(!is.na(SC1_no_vacc$time_infection))
-#   SC1_storage_nothing_nth_day[l, i, k] <- time_to_nth_infection(tdf = SC1_no_vacc, n = n)[[1]]
-#   
-#   SC2_no_vacc <- ring_vax_bp_sim(offspring = "pois",
-#                                  mn_offspring = R0_scan[i],
-#                                  generation_time = SC2_generation_time,
-#                                  t0 = 0, tf = Inf, pop = pop, check_final_size = check_final_size, initial_immune = initial_immune,
-#                                  seeding_cases = seeding_cases, 
-#                                  seed = seeds[l],
-#                                  prop_asymptomatic = SC2_prop_asymptomatic,
-#                                  infection_to_onset = SC2_infection_to_onset,
-#                                  vaccine_start = 1000, vaccine_coverage = vaccine_coverage,
-#                                  vaccine_efficacy_infection = vaccine_efficacy_infection,
-#                                  vaccine_efficacy_transmission = vaccine_efficacy_transmission,
-#                                  vaccine_logistical_delay = vaccine_logistical_delay,
-#                                  vaccine_protection_delay = 100,
-#                                  time_to_quarantine = quarantine_time,
-#                                  prob_quarantine_contact_traced = prob_quarantine_contact_traced,
-#                                  prob_quarantine_symptoms = prob_quarantine_symptoms,
-#                                  quarantine_efficacy = quarantine_efficacy_scan[k])
-#   SC2_storage_nothing[l, i, k] <- sum(!is.na(SC2_no_vacc$time_infection))
-#   SC2_storage_nothing_nth_day[l, i, k] <- time_to_nth_infection(tdf = SC2_no_vacc, n = n)[[1]]
-#   
-#   # print(paste0("l = ", l))
-# }
+## Plotting the increased control relative to no vaccine
+# containment_plot <- ggplot(subset(containment_df2, vaccine_efficacy_infection == 0.35 & quarantine_efficacy != 0.35), 
+#                            aes(x = R0, y = 100 * proportion_contained, col = scenario)) +
+#   geom_line() +
+#   geom_point() +
+#   theme_bw() +
+#   facet_grid(quarantine_efficacy~pathogen,
+#              labeller = labeller(quarantine_efficacy = c(`0`   = "No Quarantine", 
+#                                                          `0.35` = "Quarantine Efficacy = 35%", 
+#                                                          `0.65`   = "Quarantine Efficacy = 65%"))) +  
+#   scale_colour_manual(values = c("#CA2E6B", "#88C5EE", "#236897", "#13496E", "black"), 
+#                       labels = c("No Delay", "2 Days", "1 Week", "2 Weeks", "No Vaccination"),
+#                       name = "Vaccine\nProtection\nDelay",
+#                       guide = guide_legend(reverse = TRUE)) +
+#   labs(x = "R0", y = "% Outbreaks Contained") +
+#   theme(strip.background = element_rect(fill = "white"))
+# 
+# time_to_n_plot <- ggplot(subset(containment_df2, vaccine_efficacy_infection == 0.35 & quarantine_efficacy != 0.35), 
+#        aes(x = R0, y = time_to_n, col = scenario)) +
+#   geom_line() +
+#   geom_point() +
+#   theme_bw() +
+#   facet_grid(quarantine_efficacy~pathogen,
+#              labeller = labeller(quarantine_efficacy = c(`0`   = "No Quarantine", 
+#                                                          `0.35` = "Quarantine Efficacy = 35%", 
+#                                                          `0.65`   = "Quarantine Efficacy = 65%"))) +  
+#   scale_colour_manual(values = c("#CA2E6B", "#88C5EE", "#236897", "#13496E", "black"), 
+#                       labels = c("No Delay", "2 Days", "1 Week", "2 Weeks", "No Vaccination"),
+#                       name = "Vaccine\nProtection\nDelay",
+#                       guide = guide_legend(reverse = TRUE)) +
+#   labs(x = "R0", y = "Time to 2000 Infections") +
+#   theme(strip.background = element_rect(fill = "white"))
+
+
+# containment_relative <- containment_df %>%
+#   group_by(R0, pathogen, vaccine_efficacy_infection, quarantine_efficacy) %>%
+#   mutate(extra_control_absolute = proportion_contained - proportion_contained[scenario == "zno_vaccination"]) %>%
+#   ungroup()
+# ggplot(subset(containment_relative, pathogen == "SARS-CoV-2"), 
+#        aes(x = R0, y = 100 * extra_control_absolute, col = scenario)) +
+#   geom_line() +
+#   geom_point() +
+#   theme_bw() +
+#   facet_grid(quarantine_efficacy~vaccine_efficacy_infection) + 
+#   scale_colour_manual(values = c("#CA2E6B", "#88C5EE", "#236897", "#13496E", "black"), 
+#                       labels = c("No Delay", "2 Days", "1 Week", "2 Weeks", "No Vaccination"),
+#                       name = "Vaccine\nProtection\nDelay",
+#                       guide = guide_legend(reverse = TRUE)) +
+#   labs(x = "R0", y = "% Outbreaks Contained") +
+#   theme(strip.background = element_rect(fill = "white"))
+
+## Plotting the increased time to N cases
+# time_to_n_df <- overall_bp_df %>%
+#   mutate(contained = ifelse(epidemic_size < (0.9 * check_final_size), 1, 0)) %>%
+#   mutate(time_to_n_2 = ifelse(is.na(time_to_n), 250, time_to_n)) %>%
+#   group_by(R0, scenario, pathogen, vaccine_efficacy_infection, quarantine_efficacy) %>%
+#   summarise(proportion_contained = sum(contained) / iterations,
+#             time_to_n = mean(time_to_n, na.rm = TRUE),
+#             time_to_n_2 = mean(time_to_n_2, na.rm = TRUE)) %>%
+#   mutate(proportion_contained = ifelse(R0 == 1.00, 1, proportion_contained)) %>%
+#   mutate(scenario = ifelse(scenario == "no_vaccination", "zno_vaccination", scenario)) %>%
+#   mutate(scenario = ifelse(scenario == "2days_delay", "bvacc_2days_protectDelay", scenario)) %>%
+#   mutate(scenario = ifelse(scenario == "1week_delay", "dvacc_1week_protectDelay", scenario)) %>%
+#   mutate(scenario = ifelse(scenario == "2weeks_delay", "evacc_2weeks_protectDelay", scenario)) %>%
+#   mutate(scenario = ifelse(scenario == "no_delay", "avacc_no_delay", scenario)) 
+# 
+# time_to_n_plot <- ggplot(subset(time_to_n_df, pathogen == "SARS-CoV-2"), 
+#        aes(x = R0, y = time_to_n, col = scenario)) +
+#   geom_line() +
+#   geom_point() +
+#   theme_bw() +
+#   facet_grid(quarantine_efficacy~vaccine_efficacy_infection,
+#              scales = "free_y") + 
+#   lims(y = c(0, NA)) +
+#   scale_colour_manual(values = c("#CA2E6B", "#88C5EE", "#236897", "#13496E", "black"), 
+#                       labels = c("No Delay", "2 Days", "1 Week", "2 Weeks", "No Vaccination"),
+#                       name = "Vaccine\nProtection\nDelay",
+#                       guide = guide_legend(reverse = TRUE)) +
+#   labs(x = "R0", y = "Time to 2000 Cases") +
+#   theme(strip.background = element_rect(fill = "white"))
+# 
+# time_to_n_df_relative <- time_to_n_df %>%
+#   filter(proportion_contained < 0.25) %>%
+#   group_by(R0, pathogen, vaccine_efficacy_infection, quarantine_efficacy) %>%
+#   mutate(relative_time_to_n_noVax = time_to_n / time_to_n[scenario == "zno_vaccination"]) %>%
+#   ungroup()
+# 
+# ggplot(subset(time_to_n_df_relative, pathogen == "SARS-CoV-2"), 
+#        aes(x = R0, y = relative_time_to_n_noVax, col = scenario)) +
+#   geom_line() +
+#   geom_point() +
+#   theme_bw() +
+#   facet_grid(quarantine_efficacy~vaccine_efficacy_infection,
+#              scales = "free_y") + 
+#   lims(y = c(0, NA)) +
+#   scale_colour_manual(values = c("#CA2E6B", "#88C5EE", "#236897", "#13496E", "black"), 
+#                       labels = c("No Delay", "2 Days", "1 Week", "2 Weeks", "No Vaccination"),
+#                       name = "Vaccine\nProtection\nDelay",
+#                       guide = guide_legend(reverse = TRUE)) +
+#   labs(x = "R0", y = "Time to n Cases Relative to No Vaccination") +
+#   theme(strip.background = element_rect(fill = "white"))

@@ -476,3 +476,121 @@ calculate_Reff <- function(tdf, type = "not_spatial_vax") {
   }
   return(Reff)
 }
+
+make_stacked_plot_timetoN <- function(df, patho, qe,
+                                      rel_heights = c(1, 3),
+                                      palette      = c("#CA2E6B", "#88C5EE", "#236897", "#13496E", "black")) {
+  
+  df_sub <- df %>% 
+    filter(vaccine_efficacy_infection == 0.35,
+           quarantine_efficacy        == qe,
+           pathogen                   == patho)
+  
+  ## bottom panel – containment
+  p_cont <- ggplot(df_sub,
+                   aes(R0, 100 * proportion_contained, colour = scenario)) +
+    geom_line() +
+    geom_point() +
+    theme_bw() +
+    scale_colour_manual(values = palette, 
+                        labels = c("No Delay", "2 Days", "1 Week", "2 Weeks", "No Vaccination"),
+                        name = "Vaccine\nProtection\nDelay",
+                        guide = guide_legend(reverse = TRUE)) +
+    labs(x = "R0", y = "% Outbreaks Contained") +
+    theme(strip.background = element_rect(fill = "white"),
+          plot.margin = margin(t = -10, r = 5, b = 0, l = 5),
+          legend.position = "none")
+  
+  ## top panel – time to N
+  p_time <- ggplot(df_sub,
+                   aes(R0, time_to_n, colour = scenario)) +
+    geom_line() + geom_point() +  theme_bw() +
+    scale_colour_manual(values = palette,
+                        guide  = "none") +      # legend only once
+    labs(x = "", y = "") +
+    theme(strip.background = element_rect(fill = "white"),
+          axis.text.x = element_blank(),
+          axis.ticks.x = element_blank(),
+          plot.margin = margin(t = 10, r = 5, b = 0, l = 5),
+          legend.position = "none")
+  
+  plot_grid(p_time, p_cont, nrow = 2, rel_heights = rel_heights)
+}
+
+
+make_stacked_plot_Reff <- function(df, patho, qe,
+                                   rel_heights = c(1, 3),
+                                   palette      = c("#CA2E6B", "#88C5EE", "#236897", "#13496E", "black")) {
+  
+  df_sub <- df %>% 
+    filter(vaccine_efficacy_infection == 0.35,
+           quarantine_efficacy        == qe,
+           pathogen                   == patho)
+  
+  # constant to make sure everything's aligned
+  x_breaks_raw   <- seq(0.75, 2.50, 0.25)   # tick marks
+  x_breaks <- seq(1, 2.5, 0.5)
+  bar_width  <- 0.2                    # <- same width you pass to geom_bar
+  half_bw    <- bar_width / 1.8
+  x_limits   <- range(x_breaks_raw) + c(-half_bw, half_bw)
+  pd <- position_dodge(width = bar_width)   # shared dodge
+  
+  ## bottom panel – containment
+  p_cont <- ggplot(df_sub,
+                   aes(R0, 100 * proportion_contained, colour = scenario)) +
+    geom_line() +
+    geom_point() +
+    theme_bw() +
+    scale_x_continuous(breaks = x_breaks,
+                       limits = x_limits,
+                       expand = c(0, 0)) +
+    scale_colour_manual(values = palette, 
+                        labels = c("No Delay", "2 Days", "1 Week", "2 Weeks", "No Vaccination"),
+                        name = "Vaccine\nProtection\nDelay",
+                        guide = guide_legend(reverse = TRUE)) +
+    labs(x = "R0", y = "% Outbreaks Contained") +
+    theme(strip.background = element_rect(fill = "white"),
+          plot.margin = margin(t = -10, r = 5, b = 0, l = 5),
+          legend.position = "none")
+  
+  ## top panel – Reff
+  desired_order <- c("zno_vaccination", "evacc_2weeks_protectDelay", "dvacc_1week_protectDelay", "bvacc_2days_protectDelay",  "avacc_no_delay")
+  df_sub2 <- df_sub %>% 
+    mutate(scenario = factor(scenario, levels = desired_order))
+  
+  p_Reff <- ggplot(df_sub2,
+                   aes(R0, Reff_mean, fill = scenario)) +
+    geom_bar(stat = "identity",
+             position = pd,
+             width    = bar_width) +              # <- give bars exact width
+    geom_errorbar(aes(ymin = Reff_lower, ymax = Reff_upper),
+                  position = pd,
+                  width    = bar_width * 0.8) +
+    geom_hline(yintercept = 1, linetype = "dashed") +
+    scale_fill_manual(values = rev(palette), guide = "none") +
+    scale_x_continuous(breaks = x_breaks,
+                       limits = x_limits,
+                       expand = c(0, 0)) +
+    theme_bw() +
+    labs(x = "", y = "REff") +
+    theme(strip.background = element_rect(fill = "white"),
+          axis.text.x = element_blank(),
+          axis.ticks.x = element_blank(),
+          plot.margin = margin(t = 10, r = 5, b = 0, l = 5),
+          legend.position = "none")
+  
+  ## bottom panel - time to N
+  # p_timetoN <- ggplot(df_sub2, aes(R0, time_to_n_relative, colour = scenario)) + 
+  #   geom_line() +
+  #   geom_point() +
+  #   theme_bw() +
+  #   scale_colour_manual(values = rev(palette), 
+  #                       labels = c("No Delay", "2 Days", "1 Week", "2 Weeks", "No Vaccination"),
+  #                       name = "Vaccine\nProtection\nDelay",
+  #                       guide = "none") +
+  #   labs(x = "R0", y = "Fold extra time to\nreach epidemic threshold") +
+  #   theme(strip.background = element_rect(fill = "white"))
+  
+  plot_grid(p_Reff, p_cont, nrow = 2, rel_heights = rel_heights,
+            align = "v", axis = "l")
+}
