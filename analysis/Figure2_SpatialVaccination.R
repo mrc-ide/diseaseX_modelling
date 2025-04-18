@@ -55,9 +55,10 @@ vaccine_protection_delay <- 7
 ### Other parameters
 pop <- 10^10
 check_final_size <- 2500
+time_to_n_indicator <- check_final_size * 0.9
 initial_immune <- 0
 seeding_cases <- 3
-iterations <- 100
+iterations <- 20
 
 #########################################################################
 ## R0 sensitivity analysis (Figure 2B)
@@ -82,7 +83,7 @@ if (fresh_run_R0_sensitivity_analysis) {
   seeds <- runif(n = iterations, min = 1, max = 10^9)
   clusterExport(cl, list("mu", "R0_scan", "SC1_generation_time", "spatial_kernel", "calculate_Reff", "calculate_R0",
                          "check_final_size", "seeding_cases", "SC1_prop_asymptomatic", "time_to_nth_infection",
-                         "SC1_prob_hosp", "SC1_hospitalisation_delay", "surveillance_scan", "n",
+                         "SC1_prob_hosp", "SC1_hospitalisation_delay", "surveillance_scan", "time_to_n_indicator",
                          "SC1_infection_to_onset", "SC2_infection_to_onset", "implement_quarantine",
                          "vaccine_coverage", "vaccine_efficacy_infection_scan", "vaccine_efficacy_transmission_scan",
                          "vaccine_efficacy_disease", "vaccine_logistical_delay", "vaccine_protection_delay",
@@ -139,7 +140,7 @@ if (fresh_run_R0_sensitivity_analysis) {
                                              prob_quarantine_symptoms = prob_quarantine_symptoms,
                                              quarantine_efficacy = quarantine_efficacy_scan[m])
               SC1_count <- sum(!is.na(SC1_temp$time_infection))
-              SC1_time_to_n <- time_to_nth_infection(tdf = SC1_temp, n = n)[[1]]
+              SC1_time_to_n <- time_to_nth_infection(tdf = SC1_temp, n = time_to_n_indicator)[[1]]
               SC1_Reff <- calculate_Reff(SC1_temp, "spatial_vax")
               SC1_R0 <- calculate_R0(SC1_temp)
               
@@ -171,7 +172,7 @@ if (fresh_run_R0_sensitivity_analysis) {
                                              prob_quarantine_symptoms = prob_quarantine_symptoms,
                                              quarantine_efficacy = quarantine_efficacy_scan[m])
               SC2_count <- sum(!is.na(SC2_temp$time_infection))
-              SC2_time_to_n <- time_to_nth_infection(tdf = SC2_temp, n = n)[[1]]
+              SC2_time_to_n <- time_to_nth_infection(tdf = SC2_temp, n = time_to_n_indicator)[[1]]
               SC2_Reff <- calculate_Reff(SC2_temp, "spatial_vax")
               SC2_R0 <- calculate_R0(SC2_temp)
               
@@ -244,7 +245,7 @@ if (fresh_run_R0_sensitivity_analysis) {
                                        prob_quarantine_symptoms = prob_quarantine_symptoms,
                                        quarantine_efficacy = quarantine_efficacy_scan[j])
         SC1_count <- sum(!is.na(SC1_temp$time_infection))
-        SC1_time_to_n <- time_to_nth_infection(tdf = SC1_temp, n = n)[[1]]
+        SC1_time_to_n <- time_to_nth_infection(tdf = SC1_temp, n = time_to_n_indicator)[[1]]
         SC1_Reff <- calculate_Reff(SC1_temp, "spatial_vax")
         SC1_R0 <- calculate_R0(SC1_temp)
         
@@ -275,7 +276,7 @@ if (fresh_run_R0_sensitivity_analysis) {
                                        prob_quarantine_symptoms = prob_quarantine_symptoms,
                                        quarantine_efficacy = quarantine_efficacy_scan[j])
         SC2_count <- sum(!is.na(SC2_temp$time_infection))
-        SC2_time_to_n <- time_to_nth_infection(tdf = SC2_temp, n = n)[[1]]
+        SC2_time_to_n <- time_to_nth_infection(tdf = SC2_temp, n = time_to_n_indicator)[[1]]
         SC2_Reff <- calculate_Reff(SC2_temp, "spatial_vax")
         SC2_R0 <- calculate_R0(SC2_temp)
         
@@ -430,6 +431,7 @@ Fig1BCDE <- plot_grid(plotlist = list(combo_plot$p[[3]], combo_plot$p[[1]], comb
 
 ## Plotting Supplementary Figure looking at time to epidemic threshold
 overall_spatial_vax_df$vaccine_quarantine_elision <- paste0("Vaccine Efficacy = ", overall_spatial_vax_df$vaccine_efficacy_infection, "\nQuarantine Efficacy = ", overall_spatial_vax_df$quarantine_efficacy)
+palette <- c("#474747", "#E3AFCB", "#D474A4", "#B52F7B", "#9C105A", "#6B0045")
 time_to_n_plot <- ggplot(subset(overall_spatial_vax_df, quarantine_efficacy != 0.35),
                          aes(x = input_R0, y = time_to_n_relative, col = interaction(vaccine, factor(surveillance)))) +
   geom_line() +
@@ -461,8 +463,7 @@ if (fresh_run_vaccination_heatmaps) {
   vaccine_efficacy_infection_scan <- c(0, 0.35, 0.75)
   vaccine_efficacy_transmission_scan <- c(0, 0.35, 0.5)
   outcome_names <- c("epidemic_size", "time_to_n", "Reff", "R0")
-  time_to_n_indicator <- 2000
-  
+
   #######################################################################
   ## Sensitivity Analysis - R0 vs Spatial Vax Radius
   #######################################################################
@@ -478,7 +479,7 @@ if (fresh_run_vaccination_heatmaps) {
   seeds <- runif(n = iterations, min = 1, max = 10^9)
   clusterExport(cl, list("mu", "R0_seq", "SC1_generation_time", "spatial_kernel", "calculate_Reff", "calculate_R0", "surveillance_threshold_fixed",
                          "check_final_size", "seeding_cases", "SC1_prop_asymptomatic", "time_to_nth_infection", "spatial_ratio_scan_full",
-                         "SC1_prob_hosp", "SC1_hospitalisation_delay", "surveillance_scan", "n",
+                         "SC1_prob_hosp", "SC1_hospitalisation_delay", "surveillance_scan", "time_to_n_indicator",
                          "SC1_infection_to_onset", "SC2_infection_to_onset", "implement_quarantine",
                          "vaccine_coverage", "vaccine_efficacy_infection_scan", "vaccine_efficacy_transmission_scan",
                          "vaccine_efficacy_disease", "vaccine_logistical_delay", "vaccine_protection_delay",
@@ -569,7 +570,7 @@ if (fresh_run_vaccination_heatmaps) {
   #######################################################################
   
   ## Parameter scan arguments
-  vaccine_efficacy_scan_full <- seq(0.3, 0.9, 0.1)
+  vaccine_efficacy_scan_full <- c(0, seq(0.3, 0.9, 0.1))
   storage_R0_VaccineEff_sensitivity <- array(data = NA, dim = c(iterations, length(R0_seq), length(vaccine_efficacy_scan_full), length(quarantine_efficacy_scan), 4))
   
   ## Setting up the cluster to support the parallel runs
@@ -579,7 +580,7 @@ if (fresh_run_vaccination_heatmaps) {
   seeds <- runif(n = iterations, min = 1, max = 10^9)
   clusterExport(cl, list("mu", "R0_seq", "SC1_generation_time", "spatial_kernel", "calculate_Reff", "calculate_R0", "surveillance_threshold_fixed", 
                          "check_final_size", "seeding_cases", "SC1_prop_asymptomatic", "time_to_nth_infection", "spatial_ratio_fixed",
-                         "SC1_prob_hosp", "SC1_hospitalisation_delay", "surveillance_scan", "n",
+                         "SC1_prob_hosp", "SC1_hospitalisation_delay", "surveillance_scan", "time_to_n_indicator",
                          "SC1_infection_to_onset", "SC2_infection_to_onset", "implement_quarantine",
                          "vaccine_coverage", "vaccine_efficacy_scan_full", "vaccine_efficacy_scan_full",
                          "vaccine_efficacy_disease", "vaccine_logistical_delay", "vaccine_protection_delay",
@@ -676,8 +677,8 @@ if (fresh_run_vaccination_heatmaps) {
   seeds <- runif(n = iterations, min = 1, max = 10^9)
   clusterExport(cl, list("mu", "R0_seq", "SC1_generation_time", "spatial_kernel", "calculate_Reff", "calculate_R0", "surveillance_threshold_fixed",
                          "check_final_size", "seeding_cases", "SC1_prop_asymptomatic", "time_to_nth_infection", "spatial_ratio_scan_full",
-                         "SC1_prob_hosp", "SC1_hospitalisation_delay", "surveillance_scan", "n", "spatial_ratio_fixed",
-                         "SC1_infection_to_onset", "SC2_infection_to_onset", "implement_quarantine",
+                         "SC1_prob_hosp", "SC1_hospitalisation_delay", "surveillance_scan", "spatial_ratio_fixed",
+                         "SC1_infection_to_onset", "SC2_infection_to_onset", "implement_quarantine", "time_to_n_indicator",
                          "vaccine_coverage", "vaccine_efficacy_infection_scan", "vaccine_efficacy_transmission_scan",
                          "vaccine_efficacy_disease", "vaccine_logistical_delay", "vaccine_protection_delay",
                          "spatial_ratio_scan", "spatial_vax_bp_sim", "spatial_calc", "seeds", "pop",
