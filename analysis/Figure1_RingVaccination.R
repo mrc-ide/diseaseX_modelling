@@ -49,11 +49,11 @@ pop <- 10^10
 check_final_size <- 2500
 initial_immune <- 0
 seeding_cases <- 5
-iterations <- 50
+iterations <- 200
 R0_scan <- c(0.75, 1, 1.25, 1.5, 1.75, 2, 2.25, 2.5)
 
 ## R0 sensitivity analysis (Figure 1B)
-fresh_run_R0_sensitivity_analysis <- FALSE
+fresh_run_R0_sensitivity_analysis <- TRUE
 n <- 2000
 if (fresh_run_R0_sensitivity_analysis) {
   

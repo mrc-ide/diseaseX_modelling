@@ -58,7 +58,7 @@ check_final_size <- 2500
 time_to_n_indicator <- check_final_size * 0.9
 initial_immune <- 0
 seeding_cases <- 3
-iterations <- 20
+iterations <- 200
 
 #########################################################################
 ## R0 sensitivity analysis (Figure 2B)
@@ -71,7 +71,7 @@ spatial_ratio_scan <- c(50, 100)
 quarantine_efficacy_scan <- c(0, 0.35, 0.65) # from the same article as above
 length(R0_scan) * length(surveillance_scan) * length(vaccine_efficacy_infection_scan) * length(spatial_ratio_scan) * length(quarantine_efficacy_scan) * (50/ (60 * 60)) 
 
-fresh_run_R0_sensitivity_analysis <- FALSE
+fresh_run_R0_sensitivity_analysis <- TRUE
 tic()
 n <- 2000
 if (fresh_run_R0_sensitivity_analysis) {
