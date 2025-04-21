@@ -53,7 +53,7 @@ iterations <- 200
 R0_scan <- c(0.75, 1, 1.25, 1.5, 1.75, 2, 2.25, 2.5)
 
 ## R0 sensitivity analysis (Figure 1B)
-fresh_run_R0_sensitivity_analysis <- TRUE
+fresh_run_R0_sensitivity_analysis <- FALSE
 n <- 2000
 if (fresh_run_R0_sensitivity_analysis) {
   
@@ -582,38 +582,6 @@ containment_df$scenario <- factor(containment_df$scenario,
 containment_df2 <- containment_df %>%
   arrange(scenario) 
 
-df_sub <- containment_df %>% 
-  dplyr::filter(vaccine_efficacy_infection == 0.35,
-                quarantine_efficacy        == 0.65,
-                pathogen                   == "SARS-CoV-2")
-ggplot(df_sub,
-       aes(R0, 100 * proportion_contained, colour = scenario)) +
-  geom_line() +
-  geom_point() +
-  theme_bw()
-
-x_breaks_raw   <- seq(0.75, 2.50, 0.25)   # tick marks
-x_breaks <- seq(1, 2.5, 0.5)
-bar_width  <- 0.2                    # <- same width you pass to geom_bar
-half_bw    <- bar_width / 1.8
-x_limits   <- range(x_breaks_raw) + c(-half_bw, half_bw)
-pd <- position_dodge(width = bar_width)   # shared dodg
-desired_order <- c("zno_vaccination", "evacc_2weeks_protectDelay", "dvacc_1week_protectDelay", "bvacc_2days_protectDelay",  "avacc_no_delay")
-df_sub2 <- df_sub %>% 
-  mutate(scenario = factor(scenario, levels = desired_order))
-palette      = c("#CA2E6B", "#88C5EE", "#236897", "#13496E", "black")
-ggplot(df_sub2,
-       aes(R0, Reff_mean, fill = scenario)) +
-  geom_bar(stat = "identity",
-           position = pd,
-           width    = bar_width) +              # <- give bars exact width
-  geom_errorbar(aes(ymin = Reff_lower, ymax = Reff_upper),
-                position = pd,
-                width    = bar_width * 0.8,
-                size = 0.35) +
-  geom_hline(yintercept = 1, linetype = "dashed", size = 0.25) +
-  scale_fill_manual(values = rev(palette))
-
 ## Plotting Fig1B - Reff and Proportion of Outbreaks Contained
 combo_tbl  <- expand_grid(pathogen =  c("SARS-CoV-2", "SARS-CoV-1"), quarantine_efficacy = c(0, 0.65))
 combo_plot <- combo_tbl %>% 
@@ -637,14 +605,14 @@ time_to_n_plot <- ggplot(subset(containment_df2, quarantine_efficacy != 0.35),
                       guide = guide_legend(reverse = TRUE)) +
   labs(x = "R0", y = "Fold Increase in Time to Epidemic Threshold") +
   theme(strip.background = element_rect(fill = "white"))
-ggsave(plot = time_to_n_plot, filename = "figures/Figure_1_BranchingProcess/FigS1_ParamScan_timetoN.pdf", height = 8.5, width = 8)
+ggsave(plot = time_to_n_plot, filename = "figures/Figure_1_RingVaccination/FigS1_ParamScan_timetoN.pdf", height = 8.5, width = 8)
 
 ####################################################################################################################################
 ## Vaccination-Related Sensitivity Analyses Heatmaps
 ### Note that old paper results were with 0.75 vaccine efficacy against infection and 0.5 against onwards transmission. 
 ### Have updated that here.
 ####################################################################################################################################
-fresh_run_vaccination_heatmaps <- TRUE
+fresh_run_vaccination_heatmaps <- FALSE
 if (fresh_run_vaccination_heatmaps) {
   
   set.seed(2000)
@@ -997,8 +965,8 @@ SI_contained_R0_TgRatio_plot <- ggplot(subset(R0_TgRatio_df, quarantine_efficacy
   geom_tile(colour = "black") +
   scale_fill_viridis_c(option = "mako", limits = c(0, 1), begin = 0.175, end = 1, name = "Proportion\nContained",
                        direction = -1) +
-  labs(x = "R0", y = "Ratio of Tg to Vaccine Protection Delay") +
-  facet_grid(vaccine_efficacy_infection ~ quarantine_efficacy,
+  labs(x = "R0", y = "Ratio of Tg\nto Vaccine Protection Delay") +
+  facet_grid(quarantine_efficacy ~ vaccine_efficacy_infection,
              labeller = labeller(vaccine_efficacy_infection = c(`0` = "No Vaccine", 
                                                                 `0.35` = "Vaccine Efficacy = 35%", 
                                                                 `0.75` = "Vaccine Efficacy = 75%"),
@@ -1012,7 +980,7 @@ SI_contained_R0_TgRatio_plot <- ggplot(subset(R0_TgRatio_df, quarantine_efficacy
         strip.background = element_rect(fill = "white", colour = "black"),
         panel.border = element_rect(linetype = "solid", fill = NA, linewidth = 0.5)) +  # Add black border
   coord_cartesian(expand = FALSE)
-ggsave(file = "figures/Figure_1_BranchingProcess/FigS1_R0TgRatio_ParameterScan_ContainedPlot.pdf", plot = SI_contained_R0_TgRatio_plot, width = 9, height = 7.2)
+# ggsave(file = "figures/Figure_1_BranchingProcess/FigS1_R0TgRatio_ParameterScan_ContainedPlot.pdf", plot = SI_contained_R0_TgRatio_plot, width = 9, height = 7.2)
 
 SI_Reff_R0_TgRatio_plot <- ggplot(subset(R0_TgRatio_df, quarantine_efficacy != 0.35), aes(x = input_R0, y = Tg_Ratio, fill = 100 * (1 - (avg_Reff / avg_R0)))) +
   geom_tile(colour = "black") +
@@ -1020,8 +988,8 @@ SI_Reff_R0_TgRatio_plot <- ggplot(subset(R0_TgRatio_df, quarantine_efficacy != 0
                        name = "% Red.\nin R0",
                        direction = 1) +
   labs(x = "R0",
-       y = "Ratio of Tg to Vaccine Protection Delay") +
-  facet_grid(vaccine_efficacy_infection ~ quarantine_efficacy,
+       y = "Ratio of Tg\nto Vaccine Protection Delay") +
+  facet_grid(quarantine_efficacy ~ vaccine_efficacy_infection,
              labeller = labeller(vaccine_efficacy_infection = c(`0` = "No Vaccine", 
                                                                 `0.35` = "Vaccine Efficacy = 35%", 
                                                                 `0.75` = "Vaccine Efficacy = 75%"),
@@ -1035,7 +1003,7 @@ SI_Reff_R0_TgRatio_plot <- ggplot(subset(R0_TgRatio_df, quarantine_efficacy != 0
         strip.background = element_rect(fill = "white", colour = "black"),
         panel.border = element_rect(linetype = "solid", fill = NA, linewidth = 0.5)) +  # Add black border
   coord_cartesian(expand = FALSE)
-ggsave(file = "figures/Figure_1_BranchingProcess/FigS1_R0TgRatio_ParameterScan_ReffPlot.pdf", plot = SI_Reff_R0_TgRatio_plot, width = 9, height = 7.2)
+# ggsave(file = "figures/Figure_1_BranchingProcess/FigS1_R0TgRatio_ParameterScan_ReffPlot.pdf", plot = SI_Reff_R0_TgRatio_plot, width = 9, height = 7.2)
 
 SI_timetoN_R0_TgRatio_plot <- ggplot(subset(R0_TgRatio_df, quarantine_efficacy != 0.35 & vaccine_efficacy_infection != 0), 
        aes(x = input_R0, y = Tg_Ratio, fill = avg_time_to_n_relative, alpha = 100 * (1 - proportion_contained))) +
@@ -1045,7 +1013,7 @@ SI_timetoN_R0_TgRatio_plot <- ggplot(subset(R0_TgRatio_df, quarantine_efficacy !
                        name = "Fold Increase\nin Time to Epidemic\nThreshold",
                        direction = 1) +
   scale_alpha(name = "% Outbreaks\nNot Contained") +
-  labs(x = "R0", y = "Ratio of Tg to Vaccine Protection Delay") +
+  labs(x = "R0", y = "Ratio of Tg\nto Vaccine Protection Delay") +
   facet_grid(vaccine_efficacy_infection ~ quarantine_efficacy,
              labeller = labeller(vaccine_efficacy_infection = c(`0.35` = "Vaccine Efficacy = 35%", 
                                                                 `0.75` = "Vaccine Efficacy = 75%"),
@@ -1059,8 +1027,14 @@ SI_timetoN_R0_TgRatio_plot <- ggplot(subset(R0_TgRatio_df, quarantine_efficacy !
         panel.background = element_blank(),
         strip.background = element_rect(fill = "white", colour = "black"),
         panel.border = element_rect(linetype = "solid", fill = NA, linewidth = 0.5)) +  # Add black border
-  coord_cartesian(expand = FALSE)
-ggsave(file = "figures/Figure_1_BranchingProcess/FigS1_R0TgRatio_ParameterScan_timetoNPlot.pdf", plot = SI_timetoN_R0_TgRatio_plot, width = 9, height = 4.8)
+  coord_cartesian(expand = FALSE) 
+# ggsave(file = "figures/Figure_1_BranchingProcess/FigS1_R0TgRatio_ParameterScan_timetoNPlot.pdf", plot = SI_timetoN_R0_TgRatio_plot, width = 9, height = 4.8)
+
+SI_R0_TgRatio_top_two_thirds <- cowplot::plot_grid(SI_contained_R0_TgRatio_plot, SI_Reff_R0_TgRatio_plot, nrow = 2,
+                                                   align = "v", axis = "r", labels = c("A", "B"))
+SI_R0_TgRatio_bottom_third <- cowplot::plot_grid(SI_timetoN_R0_TgRatio_plot, NULL, ncol = 2, rel_widths = c(1.33, 0.25), labels = c("C", NA))
+SI_R0_TgRatio_overall <- cowplot::plot_grid(SI_R0_TgRatio_top_two_thirds, SI_R0_TgRatio_bottom_third, nrow = 2, rel_heights = c(2, 1))
+ggsave(file = "figures/Figure_1_RingVaccination/FigS1_R0TgRatio_overall.pdf", plot = SI_R0_TgRatio_overall, width = 8, height = 11)
 
 
 ############################################################
@@ -1101,7 +1075,6 @@ SI_Reff_R0_efficacy_plot <- ggplot(subset(R0_efficacy_df, quarantine_efficacy !=
         strip.background = element_rect(fill = "white", colour = "black"),
         panel.border = element_rect(linetype = "solid", fill = NA, linewidth = 0.5)) +  # Add black border
   coord_cartesian(expand = FALSE)
-ggsave(file = "figures/Figure_1_BranchingProcess/FigS1_R0VaxEff_ParameterScan_ReffPlot.pdf", plot = SI_Reff_R0_efficacy_plot, width = 6, height = 2.4)
 
 SI_timetoN_R0_efficacy_plot <- ggplot(subset(R0_efficacy_df, quarantine_efficacy != 0.35 & vaccine_efficacy_infection != 0), 
                                      aes(x = input_R0, y = 100 * vaccine_efficacy_infection, fill = avg_time_to_n_relative, alpha = 100 * (1 - proportion_contained))) +
@@ -1124,7 +1097,12 @@ SI_timetoN_R0_efficacy_plot <- ggplot(subset(R0_efficacy_df, quarantine_efficacy
         strip.background = element_rect(fill = "white", colour = "black"),
         panel.border = element_rect(linetype = "solid", fill = NA, linewidth = 0.5)) +  # Add black border
   coord_cartesian(expand = FALSE)
-ggsave(file = "figures/Figure_1_BranchingProcess/FigS1_R0TgRatio_ParameterScan_timetoNPlot.pdf", plot = SI_timetoN_R0_efficacy_plot, width = 6, height = 2.4)
+# ggsave(file = "figures/Figure_1_BranchingProcess/FigS1_R0TgRatio_ParameterScan_timetoNPlot.pdf", plot = SI_timetoN_R0_efficacy_plot, width = 6, height = 2.4)
+
+SI_R0_efficacy_overall <- cowplot::plot_grid(SI_Reff_R0_efficacy_plot, SI_timetoN_R0_efficacy_plot, nrow = 2, rel_heights = c(1, 1), labels = c("A", "B"),
+                                             align = "v", axis = "r")
+ggsave(file = "figures/Figure_1_RingVaccination/FigS1_R0Efficacy_overall.pdf", plot = SI_R0_efficacy_overall, width = 8, height = 6)
+
 
 #################################################################
 ### R0 / Proportion Presymptomatic Transmission Parameter Scans
@@ -1154,7 +1132,7 @@ SI_contained_R0_preSymp_plot <- ggplot(subset(R0_preSymp_df, quarantine_efficacy
   scale_fill_viridis_c(option = "mako", limits = c(0, 1), begin = 0.175, end = 1, name = "Proportion\nContained",
                        direction = -1) +
   labs(x = "R0", y = "% Presymptomatic\nTransmission") +
-  facet_grid(vaccine_efficacy_infection ~ quarantine_efficacy,
+  facet_grid(quarantine_efficacy ~ vaccine_efficacy_infection,
              labeller = labeller(vaccine_efficacy_infection = c(`0` = "No Vaccine", 
                                                                 `0.35` = "Vaccine Efficacy = 35%", 
                                                                 `0.75` = "Vaccine Efficacy = 75%"),
@@ -1168,7 +1146,7 @@ SI_contained_R0_preSymp_plot <- ggplot(subset(R0_preSymp_df, quarantine_efficacy
         strip.background = element_rect(fill = "white", colour = "black"),
         panel.border = element_rect(linetype = "solid", fill = NA, linewidth = 0.5)) +  # Add black border
   coord_cartesian(expand = FALSE)
-ggsave(file = "figures/Figure_1_BranchingProcess/FigS1_R0preSymp_ParameterScan_ContainedPlot.pdf", plot = SI_contained_R0_preSymp_plot, width = 9, height = 7.2)
+# ggsave(file = "figures/Figure_1_BranchingProcess/FigS1_R0preSymp_ParameterScan_ContainedPlot.pdf", plot = SI_contained_R0_preSymp_plot, width = 9, height = 7.2)
 
 SI_Reff_R0_preSymp_plot <- ggplot(subset(R0_preSymp_df, quarantine_efficacy != 0.35), aes(x = input_R0, y = 100 * prop_preSymp, fill = 100 * (1 - (avg_Reff / avg_R0)))) +
   geom_tile(colour = "black") +
@@ -1176,7 +1154,7 @@ SI_Reff_R0_preSymp_plot <- ggplot(subset(R0_preSymp_df, quarantine_efficacy != 0
                        name = "% Red.\nin R0",
                        direction = 1) +
   labs(x = "R0", y = "% Presymptomatic\nTransmission") +
-  facet_grid(vaccine_efficacy_infection ~ quarantine_efficacy,
+  facet_grid(quarantine_efficacy ~ vaccine_efficacy_infection,
              labeller = labeller(vaccine_efficacy_infection = c(`0` = "No Vaccine", 
                                                                 `0.35` = "Vaccine Efficacy = 35%", 
                                                                 `0.75` = "Vaccine Efficacy = 75%"),
@@ -1190,7 +1168,7 @@ SI_Reff_R0_preSymp_plot <- ggplot(subset(R0_preSymp_df, quarantine_efficacy != 0
         strip.background = element_rect(fill = "white", colour = "black"),
         panel.border = element_rect(linetype = "solid", fill = NA, linewidth = 0.5)) +  # Add black border
   coord_cartesian(expand = FALSE)
-ggsave(file = "figures/Figure_1_BranchingProcess/FigS1_R0preSymp_ParameterScan_ReffPlot.pdf", plot = SI_Reff_R0_preSymp_plot, width = 9, height = 7.2)
+# ggsave(file = "figures/Figure_1_BranchingProcess/FigS1_R0preSymp_ParameterScan_ReffPlot.pdf", plot = SI_Reff_R0_preSymp_plot, width = 9, height = 7.2)
 
 SI_timetoN_R0_preSymp_plot <- ggplot(subset(R0_preSymp_df, quarantine_efficacy != 0.35 & vaccine_efficacy_infection != 0), 
                                      aes(x = input_R0, y = 100 * prop_preSymp, fill = avg_time_to_n_relative, alpha = 100 * (1 - proportion_contained))) +
@@ -1201,7 +1179,7 @@ SI_timetoN_R0_preSymp_plot <- ggplot(subset(R0_preSymp_df, quarantine_efficacy !
                        direction = 1) +
   scale_alpha(name = "% Outbreaks\nNot Contained") +
   labs(x = "R0", y = "% Presymptomatic\nTransmission") +
-  facet_grid(vaccine_efficacy_infection ~ quarantine_efficacy,
+  facet_grid(quarantine_efficacy ~ vaccine_efficacy_infection,
              labeller = labeller(vaccine_efficacy_infection = c(`0.35` = "Vaccine Efficacy = 35%", 
                                                                 `0.75` = "Vaccine Efficacy = 75%"),
                                  quarantine_efficacy = c(`0`   = "No Quarantine", 
@@ -1215,7 +1193,13 @@ SI_timetoN_R0_preSymp_plot <- ggplot(subset(R0_preSymp_df, quarantine_efficacy !
         strip.background = element_rect(fill = "white", colour = "black"),
         panel.border = element_rect(linetype = "solid", fill = NA, linewidth = 0.5)) +  # Add black border
   coord_cartesian(expand = FALSE)
-ggsave(file = "figures/Figure_1_BranchingProcess/FigS1_R0preSymp_ParameterScan_timetoNPlot.pdf", plot = SI_timetoN_R0_preSymp_plot, width = 9, height = 4.8)
+# ggsave(file = "figures/Figure_1_BranchingProcess/FigS1_R0preSymp_ParameterScan_timetoNPlot.pdf", plot = SI_timetoN_R0_preSymp_plot, width = 9, height = 4.8)
+
+SI_R0_preSymp_top_two_thirds <- cowplot::plot_grid(SI_contained_R0_preSymp_plot, SI_Reff_R0_preSymp_plot, nrow = 2,
+                                                   align = "v", axis = "r", labels = c("A", "B"))
+SI_R0_preSymp_bottom_third <- cowplot::plot_grid(SI_timetoN_R0_preSymp_plot, NULL, ncol = 2, rel_widths = c(1.33, 0.25), labels = c("C", NA))
+SI_R0_preSymp_overall <- cowplot::plot_grid(SI_R0_preSymp_top_two_thirds, SI_R0_preSymp_bottom_third, nrow = 2, rel_heights = c(2, 1))
+ggsave(file = "figures/Figure_1_RingVaccination/FigS1_R0PreSymp_overall.pdf", plot = SI_R0_preSymp_overall, width = 8, height = 11)
 
 ## Overall figure
 Fig1FGH <- cowplot::plot_grid(main_contained_R0_TgRatio_plot + theme(legend.position = "none"),
@@ -1224,6 +1208,6 @@ Fig1FGH <- cowplot::plot_grid(main_contained_R0_TgRatio_plot + theme(legend.posi
                               nrow = 1,
                               labels = c("F", "G", "H"), rel_widths = c(1, 1, 1.12))
 overall_figure1 <- cowplot::plot_grid(Fig1BCDE, Fig1FGH, nrow = 2, rel_heights = c(1.25, 1))
-ggsave(file = "figures/Figure_1_BranchingProcess/Fig1_Overall.pdf", plot = overall_figure1, width = 8, height = 9.5)
+ggsave(file = "figures/Figure_1_RingVaccination/Fig1_Overall.pdf", plot = overall_figure1, width = 8, height = 9.5)
 
 
