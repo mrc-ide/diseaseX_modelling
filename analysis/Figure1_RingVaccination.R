@@ -887,7 +887,7 @@ R0_TgRatio_df <- storage_R0_TgRatio_df %>%
          time_to_n_2_relative = time_to_n_2 / time_to_n_2[vaccine_efficacy_infection == 0]) %>%
   ungroup() %>%
   group_by(input_R0, Tg_Ratio, vaccine_efficacy_infection, quarantine_efficacy) %>%
-  summarise(proportion_contained = sum(contained) / iterations,
+  summarise(proportion_contained = sum(contained) / n(),
             avg_time_to_n = mean(time_to_n, na.rm = TRUE),
             avg_time_to_n_2 = mean(time_to_n_2, na.rm = TRUE),
             avg_time_to_n_relative = mean(time_to_n_relative, na.rm = TRUE),
@@ -905,7 +905,7 @@ R0_efficacy_df <- storage_R0_efficacy_df %>%
          time_to_n_2_relative = time_to_n_2 / time_to_n_2[vaccine_efficacy_infection == 0]) %>%
   ungroup() %>%
   group_by(input_R0, vaccine_efficacy_infection, quarantine_efficacy) %>%
-  summarise(proportion_contained = sum(contained) / iterations,
+  summarise(proportion_contained = sum(contained) / n(),
             avg_time_to_n = mean(time_to_n, na.rm = TRUE),
             avg_time_to_n_2 = mean(time_to_n_2, na.rm = TRUE),
             avg_time_to_n_relative = mean(time_to_n_relative, na.rm = TRUE),
@@ -923,7 +923,7 @@ R0_preSymp_df <- storage_R0_preSymp_df %>%
          time_to_n_2_relative = time_to_n_2 / time_to_n_2[vaccine_efficacy_infection == 0]) %>%
   ungroup() %>%
   group_by(input_R0, prop_preSymp, vaccine_efficacy_infection, quarantine_efficacy) %>%
-  summarise(proportion_contained = sum(contained) / iterations,
+  summarise(proportion_contained = sum(contained) / n(),
             avg_time_to_n = mean(time_to_n, na.rm = TRUE),
             avg_time_to_n_2 = mean(time_to_n_2, na.rm = TRUE),
             avg_time_to_n_relative = mean(time_to_n_relative, na.rm = TRUE),
@@ -1201,7 +1201,7 @@ SI_R0_preSymp_bottom_third <- cowplot::plot_grid(SI_timetoN_R0_preSymp_plot, NUL
 SI_R0_preSymp_overall <- cowplot::plot_grid(SI_R0_preSymp_top_two_thirds, SI_R0_preSymp_bottom_third, nrow = 2, rel_heights = c(2, 1))
 ggsave(file = "figures/Figure_1_RingVaccination/FigS1_R0PreSymp_overall.pdf", plot = SI_R0_preSymp_overall, width = 8, height = 11)
 
-## Overall figure
+## Overall main figure
 Fig1FGH <- cowplot::plot_grid(main_contained_R0_TgRatio_plot + theme(legend.position = "none"),
                               main_contained_R0_efficacy_plot + theme(legend.position = "none"), 
                               main_contained_R0_preSymp_plot + theme(legend.position = "none"),

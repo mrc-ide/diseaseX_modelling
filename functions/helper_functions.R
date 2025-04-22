@@ -517,17 +517,17 @@ make_stacked_plot_timetoN <- function(df, patho, qe,
   plot_grid(p_time, p_cont, nrow = 2, rel_heights = rel_heights)
 }
 
- 
-# df <- overall_spatial_vax_df
-# qe <- 0.65
-# patho <- "SARS-CoV-1"
-# vaccine_efficacy_infection_value <- 0.35
-# rel_heights <- c(1, 2)
-# palette <- c("#474747", "#E3AFCB", "#D474A4", "#B52F7B", "#9C105A", "#6B0045")
+#  
+df <- overall_spatial_df
+qe <- 0
+patho <- "SARS-CoV-1"
+vaccine_efficacy_infection_value <- 0.35
+rel_heights <- c(1, 2)
+palette <- c("#E3AFCB", "#D474A4", "#B52F7B", "#9C105A", "#6B0045", "#474747")
 
 make_stacked_plot_Reff_spatialvax <- function(df, patho, qe, vaccine_efficacy_infection_value, 
                                               rel_heights = c(1, 3),
-                                              palette      = c("#474747", c("#E3AFCB", "#D474A4", "#B52F7B", "#9C105A", "#6B0045"))) {
+                                              palette      = c("#E3AFCB", "#D474A4", "#B52F7B", "#9C105A", "#6B0045", "#474747")) {
   
   df_sub <- df %>% 
     filter(vaccine_efficacy_infection == vaccine_efficacy_infection_value,
@@ -544,14 +544,14 @@ make_stacked_plot_Reff_spatialvax <- function(df, patho, qe, vaccine_efficacy_in
   
   ## bottom panel – containment
   p_cont <- ggplot(df_sub,
-                   aes(input_R0, 100 * proportion_contained, colour = interaction(vaccine, factor(surveillance)))) +
+                   aes(input_R0, 100 * proportion_contained, colour = factor(surveillance))) +
     geom_line() +
     geom_point() +
     theme_bw() +
     scale_x_continuous(breaks = x_breaks,
                        limits = x_limits,
                        expand = c(0, 0)) +
-    scale_colour_manual(labels = c("No\nVaccine", paste0(surveillance_scan, " Hosp.")),
+    scale_colour_manual(labels = c(paste0(surveillance_scan[-length(surveillance_scan)], " Hosp."), "No\nVaccine"),
                         values = palette,
                         name = "Surveillance\nThreshold\nTrigger") +
     labs(x = "R0", y = "% Outbreaks\nContained") +
@@ -564,7 +564,7 @@ make_stacked_plot_Reff_spatialvax <- function(df, patho, qe, vaccine_efficacy_in
     mutate(plot_bar = ifelse(proportion_contained > 0.25, 0, 1)) %>%
     mutate(Reff_plot = ifelse(plot_bar == 1, Reff_mean, 0))
   p_Reff <- ggplot(df_sub2,
-                   aes(input_R0, Reff_mean, fill = interaction(vaccine, factor(surveillance)))) +
+                   aes(input_R0, Reff_mean, fill = factor(surveillance))) +
     geom_bar(stat = "identity",
              position = pd,
              width    = bar_width) +              # <- give bars exact width
