@@ -518,12 +518,12 @@ make_stacked_plot_timetoN <- function(df, patho, qe,
 }
 
 #  
-df <- overall_spatial_df
-qe <- 0
-patho <- "SARS-CoV-1"
-vaccine_efficacy_infection_value <- 0.35
-rel_heights <- c(1, 2)
-palette <- c("#E3AFCB", "#D474A4", "#B52F7B", "#9C105A", "#6B0045", "#474747")
+# df <- overall_spatial_df
+# qe <- 0
+# patho <- "SARS-CoV-1"
+# vaccine_efficacy_infection_value <- 0.35
+# rel_heights <- c(1, 2)
+# palette <- c("#E3AFCB", "#D474A4", "#B52F7B", "#9C105A", "#6B0045", "#474747")
 
 make_stacked_plot_Reff_spatialvax <- function(df, patho, qe, vaccine_efficacy_infection_value, 
                                               rel_heights = c(1, 3),

@@ -58,7 +58,7 @@ check_final_size <- 2500
 time_to_n_indicator <- check_final_size * 0.9
 initial_immune <- 0
 seeding_cases <- 3
-iterations <- 5
+iterations <- 200
 
 #########################################################################
 ## R0 sensitivity analysis (Figure 2B)
@@ -439,7 +439,7 @@ time_to_n_plot <- ggplot(subset(overall_spatial_df, quarantine_efficacy != 0.35)
                       name = "Surveillance\nThreshold\nTrigger") +
   labs(x = "R0", y = "Fold Increase in Time to Epidemic Threshold") +
   theme(strip.background = element_rect(fill = "white"))
-ggsave(plot = time_to_n_plot, filename = "figures/Figure_1_BranchingProcess/FigS2_ParamScan_timetoN.pdf", height = 8.5, width = 8)
+ggsave(plot = time_to_n_plot, filename = "figures/Figure_2_SpatialVaccination/FigS2_ParamScan_timetoN.pdf", height = 8.5, width = 8)
 
 #########################################################################
 ## Parameter scan sensitivity analyses (Figure 2C-E)
@@ -664,8 +664,8 @@ if (fresh_run_vaccination_heatmaps) {
   #######################################################################
   
   ## Parameter scan arguments
-  storage_R0_SurvThreshold_sensitivity <- array(data = NA, dim = c(iterations, length(R0_seq), length(surveillance_scan_full), length(vaccine_efficacy_infection_scan), length(quarantine_efficacy_scan), 4))
   surveillance_scan_full <- c(1, 10, 25, 50, 75, 100)
+  storage_R0_SurvThreshold_sensitivity <- array(data = NA, dim = c(iterations, length(R0_seq), length(surveillance_scan_full), length(vaccine_efficacy_infection_scan), length(quarantine_efficacy_scan), 4))
     
   ## Setting up the cluster to support the parallel runs
   no_cores <- min(iterations, 10)
@@ -1097,5 +1097,5 @@ Fig1FGH <- cowplot::plot_grid(main_contained_R0_SpatialRadius_plot + theme(legen
                               nrow = 1,
                               labels = c("F", "G", "H"), rel_widths = c(1, 1, 1.12))
 overall_figure2 <- cowplot::plot_grid(Fig1BCDE, Fig1FGH, nrow = 2, rel_heights = c(1.25, 1))
-ggsave(file = "figures/Figure_2_SpatialVaccination/Fig2_Overall.pdf", plot = overall_figure1, width = 8, height = 9.5)
+ggsave(file = "figures/Figure_2_SpatialVaccination/Fig2_Overall.pdf", plot = overall_figure2, width = 8, height = 9.5)
 
