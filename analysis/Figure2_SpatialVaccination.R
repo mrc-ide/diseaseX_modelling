@@ -1002,7 +1002,7 @@ main_contained_R0_SurvThresh_plot <- ggplot(subset(R0_SurvThresh_df, quarantine_
   geom_tile(colour = "black") +
   scale_fill_viridis_c(option = "rocket", limits = c(0, 100), begin = 0.175, end = 1, name = "Proportion\nContained",
                        direction = -1) +
-  labs(x = "R0", y = "Surveillance Threshold") +
+  labs(x = "R0", y = "Surveillance\nThreshold") +
   facet_grid(quarantine_efficacy ~ .,
              labeller = labeller(vaccine_efficacy_infection = c(`0` = "No Vaccine", 
                                                                 `0.35` = "Vaccine Efficacy = 35%", 
@@ -1068,7 +1068,7 @@ SI_timetoN_R0_SurvThresh_plot <- ggplot(subset(R0_SurvThresh_df, quarantine_effi
                        name = "Fold Increase\nin Time to Epidemic\nThreshold",
                        direction = 1) +
   scale_alpha(name = "% Outbreaks\nNot Contained") +
-  labs(x = "R0", y = "Surveillance Threshold") +
+  labs(x = "R0", y = "Surveillance\nThreshold") +
   facet_grid(vaccine_efficacy_infection ~ quarantine_efficacy,
              labeller = labeller(vaccine_efficacy_infection = c(`0.35` = "Vaccine Efficacy = 35%", 
                                                                 `0.75` = "Vaccine Efficacy = 75%"),
@@ -1095,7 +1095,7 @@ Fig1FGH <- cowplot::plot_grid(main_contained_R0_SpatialRadius_plot + theme(legen
                               main_contained_R0_efficacy_plot + theme(legend.position = "none"), 
                               main_contained_R0_SurvThresh_plot + theme(legend.position = "none"),
                               nrow = 1,
-                              labels = c("F", "G", "H"), rel_widths = c(1, 1, 1.12))
+                              labels = c("F", "G", "H"), rel_widths = c(1, 1, 1.08))
 overall_figure2 <- cowplot::plot_grid(Fig1BCDE, Fig1FGH, nrow = 2, rel_heights = c(1.25, 1))
 ggsave(file = "figures/Figure_2_SpatialVaccination/Fig2_Overall.pdf", plot = overall_figure2, width = 8, height = 9.5)
 
