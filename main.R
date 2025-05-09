@@ -31,6 +31,7 @@ library(cowplot)
 library(ggnewscale)
 library(viridis)
 library(doParallel)
+library(scico)
 
 # colours
 
