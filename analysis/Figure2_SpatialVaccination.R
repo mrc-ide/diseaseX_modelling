@@ -71,7 +71,7 @@ spatial_ratio_scan <- c(50) # , 100)
 quarantine_efficacy_scan <- c(0, 0.65) # 0.35, 0.65) # from the same article as above
 length(R0_scan) * length(surveillance_scan) * length(vaccine_efficacy_infection_scan) * length(spatial_ratio_scan) * length(quarantine_efficacy_scan) * (50/ (60 * 60)) 
 
-fresh_run_R0_sensitivity_analysis <- TRUE
+fresh_run_R0_sensitivity_analysis <- FALSE
 if (fresh_run_R0_sensitivity_analysis) {
   
   ## Setting up the cluster to support the parallel runs
@@ -426,9 +426,31 @@ Fig1BCDE <- plot_grid(plotlist = list(combo_plot$p[[3]], combo_plot$p[[1]], comb
                       labels = c("B", "C", "D", "E"), label_size = 10)
 
 ## Plotting Supplementary Figure looking at time to epidemic threshold
-overall_spatial_df$vaccine_quarantine_elision <- paste0("Vaccine Efficacy = ", overall_spatial_df$vaccine_efficacy_infection, "\nQuarantine Efficacy = ", overall_spatial_df$quarantine_efficacy)
+overall_spatial_vax_df2 <- rbind(SC1_reshaped2, SC2_reshaped2) %>%
+  mutate(surveillance = ifelse(surveillance == 1, "1 Hosp.", surveillance)) %>%
+  mutate(surveillance = ifelse(surveillance == 10, "10 Hosp.", surveillance)) %>%
+  mutate(surveillance = ifelse(surveillance == 25, "25 Hosp", surveillance)) %>%
+  mutate(surveillance = ifelse(surveillance == 50, "50 Hosp", surveillance)) %>%
+  mutate(surveillance = ifelse(surveillance == 75, "75 Hosp", surveillance)) %>%
+  mutate(surveillance = ifelse(surveillance == 10000, "zno_vaccination", surveillance))
+
+overall_spatial_df2 <- overall_spatial_vax_df2 %>%
+  filter(spatial_ratio == 50) %>%
+  mutate(contained = ifelse(epidemic_size < (0.9 * check_final_size), 1, 0)) %>%
+  group_by(input_R0, pathogen, quarantine_efficacy) %>%
+  mutate(time_to_n_relative = time_to_n / time_to_n[surveillance == "zno_vaccination"]) %>%
+  group_by(input_R0, pathogen, vaccine_efficacy_infection, quarantine_efficacy, surveillance, spatial_ratio) %>%
+  summarise(proportion_contained = sum(contained) / n(),
+            R0_actual = mean(input_R0, na.rm = TRUE),
+            Reff_mean = median(Reff, na.rm = TRUE),
+            Reff_lower = quantile(Reff, 0.1, na.rm = TRUE),
+            Reff_upper = quantile(Reff, 0.9, na.rm = TRUE), 
+            time_to_n = mean(time_to_n, na.rm = TRUE),
+            time_to_n_relative = mean(time_to_n_relative, na.rm = TRUE)) 
+
+overall_spatial_df2$vaccine_quarantine_elision <- paste0("Vaccine Efficacy = ", overall_spatial_df2$vaccine_efficacy_infection, "\nQuarantine Efficacy = ", overall_spatial_df2$quarantine_efficacy)
 palette <- c("#E3AFCB", "#D474A4", "#B52F7B", "#9C105A", "#6B0045", "#474747")
-time_to_n_plot <- ggplot(subset(overall_spatial_df, quarantine_efficacy != 0.35),
+time_to_n_plot <- ggplot(subset(overall_spatial_df2, quarantine_efficacy != 0.35),
                          aes(x = input_R0, y = time_to_n_relative, col = factor(surveillance))) +
   geom_line() +
   geom_point() +
@@ -466,7 +488,7 @@ if (fresh_run_vaccination_heatmaps) {
   
   ## Parameter scan arguments
   spatial_ratio_scan_full <- c(1, 10, 25, 50, 75, 100)
-  storage_R0_SpatialRadius_sensitivity <- array(data = NA, dim = c(iterations, length(R0_seq), length(spatial_ratio_scan_full), length(vaccine_efficacy_infection_scan), length(quarantine_efficacy_scan), 4))
+  storage_R0_SpatialRadius_sensitivity <- array(data = NA, dim = c(iterations, length(R0_seq), length(spatial_ratio_scan_full), length(vaccine_efficacy_infection_scan), length(quarantine_efficacy_scan), 5))
   
   ## Setting up the cluster to support the parallel runs
   no_cores <- min(iterations, 10)
@@ -529,7 +551,7 @@ if (fresh_run_vaccination_heatmaps) {
             Reff <- calculate_Reff(SC2_temp, "spatial_vax")
             R0 <- calculate_R0(SC2_temp)
             
-            list(count = count, time_to_n = time_to_n, Reff = Reff, R0 = R0)})
+            list(count = count, time_to_n = time_to_n, Reff = Reff, R0 = R0, radius = spatial_ratio_scan_full[j])})
           
           # Extract results and store them in the respective storage arrays
           for (n in 1:iterations) {
@@ -537,6 +559,7 @@ if (fresh_run_vaccination_heatmaps) {
             storage_R0_SpatialRadius_sensitivity[n, i, j, k, l, 2] <- results[[n]]$time_to_n
             storage_R0_SpatialRadius_sensitivity[n, i, j, k, l, 3] <- results[[n]]$Reff
             storage_R0_SpatialRadius_sensitivity[n, i, j, k, l, 4] <- results[[n]]$R0
+            storage_R0_SpatialRadius_sensitivity[n, i, j, k, l, 5] <- results[[n]]$radius
           }
           print(paste0("i = ", i, ", j = ", j, ", k = ", k, ", l = " , l))
         }
@@ -546,6 +569,7 @@ if (fresh_run_vaccination_heatmaps) {
   stopCluster(cl)
   
   ## Processing the simulations
+  outcome_names_test <- c("epidemic_size", "time_to_n", "Reff", "R0", "radius")
   reshaped_R0_SpatialRadius_sensitivity <- reshape2::melt(storage_R0_SpatialRadius_sensitivity)
   colnames(reshaped_R0_SpatialRadius_sensitivity) <- c("iteration", "R0", "spatial_ratio", "vaccine_efficacy", "quarantine_efficacy", "outcome", "value")
   reshaped_R0_SpatialRadius_sensitivity <- reshaped_R0_SpatialRadius_sensitivity %>%
@@ -555,12 +579,12 @@ if (fresh_run_vaccination_heatmaps) {
            vaccine_efficacy_infection = vaccine_efficacy_infection_scan[vaccine_efficacy], 
            vaccine_efficacy_transmission = vaccine_efficacy_transmission_scan[vaccine_efficacy], 
            quarantine_efficacy = quarantine_efficacy_scan[quarantine_efficacy],
-           outcome = outcome_names[outcome]) %>% 
+           outcome = outcome_names_test[outcome]) %>% 
     dplyr::select(iteration, input_R0, -R0, spatial_ratio, vaccine_efficacy_infection, vaccine_efficacy_transmission, 
                   quarantine_efficacy, outcome, value, -vaccine_efficacy) %>%
     pivot_wider(names_from = "outcome", values_from = value)
   saveRDS(object = reshaped_R0_SpatialRadius_sensitivity, file = "outputs/Figure1_branchingProcess_Containment/Fig2_spatialVaccination_R0SpatialScan.rds")
-  
+
   #######################################################################
   ## Sensitivity Analysis - R0 vs Vaccine Efficacy
   #######################################################################
@@ -776,10 +800,10 @@ R0_SpatialRadius_df <- reshaped_R0_SpatialRadius_sensitivity %>%
   ungroup() %>%
   mutate(contained = ifelse(epidemic_size < (0.9 * check_final_size), 1, 0)) %>%
   mutate(time_to_n_2 = ifelse(is.na(time_to_n), max(time_to_n, na.rm = TRUE), time_to_n)) %>%
-  group_by(iteration, input_R0, spatial_ratio, quarantine_efficacy) %>%
-  mutate(time_to_n_check = time_to_n[vaccine_efficacy_infection == 0],
-         time_to_n_relative = time_to_n / time_to_n[vaccine_efficacy_infection == 0],
-         time_to_n_2_relative = time_to_n_2 / time_to_n_2[vaccine_efficacy_infection == 0]) %>%
+  group_by(iteration, input_R0, spatial_ratio) %>%
+  mutate(time_to_n_check = time_to_n[vaccine_efficacy_infection == 0 & quarantine_efficacy == 0],
+         time_to_n_relative = time_to_n / time_to_n[vaccine_efficacy_infection == 0 & quarantine_efficacy == 0],
+         time_to_n_2_relative = time_to_n_2 / time_to_n_2[vaccine_efficacy_infection == 0 & quarantine_efficacy == 0]) %>%
   ungroup() %>%
   group_by(input_R0, spatial_ratio, vaccine_efficacy_infection, quarantine_efficacy) %>%
   summarise(proportion_contained = sum(contained) / n(),
@@ -787,6 +811,7 @@ R0_SpatialRadius_df <- reshaped_R0_SpatialRadius_sensitivity %>%
             avg_time_to_n_2 = mean(time_to_n_2, na.rm = TRUE),
             avg_time_to_n_relative = mean(time_to_n_relative, na.rm = TRUE),
             avg_time_to_n_2_relative = mean(time_to_n_2_relative, na.rm = TRUE),
+            avg_time_to_n_check = mean(time_to_n_check, na.rm = TRUE),
             avg_R0 = mean(R0),
             avg_Reff = mean(Reff)) %>%
   mutate(avg_time_to_n_2_relative_plot = ifelse(proportion_contained < 0.9, avg_time_to_n_2_relative, NA))
@@ -796,10 +821,10 @@ R0_efficacy_df <- reshaped_R0_VaccineEff_sensitivity %>%
   ungroup() %>%
   mutate(contained = ifelse(epidemic_size < (0.9 * check_final_size), 1, 0)) %>%
   mutate(time_to_n_2 = ifelse(is.na(time_to_n), max(time_to_n, na.rm = TRUE), time_to_n)) %>%
-  group_by(iteration, input_R0, quarantine_efficacy) %>%
-  mutate(time_to_n_check = time_to_n[vaccine_efficacy_infection == 0],
-         time_to_n_relative = time_to_n / time_to_n[vaccine_efficacy_infection == 0],
-         time_to_n_2_relative = time_to_n_2 / time_to_n_2[vaccine_efficacy_infection == 0]) %>%
+  group_by(iteration, input_R0) %>%
+  mutate(time_to_n_check = time_to_n[vaccine_efficacy_infection == 0 & quarantine_efficacy == 0],
+         time_to_n_relative = time_to_n / time_to_n[vaccine_efficacy_infection == 0 & quarantine_efficacy == 0],
+         time_to_n_2_relative = time_to_n_2 / time_to_n_2[vaccine_efficacy_infection == 0 & quarantine_efficacy == 0]) %>%
   ungroup() %>%
   group_by(input_R0, vaccine_efficacy_infection, quarantine_efficacy) %>%
   summarise(proportion_contained = sum(contained) / n(),
@@ -816,10 +841,10 @@ R0_SurvThresh_df <- reshaped_R0_SurvThreshold_sensitivity %>%
   ungroup() %>%
   mutate(contained = ifelse(epidemic_size < (0.9 * check_final_size), 1, 0)) %>%
   mutate(time_to_n_2 = ifelse(is.na(time_to_n), max(time_to_n, na.rm = TRUE), time_to_n)) %>%
-  group_by(iteration, input_R0, surveillance_threshold, quarantine_efficacy) %>%
-  mutate(time_to_n_check = time_to_n[vaccine_efficacy_infection == 0],
-         time_to_n_relative = time_to_n / time_to_n[vaccine_efficacy_infection == 0],
-         time_to_n_2_relative = time_to_n_2 / time_to_n_2[vaccine_efficacy_infection == 0]) %>%
+  group_by(iteration, input_R0, surveillance_threshold) %>%
+  mutate(time_to_n_check = time_to_n[vaccine_efficacy_infection == 0 & quarantine_efficacy == 0],
+         time_to_n_relative = time_to_n / time_to_n[vaccine_efficacy_infection == 0 & quarantine_efficacy == 0],
+         time_to_n_2_relative = time_to_n_2 / time_to_n_2[vaccine_efficacy_infection == 0 & quarantine_efficacy == 0]) %>%
   ungroup() %>%
   group_by(input_R0, surveillance_threshold, vaccine_efficacy_infection, quarantine_efficacy) %>%
   summarise(proportion_contained = sum(contained) / n(),
@@ -841,6 +866,7 @@ R0_SurvThresh_df <- reshaped_R0_SurvThreshold_sensitivity %>%
 main_contained_R0_SpatialRadius_plot <- ggplot(subset(R0_SpatialRadius_df, quarantine_efficacy != 0.35 & vaccine_efficacy_infection == 0.35), aes(x = input_R0, y = factor(spatial_ratio), fill = 100 * proportion_contained)) +
   geom_tile(colour = "black") +
   scale_fill_viridis_c(option = "rocket", limits = c(0, 100), begin = 0.175, end = 1, name = "Proportion\nContained",
+                       oob = scales::squish,
                        direction = -1) +
   labs(x = "R0", y = "Ratio Spatial Vax Radius") +
   facet_grid(quarantine_efficacy ~ .,
@@ -875,6 +901,7 @@ SI_contained_R0_SpatialRadius_plot <- ggplot(subset(R0_SpatialRadius_df, quarant
         plot.title = element_text(hjust = 0.5, size = 20, face = "bold"),
         legend.title = element_text(size = 12),
         legend.text = element_text(size = 12),
+        strip.text.y = element_text(size = 8),
         strip.background = element_rect(fill = "white", colour = "black"),
         panel.border = element_rect(linetype = "solid", fill = NA, linewidth = 0.5)) +  # Add black border
   coord_cartesian(expand = FALSE)
@@ -882,7 +909,8 @@ SI_contained_R0_SpatialRadius_plot <- ggplot(subset(R0_SpatialRadius_df, quarant
 SI_Reff_R0_SpatialRadius_plot <- ggplot(subset(R0_SpatialRadius_df, quarantine_efficacy != 0.35), aes(x = input_R0, y = factor(spatial_ratio), fill = 100 * (1 - (avg_Reff / avg_R0)))) +
   geom_tile(colour = "black") +
   scale_fill_viridis_c(option = "rocket", limits = c(0, 70), begin = 0.175, end = 1,
-                       name = "% Red.\nin R0",
+                       name = "% Red.\nin R",
+                       oob = scales::squish,
                        direction = 1) +
   labs(x = "R0", y = "Ratio Spatial Vax Radius") +
   facet_grid(quarantine_efficacy ~ vaccine_efficacy_infection,
@@ -896,21 +924,26 @@ SI_Reff_R0_SpatialRadius_plot <- ggplot(subset(R0_SpatialRadius_df, quarantine_e
         plot.title = element_text(hjust = 0.5, size = 20, face = "bold"),
         legend.title = element_text(size = 12),
         legend.text = element_text(size = 12),
+        strip.text.y = element_text(size = 8),
         strip.background = element_rect(fill = "white", colour = "black"),
         panel.border = element_rect(linetype = "solid", fill = NA, linewidth = 0.5)) +  # Add black border
   coord_cartesian(expand = FALSE)
 
-SI_timetoN_R0_SpatialRadius_plot <- ggplot(subset(R0_SpatialRadius_df, quarantine_efficacy != 0.35 & vaccine_efficacy_infection != 0), 
-                                     aes(x = input_R0, y = factor(spatial_ratio), fill = avg_time_to_n_relative, alpha = 100 * (1 - proportion_contained))) +
-  geom_tile(colour = "black") +
-  scale_fill_viridis_c(option = "rocket", limits = c(0.9, 1.5), begin = 0.175, end = 1,
-                       breaks = c(1, 1.1, 1.2, 1.3, 1.4, 1.5),
+SI_timetoN_R0_SpatialRadius_plot_part1 <- ggplot(R0_SpatialRadius_df, aes(x = input_R0, y = factor(spatial_ratio), fill = avg_time_to_n_relative,
+                 alpha = 1 - proportion_contained)) +
+  geom_tile(colour = "grey") +
+  scale_fill_viridis_c(option = "rocket", limits = c(0.8, max(R0_SpatialRadius_df$avg_time_to_n_relative, na.rm = TRUE)), begin = 0.175, end = 1,
+                       oob = scales::squish,
                        name = "Fold Increase\nin Time to Epidemic\nThreshold",
                        direction = 1) +
-  scale_alpha(name = "% Outbreaks\nNot Contained") +
+  geom_tile(data = filter(R0_SpatialRadius_df, proportion_contained < 0.5), aes(x = input_R0, y = factor(spatial_ratio)),
+            fill = NA, colour = "black", linewidth = 0.5, inherit.aes = FALSE) +
+  scale_alpha(name = "% Outbreaks\nNot Contained",
+              limits = c(0, 1)) +
   labs(x = "R0", y = "Ratio Spatial Vax Radius") +
-  facet_grid(vaccine_efficacy_infection ~ quarantine_efficacy,
-             labeller = labeller(vaccine_efficacy_infection = c(`0.35` = "Vaccine Efficacy = 35%", 
+  facet_grid(quarantine_efficacy ~ vaccine_efficacy_infection,
+             labeller = labeller(vaccine_efficacy_infection = c(`0` = "No Vaccine",
+                                                                `0.35` = "Vaccine Efficacy = 35%", 
                                                                 `0.75` = "Vaccine Efficacy = 75%"),
                                  quarantine_efficacy = c(`0`   = "No Quarantine", 
                                                          `0.35` = "Quarantine Efficacy = 35%", 
@@ -920,14 +953,38 @@ SI_timetoN_R0_SpatialRadius_plot <- ggplot(subset(R0_SpatialRadius_df, quarantin
         legend.title = element_text(size = 12),
         legend.text = element_text(size = 12),
         panel.background = element_blank(),
+        legend.position = "none",
+        strip.text.y = element_text(size = 8),
         strip.background = element_rect(fill = "white", colour = "black"),
         panel.border = element_rect(linetype = "solid", fill = NA, linewidth = 0.5)) +  # Add black border
   coord_cartesian(expand = FALSE) 
 
+R0_SpatialRadius_legend_df <- expand.grid(colour_val = seq(0.9, max(R0_SpatialRadius_df$avg_time_to_n_relative, na.rm = TRUE), length.out = 10),
+                                          alpha_val  = seq(0, 1,   length.out = 10))
+SI_timetoN_R0_SpatialRadius_plot_part2 <- ggplot(R0_SpatialRadius_legend_df, aes(x = 100 * alpha_val, y = colour_val, fill = colour_val, alpha = alpha_val)) +
+  geom_raster() +
+  scale_fill_viridis_c(option = "rocket", limits = c(.9, max(R0_SpatialRadius_df$avg_time_to_n_relative, na.rm = TRUE)),
+                       begin = 0.175, end = 1, oob = scales::squish, name = "Fold Increase\n(Time to threshold)") +
+  scale_alpha(range = c(0, 1), name  = "% Outbreaks\nNot Contained") +
+  geom_tile(data = filter(R0_SpatialRadius_legend_df, alpha_val > 0.5), aes(x = 100 * alpha_val, y = colour_val),
+            fill = NA, colour = "black", inherit.aes = FALSE) +
+  scale_x_continuous(breaks = c(0, 25, 50, 75, 100),
+                     labels = c("100%", "75%", "50%", "25%", "0%")) +
+  guides(fill  = "none", alpha = "none") +
+  labs(y = "Fold Increas in Time to\nEpidemic Threshold", x = "% Outbreaks Controlled") +
+  coord_cartesian(expand = FALSE) +
+  theme_bw() +
+  theme(axis.text.x = element_text(size = 8), axis.text.y = element_text(size = 8),
+        axis.title = element_text(size = 8),
+        panel.background = element_blank(), panel.grid = element_blank())
+
+R0_SpatialRadius_legend <- cowplot::plot_grid(NULL, SI_timetoN_R0_SpatialRadius_plot_part2, NULL, nrow = 3, rel_heights = c(1, 2, 1))
+
+SI_timetoN_R0_SpatialRadius_plot <- cowplot::plot_grid(SI_timetoN_R0_SpatialRadius_plot_part1, R0_SpatialRadius_legend, nrow = 1, rel_widths = c(3, 1))
+
 SI_R0_SpatialRadius_top_two_thirds <- cowplot::plot_grid(SI_contained_R0_SpatialRadius_plot, SI_Reff_R0_SpatialRadius_plot, nrow = 2,
                                                    align = "v", axis = "r", labels = c("A", "B"))
-SI_R0_SpatialRadius_bottom_third <- cowplot::plot_grid(SI_timetoN_R0_SpatialRadius_plot, NULL, ncol = 2, rel_widths = c(1.33, 0.25), labels = c("C", NA))
-SI_R0_SpatialRadius_overall <- cowplot::plot_grid(SI_R0_SpatialRadius_top_two_thirds, SI_R0_SpatialRadius_bottom_third, nrow = 2, rel_heights = c(2, 1))
+SI_R0_SpatialRadius_overall <- cowplot::plot_grid(SI_R0_SpatialRadius_top_two_thirds, SI_timetoN_R0_SpatialRadius_plot, nrow = 2, rel_heights = c(2, 1))
 ggsave(file = "figures/Figure_2_SpatialVaccination/FigS2_R0SpatialRadius_overall.pdf", plot = SI_R0_SpatialRadius_overall, width = 8, height = 11)
 
 ############################################################
@@ -936,6 +993,7 @@ ggsave(file = "figures/Figure_2_SpatialVaccination/FigS2_R0SpatialRadius_overall
 main_contained_R0_efficacy_plot <- ggplot(subset(R0_efficacy_df, quarantine_efficacy != 0.35 & vaccine_efficacy_infection != 0.0), aes(x = input_R0, y = 100 * vaccine_efficacy_infection, fill = proportion_contained)) +
   geom_tile(colour = "black") +
   scale_fill_viridis_c(option = "rocket", limits = c(0, 1), begin = 0.175, end = 1, name = "Proportion\nContained",
+                       oob = scales::squish,
                        direction = -1) +
   labs(x = "R0", y = "Vaccine Efficacy (%)") +
   facet_grid(quarantine_efficacy ~ .,
@@ -954,7 +1012,8 @@ main_contained_R0_efficacy_plot <- ggplot(subset(R0_efficacy_df, quarantine_effi
 SI_Reff_R0_efficacy_plot <- ggplot(subset(R0_efficacy_df, quarantine_efficacy != 0.35 & vaccine_efficacy_infection != 0.0), aes(x = input_R0, y = 100 * vaccine_efficacy_infection, fill = 100 * (1 - (avg_Reff / avg_R0)))) +
   geom_tile(colour = "black") +
   scale_fill_viridis_c(option = "rocket", limits = c(0, 70), begin = 0.175, end = 1,
-                       name = "% Red.\nin R0",
+                       name = "% Red.\nin R",
+                       oob = scales::squish,
                        direction = 1) +
   labs(x = "R0", y = "Vaccine Efficacy (%)") +
   facet_grid(. ~ quarantine_efficacy,
@@ -969,17 +1028,23 @@ SI_Reff_R0_efficacy_plot <- ggplot(subset(R0_efficacy_df, quarantine_efficacy !=
         panel.border = element_rect(linetype = "solid", fill = NA, linewidth = 0.5)) +  # Add black border
   coord_cartesian(expand = FALSE)
 
-SI_timetoN_R0_efficacy_plot <- ggplot(subset(R0_efficacy_df, quarantine_efficacy != 0.35 & vaccine_efficacy_infection != 0), 
-                                      aes(x = input_R0, y = 100 * vaccine_efficacy_infection, fill = avg_time_to_n_relative, alpha = 100 * (1 - proportion_contained))) +
-  geom_tile(colour = "black") +
-  scale_fill_viridis_c(option = "rocket", limits = c(0.9, 1.5), begin = 0.175, end = 1,
-                       breaks = c(1, 1.1, 1.2, 1.3, 1.4, 1.5),
+SI_timetoN_R0_efficacy_plot_part1 <- ggplot(subset(R0_efficacy_df, vaccine_efficacy_infection != 0.0),
+                                            aes(x = input_R0, y = 100 * vaccine_efficacy_infection, fill = avg_time_to_n_relative, alpha = 100 * (1 - proportion_contained))) +
+  geom_tile(colour = "grey") +
+  scale_fill_viridis_c(option = "rocket", limits = c(0.8, max(R0_efficacy_df$avg_time_to_n_relative, na.rm = TRUE)), begin = 0.175, end = 1,
+                       # oob = scales::squish,
                        name = "Fold Increase\nin Time to Epidemic\nThreshold",
                        direction = 1) +
-  scale_alpha(name = "% Outbreaks\nNot Contained") +
+  geom_tile(data = filter(subset(R0_efficacy_df, vaccine_efficacy_infection != 0.0), proportion_contained < 0.5), aes(x = input_R0, y = 100 * vaccine_efficacy_infection),
+            fill = NA, colour = "black", linewidth = 0.5, inherit.aes = FALSE) +
+  scale_alpha(name = "% Outbreaks\nNot Contained",
+              limits = c(0, 100)) +
   labs(x = "R0", y = "Vaccine Efficacy (%)") +
   facet_grid(. ~ quarantine_efficacy,
-             labeller = labeller(quarantine_efficacy = c(`0`   = "No Quarantine", 
+             labeller = labeller(vaccine_efficacy_infection = c(`0` = "No Vaccine",
+                                                                `0.35` = "Vaccine Efficacy = 35%", 
+                                                                `0.75` = "Vaccine Efficacy = 75%"),
+                                 quarantine_efficacy = c(`0`   = "No Quarantine", 
                                                          `0.35` = "Quarantine Efficacy = 35%", 
                                                          `0.65`   = "Quarantine Efficacy = 65%"))) +  
   theme(axis.text = element_text(angle = 0),
@@ -987,12 +1052,36 @@ SI_timetoN_R0_efficacy_plot <- ggplot(subset(R0_efficacy_df, quarantine_efficacy
         legend.title = element_text(size = 12),
         legend.text = element_text(size = 12),
         panel.background = element_blank(),
+        legend.position = "none",
+        strip.text.y = element_text(size = 8),
         strip.background = element_rect(fill = "white", colour = "black"),
         panel.border = element_rect(linetype = "solid", fill = NA, linewidth = 0.5)) +  # Add black border
-  coord_cartesian(expand = FALSE)
+  coord_cartesian(expand = FALSE) 
 
-SI_R0_efficacy_overall <- cowplot::plot_grid(SI_Reff_R0_efficacy_plot, SI_timetoN_R0_efficacy_plot, nrow = 2, rel_heights = c(1, 1), labels = c("A", "B"),
-                                             align = "v", axis = "r")
+R0_Efficacy_legend_df <- expand.grid(colour_val = seq(0.9, max(subset(R0_efficacy_df, vaccine_efficacy_infection != 0.0)$avg_time_to_n_relative, na.rm = TRUE), length.out = 10),
+                                     alpha_val  = seq(0, 1,   length.out = 10))
+SI_timetoN_R0_Efficacy_plot_part2 <- ggplot(R0_Efficacy_legend_df, aes(x = 100 * alpha_val, y = colour_val, fill = colour_val, alpha = alpha_val)) +
+  geom_raster() +
+  scale_fill_viridis_c(option = "rocket", limits = c(.9, max(subset(R0_efficacy_df, vaccine_efficacy_infection != 0.0)$avg_time_to_n_relative, na.rm = TRUE)),
+                       begin = 0.175, end = 1, oob = scales::squish, name = "Fold Increase\n(Time to threshold)") +
+  scale_alpha(range = c(0, 1), name  = "% Outbreaks\nNot Contained") +
+  geom_tile(data = filter(R0_Efficacy_legend_df, alpha_val > 0.5), aes(x = 100 * alpha_val, y = colour_val),
+            fill = NA, colour = "black", inherit.aes = FALSE) +
+  scale_x_continuous(breaks = c(0, 25, 50, 75, 100),
+                     labels = c("100%", "75%", "50%", "25%", "0%")) +
+  guides(fill  = "none", alpha = "none") +
+  labs(y = "Fold Increas in Time to\nEpidemic Threshold", x = "% Outbreaks Controlled") +
+  coord_cartesian(expand = FALSE) +
+  theme_bw() +
+  theme(axis.text.x = element_text(size = 8), axis.text.y = element_text(size = 8),
+        axis.title = element_text(size = 8),
+        panel.background = element_blank(), panel.grid = element_blank())
+
+R0_efficacy_legend <- cowplot::plot_grid(NULL, SI_timetoN_R0_Efficacy_plot_part2, NULL, nrow = 3, rel_heights = c(1, 2, 1))
+
+SI_timetoN_R0_efficacy_plot <- cowplot::plot_grid(SI_timetoN_R0_efficacy_plot_part1, R0_Efficacy_legend, nrow = 1, rel_widths = c(3, 1))
+
+SI_R0_efficacy_overall <- cowplot::plot_grid(SI_Reff_R0_efficacy_plot, SI_timetoN_R0_efficacy_plot, nrow = 2, rel_heights = c(1, 1), labels = c("A", "B"))
 ggsave(file = "figures/Figure_2_SpatialVaccination/FigS2_R0Efficacy_overall.pdf", plot = SI_R0_efficacy_overall, width = 8, height = 6)
 
 ############################################################
@@ -1001,6 +1090,7 @@ ggsave(file = "figures/Figure_2_SpatialVaccination/FigS2_R0Efficacy_overall.pdf"
 main_contained_R0_SurvThresh_plot <- ggplot(subset(R0_SurvThresh_df, quarantine_efficacy != 0.35 & vaccine_efficacy_infection == 0.35), aes(x = input_R0, y = factor(surveillance_threshold), fill = 100 * proportion_contained)) +
   geom_tile(colour = "black") +
   scale_fill_viridis_c(option = "rocket", limits = c(0, 100), begin = 0.175, end = 1, name = "Proportion\nContained",
+                       oob = scales::squish,
                        direction = -1) +
   labs(x = "R0", y = "Surveillance\nThreshold") +
   facet_grid(quarantine_efficacy ~ .,
@@ -1022,6 +1112,7 @@ main_contained_R0_SurvThresh_plot <- ggplot(subset(R0_SurvThresh_df, quarantine_
 SI_contained_R0_SurvThresh_plot <- ggplot(subset(R0_SurvThresh_df, quarantine_efficacy != 0.35), aes(x = input_R0, y = factor(surveillance_threshold), fill = 100 * proportion_contained)) +
   geom_tile(colour = "black") +
   scale_fill_viridis_c(option = "rocket", limits = c(0, 100), begin = 0.175, end = 1, name = "Proportion\nContained",
+                       oob = scales::squish,
                        direction = -1) +
   labs(x = "R0", y = "Surveillance Threshold") +
   facet_grid(quarantine_efficacy ~ vaccine_efficacy_infection,
@@ -1042,7 +1133,8 @@ SI_contained_R0_SurvThresh_plot <- ggplot(subset(R0_SurvThresh_df, quarantine_ef
 SI_Reff_R0_SurvThresh_plot <- ggplot(subset(R0_SurvThresh_df, quarantine_efficacy != 0.35), aes(x = input_R0, y = factor(surveillance_threshold), fill = 100 * (1 - (avg_Reff / avg_R0)))) +
   geom_tile(colour = "black") +
   scale_fill_viridis_c(option = "rocket", limits = c(0, 70), begin = 0.175, end = 1,
-                       name = "% Red.\nin R0",
+                       oob = scales::squish,
+                       name = "% Red.\nin R",
                        direction = 1) +
   labs(x = "R0", y = "Surveillance Threshold") +
   facet_grid(quarantine_efficacy ~ vaccine_efficacy_infection,
@@ -1060,17 +1152,21 @@ SI_Reff_R0_SurvThresh_plot <- ggplot(subset(R0_SurvThresh_df, quarantine_efficac
         panel.border = element_rect(linetype = "solid", fill = NA, linewidth = 0.5)) +  # Add black border
   coord_cartesian(expand = FALSE)
 
-SI_timetoN_R0_SurvThresh_plot <- ggplot(subset(R0_SurvThresh_df, quarantine_efficacy != 0.35 & vaccine_efficacy_infection != 0), 
+SI_timetoN_R0_SurvThresh_plot_part1 <- ggplot(subset(R0_SurvThresh_df, quarantine_efficacy != 0.35), 
                                            aes(x = input_R0, y = factor(surveillance_threshold), fill = avg_time_to_n_relative, alpha = 100 * (1 - proportion_contained))) +
-  geom_tile(colour = "black") +
-  scale_fill_viridis_c(option = "rocket", limits = c(0.9, 1.5), begin = 0.175, end = 1,
-                       breaks = c(1, 1.1, 1.2, 1.3, 1.4, 1.5),
+  geom_tile(colour = "grey") +
+  scale_fill_viridis_c(option = "rocket", limits = c(0.8, max(R0_SurvThresh_df$avg_time_to_n_relative, na.rm = TRUE)), begin = 0.175, end = 1,
+                       oob = scales::squish,
                        name = "Fold Increase\nin Time to Epidemic\nThreshold",
                        direction = 1) +
-  scale_alpha(name = "% Outbreaks\nNot Contained") +
-  labs(x = "R0", y = "Surveillance\nThreshold") +
-  facet_grid(vaccine_efficacy_infection ~ quarantine_efficacy,
-             labeller = labeller(vaccine_efficacy_infection = c(`0.35` = "Vaccine Efficacy = 35%", 
+  geom_tile(data = filter(R0_SurvThresh_df, proportion_contained < 0.5), aes(x = input_R0, y = factor(surveillance_threshold)),
+            fill = NA, colour = "black", linewidth = 0.5, inherit.aes = FALSE) +
+  scale_alpha(name = "% Outbreaks\nNot Contained",
+              limits = c(0, 100)) +
+  labs(x = "R0", y = "Surveillance Threshold") +
+  facet_grid(quarantine_efficacy ~ vaccine_efficacy_infection,
+             labeller = labeller(vaccine_efficacy_infection = c(`0` = "No Vaccine",
+                                                                `0.35` = "Vaccine Efficacy = 35%", 
                                                                 `0.75` = "Vaccine Efficacy = 75%"),
                                  quarantine_efficacy = c(`0`   = "No Quarantine", 
                                                          `0.35` = "Quarantine Efficacy = 35%", 
@@ -1080,15 +1176,39 @@ SI_timetoN_R0_SurvThresh_plot <- ggplot(subset(R0_SurvThresh_df, quarantine_effi
         legend.title = element_text(size = 12),
         legend.text = element_text(size = 12),
         panel.background = element_blank(),
+        legend.position = "none",
+        strip.text.y = element_text(size = 8),
         strip.background = element_rect(fill = "white", colour = "black"),
         panel.border = element_rect(linetype = "solid", fill = NA, linewidth = 0.5)) +  # Add black border
-  coord_cartesian(expand = FALSE) 
+  coord_cartesian(expand = FALSE)
+
+R0_SurvThresh_legend_df <- expand.grid(colour_val = seq(0.9, max(R0_SurvThresh_df$avg_time_to_n_relative, na.rm = TRUE), length.out = 10),
+                                       alpha_val  = seq(0, 1,   length.out = 10))
+SI_timetoN_R0_SurvThresh_plot_part2 <- ggplot(R0_SurvThresh_legend_df, aes(x = 100 * alpha_val, y = colour_val, fill = colour_val, alpha = alpha_val)) +
+  geom_raster() +
+  scale_fill_viridis_c(option = "rocket", limits = c(.9, max(R0_SurvThresh_df$avg_time_to_n_relative, na.rm = TRUE)),
+                       begin = 0.175, end = 1, oob = scales::squish, name = "Fold Increase\n(Time to threshold)") +
+  scale_alpha(range = c(0, 1), name  = "% Outbreaks\nNot Contained") +
+  geom_tile(data = filter(R0_SurvThresh_legend_df, alpha_val > 0.5), aes(x = 100 * alpha_val, y = colour_val),
+            fill = NA, colour = "black", inherit.aes = FALSE) +
+  scale_x_continuous(breaks = c(0, 25, 50, 75, 100),
+                     labels = c("100%", "75%", "50%", "25%", "0%")) +
+  guides(fill  = "none", alpha = "none") +
+  labs(y = "Fold Increas in Time to\nEpidemic Threshold", x = "% Outbreaks Controlled") +
+  coord_cartesian(expand = FALSE) +
+  theme_bw() +
+  theme(axis.text.x = element_text(size = 8), axis.text.y = element_text(size = 8),
+        axis.title = element_text(size = 8),
+        panel.background = element_blank(), panel.grid = element_blank())
+
+R0_SurvThresh_legend <- cowplot::plot_grid(NULL, SI_timetoN_R0_SurvThresh_plot_part2, NULL, nrow = 3, rel_heights = c(1, 2, 1))
+
+SI_timetoN_R0_SurvThresh_plot <- cowplot::plot_grid(SI_timetoN_R0_SurvThresh_plot_part1, R0_SurvThresh_legend, nrow = 1, rel_widths = c(3, 1))
 
 SI_R0_SurvThresh_top_two_thirds <- cowplot::plot_grid(SI_contained_R0_SurvThresh_plot, SI_Reff_R0_SurvThresh_plot, nrow = 2,
                                                          align = "v", axis = "r", labels = c("A", "B"))
-SI_R0_SurvThresh_bottom_third <- cowplot::plot_grid(SI_timetoN_R0_SurvThresh_plot, NULL, ncol = 2, rel_widths = c(1.33, 0.25), labels = c("C", NA))
-SI_R0_SurvThresh_overall <- cowplot::plot_grid(SI_R0_SurvThresh_top_two_thirds, SI_R0_SurvThresh_bottom_third, nrow = 2, rel_heights = c(2, 1))
-ggsave(file = "figures/Figure_2_SpatialVaccination/FigS2_R0SurvThresh_overall.pdf", plot = SI_R0_SpatialRadius_overall, width = 8, height = 11)
+SI_R0_SurvThresh_overall <- cowplot::plot_grid(SI_R0_SurvThresh_top_two_thirds, SI_timetoN_R0_SurvThresh_plot, nrow = 2, rel_heights = c(2, 1))
+ggsave(file = "figures/Figure_2_SpatialVaccination/FigS2_R0SurvThresh_overall.pdf", plot = SI_R0_SurvThresh_overall, width = 8, height = 11)
 
 ## Overall main figure
 Fig1FGH <- cowplot::plot_grid(main_contained_R0_SpatialRadius_plot + theme(legend.position = "none"),
@@ -1099,3 +1219,30 @@ Fig1FGH <- cowplot::plot_grid(main_contained_R0_SpatialRadius_plot + theme(legen
 overall_figure2 <- cowplot::plot_grid(Fig1BCDE, Fig1FGH, nrow = 2, rel_heights = c(1.25, 1))
 ggsave(file = "figures/Figure_2_SpatialVaccination/Fig2_Overall.pdf", plot = overall_figure2, width = 8, height = 9.5)
 
+
+
+### Old Code
+# SI_timetoN_R0_SpatialRadius_plot <- ggplot(subset(R0_SpatialRadius_df, quarantine_efficacy != 0.35 & vaccine_efficacy_infection != 0),
+#                                            aes(x = input_R0, y = factor(spatial_ratio), fill = avg_time_to_n_relative)) +
+#   geom_tile(colour = "black") +
+#   scale_fill_viridis_c(option = "rocket", limits = c(0.9, 1.5), begin = 0.175, end = 1,
+#                        breaks = c(1, 1.1, 1.2, 1.3, 1.4, 1.5),
+#                        oob = scales::squish,
+#                        name = "Fold Increase\nin Time to Epidemic\nThreshold",
+#                        direction = 1) +
+#   scale_alpha(name = "% Outbreaks\nNot Contained") +
+#   labs(x = "R0", y = "Ratio Spatial Vax Radius") +
+#   facet_grid(vaccine_efficacy_infection ~ quarantine_efficacy,
+#              labeller = labeller(vaccine_efficacy_infection = c(`0.35` = "Vaccine Efficacy = 35%", 
+#                                                                 `0.75` = "Vaccine Efficacy = 75%"),
+#                                  quarantine_efficacy = c(`0`   = "No Quarantine", 
+#                                                          `0.35` = "Quarantine Efficacy = 35%", 
+#                                                          `0.65`   = "Quarantine Efficacy = 65%"))) +  
+#   theme(axis.text = element_text(angle = 0),
+#         plot.title = element_text(hjust = 0.5, size = 20, face = "bold"),
+#         legend.title = element_text(size = 12),
+#         legend.text = element_text(size = 12),
+#         panel.background = element_blank(),
+#         strip.background = element_rect(fill = "white", colour = "black"),
+#         panel.border = element_rect(linetype = "solid", fill = NA, linewidth = 0.5)) +  # Add black border
+#   coord_cartesian(expand = FALSE) 

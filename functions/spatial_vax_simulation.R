@@ -5,8 +5,18 @@ spatial_calc <- function(parent_x_coord,
                          spatial_kernel) {
   
   
-  ## Drawing spatial - note that currently time and distance/direction are completely uncorrelated atm
-  distance <- spatial_kernel(n_offspring)
+  ## Drawing distance, corrected so that spatial density is conserved on radial (area) scale
+  m          <- n_offspring * 10  # user supplies a *1D spatial kernel  f(r)  → need to up-weight large r
+  candidates <- spatial_kernel(m)
+  if (any(candidates < 0)){
+    stop("spatial_kernel produced negative distances; check the function.")
+  }
+  w          <- candidates
+  distance   <- sample(candidates, n_offspring,   # importance resampling: weights ∝ r  → target PDF ∝ r * f(r)
+                       replace = TRUE,
+                       prob = w)
+  
+  ## Drawing direction and integrating with distance
   direction <- runif(n_offspring, 0, 2*pi)
   direction_degrees <- 360 * direction / (2 * pi) 
   subtract <- direction_degrees %/% 90
