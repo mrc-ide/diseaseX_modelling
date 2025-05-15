@@ -938,6 +938,9 @@ SI_timetoN_R0_SpatialRadius_plot_part1 <- ggplot(R0_SpatialRadius_df, aes(x = in
                        direction = 1) +
   geom_tile(data = filter(R0_SpatialRadius_df, proportion_contained < 0.5), aes(x = input_R0, y = factor(spatial_ratio)),
             fill = NA, colour = "black", linewidth = 0.5, inherit.aes = FALSE) +
+  geom_text(data = filter(R0_SpatialRadius_df, proportion_contained < 0.5), aes(x = input_R0, y = factor(spatial_ratio),
+                                                                                 label = paste0(sprintf("%.1f", avg_time_to_n_relative), "x")),
+            colour = "white", size = 3, inherit.aes = FALSE) +
   scale_alpha(name = "% Outbreaks\nNot Contained",
               limits = c(0, 1)) +
   labs(x = "R0", y = "Ratio Spatial Vax Radius") +
@@ -1037,6 +1040,9 @@ SI_timetoN_R0_efficacy_plot_part1 <- ggplot(subset(R0_efficacy_df, vaccine_effic
                        direction = 1) +
   geom_tile(data = filter(subset(R0_efficacy_df, vaccine_efficacy_infection != 0.0), proportion_contained < 0.5), aes(x = input_R0, y = 100 * vaccine_efficacy_infection),
             fill = NA, colour = "black", linewidth = 0.5, inherit.aes = FALSE) +
+  geom_text(data = filter(subset(R0_efficacy_df, vaccine_efficacy_infection != 0.0), proportion_contained < 0.5), aes(x = input_R0, y = 100 * vaccine_efficacy_infection,
+                                                                                                                      label = paste0(sprintf("%.1f", avg_time_to_n_relative), "x")),
+            colour = "white", size = 3, inherit.aes = FALSE) +
   scale_alpha(name = "% Outbreaks\nNot Contained",
               limits = c(0, 100)) +
   labs(x = "R0", y = "Vaccine Efficacy (%)") +
@@ -1079,7 +1085,7 @@ SI_timetoN_R0_Efficacy_plot_part2 <- ggplot(R0_Efficacy_legend_df, aes(x = 100 *
 
 R0_efficacy_legend <- cowplot::plot_grid(NULL, SI_timetoN_R0_Efficacy_plot_part2, NULL, nrow = 3, rel_heights = c(1, 2, 1))
 
-SI_timetoN_R0_efficacy_plot <- cowplot::plot_grid(SI_timetoN_R0_efficacy_plot_part1, R0_Efficacy_legend, nrow = 1, rel_widths = c(3, 1))
+SI_timetoN_R0_efficacy_plot <- cowplot::plot_grid(SI_timetoN_R0_efficacy_plot_part1, R0_efficacy_legend, nrow = 1, rel_widths = c(3, 1))
 
 SI_R0_efficacy_overall <- cowplot::plot_grid(SI_Reff_R0_efficacy_plot, SI_timetoN_R0_efficacy_plot, nrow = 2, rel_heights = c(1, 1), labels = c("A", "B"))
 ggsave(file = "figures/Figure_2_SpatialVaccination/FigS2_R0Efficacy_overall.pdf", plot = SI_R0_efficacy_overall, width = 8, height = 6)
@@ -1161,6 +1167,9 @@ SI_timetoN_R0_SurvThresh_plot_part1 <- ggplot(subset(R0_SurvThresh_df, quarantin
                        direction = 1) +
   geom_tile(data = filter(R0_SurvThresh_df, proportion_contained < 0.5), aes(x = input_R0, y = factor(surveillance_threshold)),
             fill = NA, colour = "black", linewidth = 0.5, inherit.aes = FALSE) +
+  geom_text(data = filter(R0_SurvThresh_df, proportion_contained < 0.5), aes(x = input_R0, y = factor(surveillance_threshold),
+                                                                             label = paste0(sprintf("%.1f", avg_time_to_n_relative), "x")),
+            colour = "white", size = 3, inherit.aes = FALSE) +
   scale_alpha(name = "% Outbreaks\nNot Contained",
               limits = c(0, 100)) +
   labs(x = "R0", y = "Surveillance Threshold") +
