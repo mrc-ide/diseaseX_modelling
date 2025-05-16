@@ -569,7 +569,9 @@ containment_df <- overall_bp_df %>%
             Reff_lower = quantile(Reff, 0.1, na.rm = TRUE),
             Reff_upper = quantile(Reff, 0.9, na.rm = TRUE),
             time_to_n = mean(time_to_n, na.rm = TRUE),
-            time_to_n_relative = mean(time_to_n_relative, na.rm = TRUE)) %>%
+            time_to_n_relative_mean = mean(time_to_n_relative, na.rm = TRUE),
+            time_to_n_relative_lower = quantile(time_to_n_relative, 0.25, na.rm  = TRUE),
+            time_to_n_relative_upper = quantile(time_to_n_relative, 0.75, na.rm  = TRUE)) %>%
   mutate(proportion_contained = ifelse(R0 == 1.00, 1, proportion_contained)) %>%
   mutate(scenario = ifelse(scenario == "no_vaccination", "zno_vaccination", scenario)) %>%
   mutate(scenario = ifelse(scenario == "2days_delay", "bvacc_2days_protectDelay", scenario)) %>%
@@ -593,18 +595,50 @@ Fig1BCDE <- plot_grid(plotlist = list(combo_plot$p[[3]], combo_plot$p[[1]], comb
 
 ## Plotting Supplementary Figure looking at time to epidemic threshold
 containment_df2$vaccine_quarantine_elision <- paste0("Vaccine Efficacy = ", containment_df2$vaccine_efficacy_infection, "\nQuarantine Efficacy = ", containment_df2$quarantine_efficacy)
-time_to_n_plot <- ggplot(subset(containment_df2, quarantine_efficacy != 0.35),
-       aes(x = R0, y = time_to_n_relative, col = scenario)) +
+containment_df3 <- containment_df2 %>%
+  filter(R0 > 1) %>%
+  group_by(vaccine_quarantine_elision, pathogen, scenario) %>%
+  mutate(time_to_n_relative_mean2 = ifelse(is.na(time_to_n_relative_mean), max(time_to_n_relative_mean, na.rm = TRUE), time_to_n_relative_mean))
+
+SC2_rectangle_df <- containment_df3 %>% 
+  filter(scenario != "zno_vaccination",
+         quarantine_efficacy != 0.35, 
+         pathogen == "SARS-CoV-2") %>%
+  arrange(R0) %>%                                   # make sure R0 is ordered
+  group_by(vaccine_quarantine_elision, scenario) %>%
+  filter(proportion_contained != 1) %>%             # first time ≠ 100 % contained
+  slice(1) %>%
+  mutate(xmin = 0.75, xmax = R0-0.25, ymin = -Inf, ymax =  Inf)
+
+time_to_n_plot <- ggplot(subset(containment_df3, quarantine_efficacy != 0.35 & 
+                pathogen == "SARS-CoV-2" &
+                scenario != "zno_vaccination"),
+       aes(x = R0, y = time_to_n_relative_mean, col = scenario)) +
   geom_line() +
-  geom_point() +
+  geom_rect_pattern(data = SC2_rectangle_df, 
+                    aes(xmin = xmin, xmax = xmax, ymin = 0, ymax = ymax), 
+                    inherit.aes = FALSE, fill = "grey80", pattern = "stripe",
+                    pattern_angle = 45, pattern_size = 0.4, pattern_density = 0.01,
+                    pattern_spacing = 0.1, pattern_colour = "black", 
+                    alpha = 1) +
+  geom_point(shape = 21, fill  = "white", size  = 8, stroke = 1.1) +
+  geom_text(aes(label = scales::percent(proportion_contained, accuracy = 3)),
+            size = 2.8, vjust = -2, hjust = 0.5) +
+  geom_text(aes(label = paste0(round(time_to_n_relative_mean2, 1), "x")),
+            size = 2.8, vjust = 0.5, hjust = 0.5, col = "black") +
   theme_bw() +
-  facet_grid(vaccine_quarantine_elision~pathogen) + 
+  facet_grid(vaccine_quarantine_elision~scenario, 
+             labeller = labeller(scenario = c(`avacc_no_delay` = "No Delay",
+                                              `bvacc_2days_protectDelay` = "2 Days",
+                                              `dvacc_1week_protectDelay` = "1 Week",
+                                              `evacc_2weeks_protectDelay` = "2 Weeks"))) + 
   scale_colour_manual(values = c("#CA2E6B", "#88C5EE", "#236897", "#13496E", "black"),
                       labels = c("No Delay", "2 Days", "1 Week", "2 Weeks", "No Vaccination"),
                       name = "Vaccine\nProtection\nDelay",
                       guide = guide_legend(reverse = TRUE)) +
   labs(x = "R0", y = "Fold Increase in Time to Epidemic Threshold") +
-  theme(strip.background = element_rect(fill = "white"))
+  theme(strip.background = element_rect(fill = "white")) +
+  lims(y = c(0, 7), x = c(0.75, 2.65))
 ggsave(plot = time_to_n_plot, filename = "figures/Figure_1_RingVaccination/FigS1_ParamScan_timetoN.pdf", height = 8.5, width = 8)
 
 ####################################################################################################################################
