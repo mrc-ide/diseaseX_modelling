@@ -303,7 +303,7 @@ if (fresh_run_R0_sensitivity_analysis) {
   #     print(paste0("i = ", i, ", j = ", j))
   #   }
   # }
-  # stopCluster(cl)
+  stopCluster(cl)
   
   outcome_names <- c("epidemic_size", "time_to_n", "Reff", "R0")
   
@@ -452,19 +452,19 @@ overall_spatial_df2 <- overall_spatial_vax_df2 %>%
 palette <- c("#E3AFCB", "#D474A4", "#B52F7B", "#9C105A", "#6B0045", "#474747")
 overall_spatial_df2$vaccine_quarantine_elision <- paste0("Vaccine Efficacy = ", overall_spatial_df2$vaccine_efficacy_infection, "\nQuarantine Efficacy = ", overall_spatial_df2$quarantine_efficacy)
 overall_spatial_df3 <- overall_spatial_df2 %>%
-  filter(R0 > 1) %>%
-  group_by(vaccine_quarantine_elision, pathogen, scenario) %>%
-  mutate(time_to_n_relative_mean2 = ifelse(is.na(time_to_n_relative_mean), max(time_to_n_relative_mean, na.rm = TRUE), time_to_n_relative_mean))
+  filter(input_R0 > 1) %>%
+  group_by(vaccine_quarantine_elision, pathogen, surveillance) %>%
+  mutate(time_to_n_relative_mean2 = ifelse(is.na(time_to_n_relative), max(time_to_n_relative, na.rm = TRUE), time_to_n_relative))
 
 SC2_rectangle_df <- overall_spatial_df3 %>% 
   filter(surveillance != 10000,
          quarantine_efficacy != 0.35, 
          pathogen == "SARS-CoV-2") %>%
-  arrange(R0) %>%                                   
+  arrange(input_R0) %>%                                   
   group_by(vaccine_quarantine_elision, surveillance) %>%
   filter(proportion_contained != 1) %>%
   slice(1) %>%
-  mutate(xmin = 0.75, xmax = R0-0.25, ymin = -Inf, ymax =  Inf)
+  mutate(xmin = 0.75, xmax = input_R0-0.25, ymin = -Inf, ymax =  Inf)
 
 SC2_time_to_n_plot <- ggplot(subset(overall_spatial_df2, quarantine_efficacy != 0.35 &
                                       pathogen == "SARS-CoV-2" & 
@@ -544,7 +544,7 @@ ggsave(plot = time_to_n_plot, filename = "figures/Figure_2_SpatialVaccination/Fi
 #########################################################################
 ## Parameter scan sensitivity analyses (Figure 2C-E)
 #########################################################################
-fresh_run_vaccination_heatmaps <- FALSE
+fresh_run_vaccination_heatmaps <- TRUE
 tic()
 if (fresh_run_vaccination_heatmaps) {
   
