@@ -69,9 +69,9 @@ vaccine_efficacy_infection_scan <- c(0.35, 0.75)
 vaccine_efficacy_transmission_scan <- c(0.35, 0.5) 
 spatial_ratio_scan <- c(50) # , 100)
 quarantine_efficacy_scan <- c(0, 0.65) # 0.35, 0.65) # from the same article as above
-length(R0_scan) * length(surveillance_scan) * length(vaccine_efficacy_infection_scan) * length(spatial_ratio_scan) * length(quarantine_efficacy_scan) * (50/ (60 * 60)) 
+length(R0_scan) * length(surveillance_scan) * length(vaccine_efficacy_infection_scan) * length(spatial_ratio_scan) * length(quarantine_efficacy_scan)
 
-fresh_run_R0_sensitivity_analysis <- FALSE
+fresh_run_R0_sensitivity_analysis <- TRUE
 if (fresh_run_R0_sensitivity_analysis) {
   
   ## Setting up the cluster to support the parallel runs
@@ -448,19 +448,97 @@ overall_spatial_df2 <- overall_spatial_vax_df2 %>%
             time_to_n = mean(time_to_n, na.rm = TRUE),
             time_to_n_relative = mean(time_to_n_relative, na.rm = TRUE)) 
 
-overall_spatial_df2$vaccine_quarantine_elision <- paste0("Vaccine Efficacy = ", overall_spatial_df2$vaccine_efficacy_infection, "\nQuarantine Efficacy = ", overall_spatial_df2$quarantine_efficacy)
+## Plotting Supplementary Figure looking at time to epidemic threshold
 palette <- c("#E3AFCB", "#D474A4", "#B52F7B", "#9C105A", "#6B0045", "#474747")
-time_to_n_plot <- ggplot(subset(overall_spatial_df2, quarantine_efficacy != 0.35),
-                         aes(x = input_R0, y = time_to_n_relative, col = factor(surveillance))) +
+overall_spatial_df2$vaccine_quarantine_elision <- paste0("Vaccine Efficacy = ", overall_spatial_df2$vaccine_efficacy_infection, "\nQuarantine Efficacy = ", overall_spatial_df2$quarantine_efficacy)
+overall_spatial_df3 <- overall_spatial_df2 %>%
+  filter(R0 > 1) %>%
+  group_by(vaccine_quarantine_elision, pathogen, scenario) %>%
+  mutate(time_to_n_relative_mean2 = ifelse(is.na(time_to_n_relative_mean), max(time_to_n_relative_mean, na.rm = TRUE), time_to_n_relative_mean))
+
+SC2_rectangle_df <- overall_spatial_df3 %>% 
+  filter(surveillance != 10000,
+         quarantine_efficacy != 0.35, 
+         pathogen == "SARS-CoV-2") %>%
+  arrange(R0) %>%                                   
+  group_by(vaccine_quarantine_elision, surveillance) %>%
+  filter(proportion_contained != 1) %>%
+  slice(1) %>%
+  mutate(xmin = 0.75, xmax = R0-0.25, ymin = -Inf, ymax =  Inf)
+
+SC2_time_to_n_plot <- ggplot(subset(overall_spatial_df2, quarantine_efficacy != 0.35 &
+                                      pathogen == "SARS-CoV-2" & 
+                                      surveillance != 10000),
+                             aes(x = input_R0, y = time_to_n_relative, col = factor(surveillance))) +
   geom_line() +
-  geom_point() +
+  geom_rect_pattern(data = SC2_rectangle_df, 
+                    aes(xmin = xmin, xmax = xmax, ymin = 0, ymax = ymax), 
+                    inherit.aes = FALSE, fill = "grey80", pattern = "stripe",
+                    pattern_angle = 45, pattern_size = 0.4, pattern_density = 0.01,
+                    pattern_spacing = 0.1, pattern_colour = "black", 
+                    alpha = 1) +
+  geom_point(shape = 21, fill  = "white", size  = 8, stroke = 1.1) +
+  geom_text(aes(label = scales::percent(proportion_contained, accuracy = 3)),
+            size = 2.8, vjust = -2, hjust = 0.5) +
+  geom_text(aes(label = paste0(round(time_to_n_relative, 1), "x")),
+            size = 2.8, vjust = 0.5, hjust = 0.5, col = "black") +
   theme_bw() +
-  facet_grid(vaccine_quarantine_elision~pathogen) + 
+  facet_grid(vaccine_quarantine_elision ~ surveillance,
+             labeller = labeller(scenario = c(`1` = "1 Hosp.",
+                                              `10` = "10 Hosp.",
+                                              `25` = "25 Hosp.",
+                                              `50` = "50 Hosp.",
+                                              `75` = "75 Hosp."))) + 
   scale_colour_manual(labels = c(paste0(surveillance_scan, " Hosp."), "No\nVaccine"),
                       values = palette,
                       name = "Surveillance\nThreshold\nTrigger") +
   labs(x = "R0", y = "Fold Increase in Time to Epidemic Threshold") +
-  theme(strip.background = element_rect(fill = "white"))
+  theme(strip.background = element_rect(fill = "white"),
+        strip.text.y = element_text(size = 7)) +
+  lims(y = c(0, 7), x = c(0.75, 2.65))
+
+SC1_rectangle_df <- overall_spatial_df3 %>% 
+  filter(surveillance != 10000,
+         quarantine_efficacy != 0.35, 
+         pathogen == "SARS-CoV-1") %>%
+  arrange(R0) %>%                                   
+  group_by(vaccine_quarantine_elision, surveillance) %>%
+  filter(proportion_contained != 1) %>%
+  slice(1) %>%
+  mutate(xmin = 0.75, xmax = R0-0.25, ymin = -Inf, ymax =  Inf)
+
+SC1_time_to_n_plot <- ggplot(subset(overall_spatial_df2, quarantine_efficacy != 0.35 &
+                                      pathogen == "SARS-CoV-1" & 
+                                      surveillance != 10000),
+                             aes(x = input_R0, y = time_to_n_relative, col = factor(surveillance))) +
+  geom_line() +
+  geom_rect_pattern(data = SC1_rectangle_df, 
+                    aes(xmin = xmin, xmax = xmax, ymin = 0, ymax = ymax), 
+                    inherit.aes = FALSE, fill = "grey80", pattern = "stripe",
+                    pattern_angle = 45, pattern_size = 0.4, pattern_density = 0.01,
+                    pattern_spacing = 0.1, pattern_colour = "black", 
+                    alpha = 1) +
+  geom_point(shape = 21, fill  = "white", size  = 8, stroke = 1.1) +
+  geom_text(aes(label = scales::percent(proportion_contained, accuracy = 3)),
+            size = 2.8, vjust = -2, hjust = 0.5) +
+  geom_text(aes(label = paste0(round(time_to_n_relative, 1), "x")),
+            size = 2.8, vjust = 0.5, hjust = 0.5, col = "black") +
+  theme_bw() +
+  facet_grid(vaccine_quarantine_elision ~ surveillance,
+             labeller = labeller(scenario = c(`1` = "1 Hosp.",
+                                              `10` = "10 Hosp.",
+                                              `25` = "25 Hosp.",
+                                              `50` = "50 Hosp.",
+                                              `75` = "75 Hosp."))) + 
+  scale_colour_manual(labels = c(paste0(surveillance_scan, " Hosp."), "No\nVaccine"),
+                      values = palette,
+                      name = "Surveillance\nThreshold\nTrigger") +
+  labs(x = "R0", y = "Fold Increase in Time to Epidemic Threshold") +
+  theme(strip.background = element_rect(fill = "white"),
+        strip.text.y = element_text(size = 7)) +
+  lims(y = c(0, 7), x = c(0.75, 2.65))
+
+time_to_n_plot <- cowplot::plot_grid(SC1_time_to_n_plot, SC2_time_to_n_plot, labels = c("A", "B"), nrow = 2)
 ggsave(plot = time_to_n_plot, filename = "figures/Figure_2_SpatialVaccination/FigS2_ParamScan_timetoN.pdf", height = 8.5, width = 8)
 
 #########################################################################
