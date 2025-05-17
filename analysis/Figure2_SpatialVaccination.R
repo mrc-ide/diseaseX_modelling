@@ -457,7 +457,7 @@ overall_spatial_df3 <- overall_spatial_df2 %>%
   mutate(time_to_n_relative_mean2 = ifelse(is.na(time_to_n_relative), max(time_to_n_relative, na.rm = TRUE), time_to_n_relative))
 
 SC2_rectangle_df <- overall_spatial_df3 %>% 
-  filter(surveillance != 10000,
+  filter(surveillance != "zno_vaccination",
          quarantine_efficacy != 0.35, 
          pathogen == "SARS-CoV-2") %>%
   arrange(input_R0) %>%                                   
@@ -468,7 +468,7 @@ SC2_rectangle_df <- overall_spatial_df3 %>%
 
 SC2_time_to_n_plot <- ggplot(subset(overall_spatial_df2, quarantine_efficacy != 0.35 &
                                       pathogen == "SARS-CoV-2" & 
-                                      surveillance != 10000),
+                                      surveillance != "zno_vaccination"),
                              aes(x = input_R0, y = time_to_n_relative, col = factor(surveillance))) +
   geom_line() +
   geom_rect_pattern(data = SC2_rectangle_df, 
@@ -498,18 +498,18 @@ SC2_time_to_n_plot <- ggplot(subset(overall_spatial_df2, quarantine_efficacy != 
   lims(y = c(0, 7), x = c(0.75, 2.65))
 
 SC1_rectangle_df <- overall_spatial_df3 %>% 
-  filter(surveillance != 10000,
+  filter(surveillance != "zno_vaccination",
          quarantine_efficacy != 0.35, 
          pathogen == "SARS-CoV-1") %>%
-  arrange(R0) %>%                                   
+  arrange(input_R0) %>%                                   
   group_by(vaccine_quarantine_elision, surveillance) %>%
   filter(proportion_contained != 1) %>%
   slice(1) %>%
-  mutate(xmin = 0.75, xmax = R0-0.25, ymin = -Inf, ymax =  Inf)
+  mutate(xmin = 0.75, xmax = input_R0-0.25, ymin = -Inf, ymax =  Inf)
 
 SC1_time_to_n_plot <- ggplot(subset(overall_spatial_df2, quarantine_efficacy != 0.35 &
                                       pathogen == "SARS-CoV-1" & 
-                                      surveillance != 10000),
+                                      surveillance != "zno_vaccination"),
                              aes(x = input_R0, y = time_to_n_relative, col = factor(surveillance))) +
   geom_line() +
   geom_rect_pattern(data = SC1_rectangle_df, 
@@ -539,12 +539,12 @@ SC1_time_to_n_plot <- ggplot(subset(overall_spatial_df2, quarantine_efficacy != 
   lims(y = c(0, 7), x = c(0.75, 2.65))
 
 time_to_n_plot <- cowplot::plot_grid(SC1_time_to_n_plot, SC2_time_to_n_plot, labels = c("A", "B"), nrow = 2)
-ggsave(plot = time_to_n_plot, filename = "figures/Figure_2_SpatialVaccination/FigS2_ParamScan_timetoN.pdf", height = 8.5, width = 8)
+ggsave(plot = time_to_n_plot, filename = "figures/Figure_2_SpatialVaccination/FigS2_ParamScan_timetoN.pdf", height = 12, width = 12)
 
 #########################################################################
 ## Parameter scan sensitivity analyses (Figure 2C-E)
 #########################################################################
-fresh_run_vaccination_heatmaps <- TRUE
+fresh_run_vaccination_heatmaps <- FALSE
 tic()
 if (fresh_run_vaccination_heatmaps) {
   
