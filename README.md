@@ -1,5 +1,7 @@
 # diseaseX_modelling
 
+[![DOI](https://zenodo.org/badge/629037925.svg)](https://doi.org/10.5281/zenodo.15864815)
+
 🦠🌍😷Modelling the deployment of a broad-spectrum vaccine against a
 hypothetical "Disease X", caused by novel sarbecovirus with pandemic
 potential 🦠🌍😷
