@@ -71,7 +71,7 @@ spatial_ratio_scan <- c(50) # , 100)
 quarantine_efficacy_scan <- c(0, 0.65) # 0.35, 0.65) # from the same article as above
 length(R0_scan) * length(surveillance_scan) * length(vaccine_efficacy_infection_scan) * length(spatial_ratio_scan) * length(quarantine_efficacy_scan)
 
-fresh_run_R0_sensitivity_analysis <- TRUE
+fresh_run_R0_sensitivity_analysis <- FALSE
 if (fresh_run_R0_sensitivity_analysis) {
   
   ## Setting up the cluster to support the parallel runs
@@ -668,7 +668,7 @@ if (fresh_run_vaccination_heatmaps) {
   #######################################################################
   
   ## Parameter scan arguments
-  vaccine_efficacy_scan_full <- c(0, seq(0.3, 0.9, 0.1))
+  vaccine_efficacy_scan_full <- c(0, seq(0.15, 0.75, 0.1))
   storage_R0_VaccineEff_sensitivity <- array(data = NA, dim = c(iterations, length(R0_seq), length(vaccine_efficacy_scan_full), length(quarantine_efficacy_scan), 4))
   
   ## Setting up the cluster to support the parallel runs
