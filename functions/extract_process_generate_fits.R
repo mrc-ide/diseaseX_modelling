@@ -172,7 +172,8 @@ get_country_draws <- function(country_iso = "IRN") {
 }
 
 # Defining function
-evaluate_country_impact2 <- function(original_fit, country_iso = "IRN", vaccination_rate, bpsv_start_date, coverage) {
+evaluate_country_impact2 <- function(original_fit, country_iso = "IRN", vaccination_rate, bpsv_start_date, coverage,
+                                     efficacy_infection_bpsv = 0.35, efficacy_disease_bpsv = 0.75) {
   
   # Loading in various components for evaluating impact
   excess <- readRDS(paste0("outputs/Figure3_SC2_Counterfactual_Impact/unprocessed_outputs/", country_iso, "_fit.rds"))
@@ -231,7 +232,7 @@ evaluate_country_impact2 <- function(original_fit, country_iso = "IRN", vaccinat
   booster_doses <- vaccine_doses$booster_doses
   
   ## Generating vaccine efficacy matrices
-  ve_bpsv <- list(infection = temp$efficacy_infection_bpsv, disease = temp$efficacy_disease_bpsv)
+  ve_bpsv <- list(infection = efficacy_infection_bpsv, disease = efficacy_disease_bpsv)
   ve_spec <- list(infection = 0, disease = 0)
   
   ### Infection Efficacy

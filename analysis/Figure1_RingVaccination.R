@@ -795,7 +795,7 @@ if (fresh_run_vaccination_heatmaps) {
   Tg_ratio_fixed <- 2.5
   generation_time <- function(n) { rgamma(n, shape = 2 * vaccine_protection_delay * Tg_ratio_fixed, rate = 2) }
   infection_to_onset <- function(n) { rgamma(n, shape = (2 * vaccine_protection_delay * Tg_ratio_fixed)/3, rate = 2) }
-  vaccine_efficacy_seq <- c(0, seq(0.3, 0.9, 0.1))
+  vaccine_efficacy_seq <- c(0, seq(0.15, 0.75, 0.1)) # c(0, seq(0.3, 0.9, 0.1))
   storage_R0_efficacy_sensitivity <- array(data = NA, dim = c(iterations, length(R0_seq), length(vaccine_efficacy_seq), 
                                                               length(quarantine_efficacy_scan), 4))
   for (i in 1:length(R0_seq)) {
@@ -1179,7 +1179,7 @@ main_contained_R0_efficacy_plot <- ggplot(subset(R0_efficacy_df, quarantine_effi
 
 SI_Reff_R0_efficacy_plot <- ggplot(subset(R0_efficacy_df, quarantine_efficacy != 0.35 & vaccine_efficacy_infection != 0.0), aes(x = input_R0, y = 100 * vaccine_efficacy_infection, fill = 100 * (1 - (avg_Reff / avg_R0)))) +
   geom_tile(colour = "black") +
-  scale_fill_viridis_c(option = "mako", limits = c(20, 70), begin = 0.175, end = 1,
+  scale_fill_viridis_c(option = "mako", limits = c(10, 70), begin = 0.175, end = 1,
                        name = "% Red.\nin R",
                        direction = 1) +
   labs(x = "R0", y = "Vaccine Efficacy (%)") +
