@@ -345,7 +345,7 @@ if (fresh_run_R0_sensitivity_analysis) {
   
   SC1_reshaped2 <- rbind(SC1_vaccine_reshaped) # , SC1_no_vaccine_reshaped)
   SC1_reshaped2$pathogen <- "SARS-CoV-1"
-  saveRDS(SC1_reshaped2, "outputs/Figure1_branchingProcess_Containment/Fig2_spatialVaccination_SC1_paramScan.rds")
+  saveRDS(SC1_reshaped2, "outputs/Figure2_spatialVaccination/Fig2_spatialVaccination_SC1_paramScan.rds")
   
   # SARS-CoV-2 Results Processing
   
@@ -385,12 +385,12 @@ if (fresh_run_R0_sensitivity_analysis) {
   
   SC2_reshaped2 <- rbind(SC2_vaccine_reshaped) # , SC2_no_vaccine_reshaped)
   SC2_reshaped2$pathogen <- "SARS-CoV-2"
-  saveRDS(SC2_reshaped2, "outputs/Figure1_branchingProcess_Containment/Fig2_spatialVaccination_SC2_paramScan.rds")
+  saveRDS(SC2_reshaped2, "outputs/Figure2_spatialVaccination/Fig2_spatialVaccination_SC2_paramScan.rds")
   
 } else {
   
-  SC1_reshaped2 <- readRDS("outputs/Figure1_branchingProcess_Containment/Fig2_spatialVaccination_SC1_paramScan.rds")
-  SC2_reshaped2 <- readRDS("outputs/Figure1_branchingProcess_Containment/Fig2_spatialVaccination_SC2_paramScan.rds")
+  SC1_reshaped2 <- readRDS("outputs/Figure2_spatialVaccination/Fig2_spatialVaccination_SC1_paramScan.rds")
+  SC2_reshaped2 <- readRDS("outputs/Figure2_spatialVaccination/Fig2_spatialVaccination_SC2_paramScan.rds")
   
 }
 
@@ -661,7 +661,7 @@ if (fresh_run_vaccination_heatmaps) {
     dplyr::select(iteration, input_R0, -R0, spatial_ratio, vaccine_efficacy_infection, vaccine_efficacy_transmission, 
                   quarantine_efficacy, outcome, value, -vaccine_efficacy) %>%
     pivot_wider(names_from = "outcome", values_from = value)
-  saveRDS(object = reshaped_R0_SpatialRadius_sensitivity, file = "outputs/Figure1_branchingProcess_Containment/Fig2_spatialVaccination_R0SpatialScan.rds")
+  saveRDS(object = reshaped_R0_SpatialRadius_sensitivity, file = "outputs/Figure2_spatialVaccination/Fig2_spatialVaccination_R0SpatialScan.rds")
 
   #######################################################################
   ## Sensitivity Analysis - R0 vs Vaccine Efficacy
@@ -759,7 +759,7 @@ if (fresh_run_vaccination_heatmaps) {
     dplyr::select(iteration, input_R0, -R0, vaccine_efficacy_infection, vaccine_efficacy_transmission, 
                   quarantine_efficacy, outcome, value, -vaccine_efficacy) %>%
     pivot_wider(names_from = "outcome", values_from = value)
-  saveRDS(object = reshaped_R0_VaccineEff_sensitivity, file = "outputs/Figure1_branchingProcess_Containment/Fig2_spatialVaccination_R0Efficacy.rds")
+  saveRDS(object = reshaped_R0_VaccineEff_sensitivity, file = "outputs/Figure2_spatialVaccination/Fig2_spatialVaccination_R0Efficacy.rds")
   
   #######################################################################
   ## Sensitivity Analysis - R0 vs Surveillance Threshold
@@ -860,13 +860,13 @@ if (fresh_run_vaccination_heatmaps) {
     dplyr::select(iteration, input_R0, -R0, surveillance_threshold, vaccine_efficacy_infection, vaccine_efficacy_transmission, 
                   quarantine_efficacy, outcome, value, -vaccine_efficacy) %>%
     pivot_wider(names_from = "outcome", values_from = value)
-  saveRDS(object = reshaped_R0_SurvThreshold_sensitivity, file = "outputs/Figure1_branchingProcess_Containment/Fig2_spatialVaccination_R0SurvThreshold.rds")
+  saveRDS(object = reshaped_R0_SurvThreshold_sensitivity, file = "outputs/Figure2_spatialVaccination/Fig2_spatialVaccination_R0SurvThreshold.rds")
   
 } else {
   
-  reshaped_R0_SpatialRadius_sensitivity <- readRDS(file = "outputs/Figure1_branchingProcess_Containment/Fig2_spatialVaccination_R0SpatialScan.rds")
-  reshaped_R0_VaccineEff_sensitivity <- readRDS(file = "outputs/Figure1_branchingProcess_Containment/Fig2_spatialVaccination_R0Efficacy.rds")
-  reshaped_R0_SurvThreshold_sensitivity <- readRDS(file = "outputs/Figure1_branchingProcess_Containment/Fig2_spatialVaccination_R0SurvThreshold.rds")
+  reshaped_R0_SpatialRadius_sensitivity <- readRDS(file = "outputs/Figure2_spatialVaccination/Fig2_spatialVaccination_R0SpatialScan.rds")
+  reshaped_R0_VaccineEff_sensitivity <- readRDS(file = "outputs/Figure2_spatialVaccination/Fig2_spatialVaccination_R0Efficacy.rds")
+  reshaped_R0_SurvThreshold_sensitivity <- readRDS(file = "outputs/Figure2_spatialVaccination/Fig2_spatialVaccination_R0SurvThreshold.rds")
   
 }
 toc()

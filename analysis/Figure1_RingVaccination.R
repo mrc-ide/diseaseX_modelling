@@ -552,9 +552,9 @@ if (fresh_run_R0_sensitivity_analysis) {
       by = c("iteration", "scenario", "pathogen", "R0", "vaccine_efficacy_infection", "vaccine_efficacy_transmission", "quarantine_efficacy"))
   
   saveRDS(object = overall_bp_df,
-          file = "outputs/Figure1_branchingProcess_Containment/Fig1_ringVaccination_paramScan.rds")
+          file = "outputs/Figure1_ringVaccination/Fig1_ringVaccination_paramScan.rds")
 } else {
-  overall_bp_df <- readRDS("outputs/Figure1_branchingProcess_Containment/Fig1_ringVaccination_paramScan.rds")
+  overall_bp_df <- readRDS("outputs/Figure1_ringVaccination/Fig1_ringVaccination_paramScan.rds")
 }
 
 ## Plotting the proportion of outbreaks controlled
@@ -782,7 +782,7 @@ if (fresh_run_vaccination_heatmaps) {
     dplyr::select(iteration, input_R0, -R0, Tg_Ratio, vaccine_efficacy_infection, vaccine_efficacy_transmission, 
                   quarantine_efficacy, outcome, value, -vaccine_efficacy) %>%
     pivot_wider(names_from = "outcome", values_from = value)
-  saveRDS(object = reshaped_R0_TgRatio_sensitivity, file = "outputs/Figure1_branchingProcess_Containment/Fig1_ringVaccination_R0TgRatio.rds")
+  saveRDS(object = reshaped_R0_TgRatio_sensitivity, file = "outputs/Figure1_ringVaccination/Fig1_ringVaccination_R0TgRatio.rds")
   storage_R0_TgRatio_df <- reshaped_R0_TgRatio_sensitivity
   
   #######################################################################
@@ -862,7 +862,7 @@ if (fresh_run_vaccination_heatmaps) {
     dplyr::select(iteration, input_R0, -R0, vaccine_efficacy_infection, vaccine_efficacy_transmission, 
                   quarantine_efficacy, outcome, value, -vaccine_efficacy) %>%
     pivot_wider(names_from = "outcome", values_from = value)
-  saveRDS(object = reshaped_R0_efficacy_sensitivity, file = "outputs/Figure1_branchingProcess_Containment/Fig1_ringVaccination_R0Efficacy.rds")
+  saveRDS(object = reshaped_R0_efficacy_sensitivity, file = "outputs/Figure1_ringVaccination/Fig1_ringVaccination_R0Efficacy.rds")
   storage_R0_efficacy_df <- reshaped_R0_efficacy_sensitivity
     
   #######################################################################
@@ -945,13 +945,13 @@ if (fresh_run_vaccination_heatmaps) {
     dplyr::select(iteration, input_R0, -R0, prop_preSymp, vaccine_efficacy_infection, vaccine_efficacy_transmission, 
                   quarantine_efficacy, outcome, value, -vaccine_efficacy) %>%
     pivot_wider(names_from = "outcome", values_from = value)
-  saveRDS(object = reshaped_R0_preSymp_sensitivity, file = "outputs/Figure1_branchingProcess_Containment/Fig1_ringVaccination_R0preSymp.rds")
+  saveRDS(object = reshaped_R0_preSymp_sensitivity, file = "outputs/Figure1_ringVaccination/Fig1_ringVaccination_R0preSymp.rds")
   storage_R0_preSymp_df <- reshaped_R0_preSymp_sensitivity
   
 } else {
-  storage_R0_TgRatio_df <- readRDS("outputs/Figure1_branchingProcess_Containment/Fig1_ringVaccination_R0TgRatio.rds")
-  storage_R0_efficacy_df <- readRDS("outputs/Figure1_branchingProcess_Containment/Fig1_ringVaccination_R0Efficacy.rds")
-  storage_R0_preSymp_df <- readRDS("outputs/Figure1_branchingProcess_Containment/Fig1_ringVaccination_R0preSymp.rds")
+  storage_R0_TgRatio_df <- readRDS("outputs/Figure1_ringVaccination/Fig1_ringVaccination_R0TgRatio.rds")
+  storage_R0_efficacy_df <- readRDS("outputs/Figure1_ringVaccination/Fig1_ringVaccination_R0Efficacy.rds")
+  storage_R0_preSymp_df <- readRDS("outputs/Figure1_ringVaccination/Fig1_ringVaccination_R0preSymp.rds")
 }
 
 ## Creating Vaccination-Related Heatmaps
