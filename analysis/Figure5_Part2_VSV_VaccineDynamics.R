@@ -101,9 +101,9 @@ if (fresh_run) {
   plan(multisession, workers = cores) # multicore does nothing on windows as multicore isn't supported
   system.time({out <- future_pmap(bpsv_implementation_scenarios, run_sars_x, .progress = TRUE, .options = furrr_options(seed = 123))})
   model_outputs <- format_multirun_output(output_list = out, parallel = TRUE, cores = cores)
-  saveRDS(model_outputs, "outputs/Figure_5_DiseaseSpecific_Dev_Access/Figure4_ImplementationDynamics_exploration.rds")
+  saveRDS(model_outputs, "outputs/Figure5_VaccineProperties/Figure5_ImplementationDynamics_exploration.rds")
 } else {
-  model_outputs <- readRDS("outputs/Figure4_VaccineProperties/Figure4_ImplementationDynamics_exploration.rds")
+  model_outputs <- readRDS("outputs/Figure5_VaccineProperties/Figure5_ImplementationDynamics_exploration.rds")
 }
 
 ## Joining back in the detection metrics
@@ -209,11 +209,11 @@ bpsv_rate_plot_supp <- ggplot(subset(bpsv_rate_plotting, R0 != 2.5 & detection_t
   theme(legend.position = "none",
         strip.background = element_rect(fill = "white"))
 
-supp_fig3_first_half <- readRDS("outputs/Figure4_VaccineProperties/SuppFig3_R0_vaccine_properties_figure.rds")
+supp_fig3_first_half <- readRDS("outputs/Figure5_VaccineProperties/SuppFig3_R0_vaccine_properties_figure.rds")
 supp_fig3_final <- cowplot::plot_grid(supp_fig3_first_half, bpsv_coverage_plot_supp, bpsv_rate_plot_supp,
                                       nrow = 1, rel_widths = c(3, 1, 1),
                                       labels = c(NA, "D", "E"))
-ggsave(filename = "figures/Figure_4_VaccineProperties/SuppFig3_R0_vaccine_properties_complete.pdf",
+ggsave(filename = "figures/Figure_5_VaccineProperties/SuppFig3_R0_vaccine_properties_complete.pdf",
        plot = supp_fig3_final,
        width = 14.5,
        height = 4.65)
@@ -302,9 +302,9 @@ if (fresh_run) {
   plan(multisession, workers = cores) # multicore does nothing on windows as multicore isn't supported
   system.time({out <- future_pmap(final_vacc_delay_scenarios2, run_sars_x, .progress = TRUE, .options = furrr_options(seed = 123))})
   model_outputs <- format_multirun_output(output_list = out, parallel = TRUE, cores = cores)
-  saveRDS(model_outputs, "outputs/Figure5_DiseaseSpecific_Dev_Access/Figure4_VSVDelay_exploration.rds")
+  saveRDS(model_outputs, "outputs/Figure5_VaccineProperties/Figure5_VSVDelay_exploration.rds")
 } else {
-  model_outputs <- readRDS("outputs/Figure4_VaccineProperties/Figure4_VSVDelay_exploration.rds")
+  model_outputs <- readRDS("outputs/Figure5_VaccineProperties/Figure5_VSVDelay_exploration.rds")
 }
 
 ## Downstream here I need to create columns for different access timings based on an assumed development time
@@ -395,7 +395,7 @@ continent_delay_plot <- ggplot(data = subset(delay_plotting, NPI_int == 7)) +
     ggplotGrob(world),
     xmin = 0.25, xmax = 2.1, ymin = 4.2, ymax = 6.5)
 
-fig4_first_half <- readRDS(file = "outputs/Figure4_VaccineProperties/Figure4_figure_first_half.rds")
+fig4_first_half <- readRDS(file = "outputs/Figure5_VaccineProperties/Figure5_figure_first_half.rds")
 bpsv_implementation_plots <- cowplot::plot_grid(bpsv_coverage_plot, bpsv_rate_plot, labels = c("D", "E"), nrow = 2)
 access_plot <- cowplot::plot_grid(access_delay_empirical_boxplot, continent_delay_plot, labels = c("F", "G"),
                                   nrow = 2, rel_heights = c(1, 2), align = "v", axis = "l")
@@ -403,7 +403,7 @@ x <- cowplot::plot_grid(fig4_first_half,
                    bpsv_implementation_plots, 
                    access_plot,
                    ncol = 3, rel_widths = c(2, 1, 1.5))
-ggsave(filename = "figures/Figure_4_VaccineProperties/Fig4_BPSVProperties_VSVDynamics",
+ggsave(filename = "figures/Figure_5_VaccineProperties/Fig5_BPSVProperties_VSVDynamics",
        plot = x,
        width = 13, 
        height = 5.8)                                                

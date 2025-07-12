@@ -132,9 +132,9 @@ if (fresh_run) {
   plan(multisession, workers = cores) # multicore does nothing on windows as multicore isn't supported
   system.time({out <- future_pmap(vaccine_property_scenarios, run_sars_x, .progress = TRUE, .options = furrr_options(seed = 123))})
   model_outputs <- format_multirun_output(output_list = out, parallel = TRUE, cores = cores)
-  saveRDS(model_outputs, "outputs/Figure4_VaccineProperties/Figure4_BPSVproperties_exploration.rds")
+  saveRDS(model_outputs, "outputs/Figure5_VaccineProperties/Figure5_BPSVproperties_exploration.rds")
 } else {
-  model_outputs <- readRDS("outputs/Figure4_VaccineProperties/Figure4_BPSVproperties_exploration.rds")
+  model_outputs <- readRDS("outputs/Figure5_VaccineProperties/Figure5_BPSVproperties_exploration.rds")
 }
 
 ## Joining back in the detection metrics
@@ -411,8 +411,8 @@ bpsv_inf_efficacy_plot_supp <- ggplot(subset(bpsv_inf_efficacy_plotting, R0 != 2
 
 supp_fig3_first_half <- cowplot::plot_grid(disease_efficacy_plot_supp, dur_protect_plot_supp, bpsv_inf_efficacy_plot_supp,
                                            nrow = 1, labels = c("A", "B", "C"))
-saveRDS(supp_fig3_first_half, "outputs/Figure4_VaccineProperties/SuppFig3_R0_vaccine_properties_figure.rds")
-ggsave(filename = "figures/Figure_4_VaccineProperties/SuppFig3_R0_vaccine_properties_firsthalf.pdf",
+saveRDS(supp_fig3_first_half, "outputs/Figure5_VaccineProperties/SuppFig3_R0_vaccine_properties_figure.rds")
+ggsave(filename = "figures/Figure_5_VaccineProperties/SuppFig3_R0_vaccine_properties_firsthalf.pdf",
        plot = supp_fig3_first_half,
        height = 8)
 
@@ -442,5 +442,5 @@ temp <- cowplot::plot_grid(bpsv_inf_efficacy_plot, dur_protect_plot, nrow = 2, l
 fig_4_first_half <- cowplot::plot_grid(disease_efficacy_plot2, temp, 
                                        labels = c("A", NA), rel_widths = c(1.2, 1))
 saveRDS(fig_4_first_half,
-        file = "outputs/Figure4_VaccineProperties/Figure4_figure_first_half.rds")
+        file = "outputs/Figure5_VaccineProperties/Figure5_figure_first_half.rds")
 
