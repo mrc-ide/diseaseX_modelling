@@ -256,7 +256,7 @@ x <- cowplot::plot_grid(deaths_averted_plot, NPI_days_averted,
 Figure2 <- cowplot::plot_grid(NPI_plot, x,
                               nrow = 1, rel_widths = c(1, 1.4 + 2.4/3.75),
                               labels = c("B", NA))
-ggsave(filename = "figures/Figure_2_FrameworkIntro/Fig2BCD_NPI_BPSVImpact_DaysAverted.pdf", 
+ggsave(filename = "figures/Figure_3_BPSV_SARS_X/Fig3BCD_NPI_BPSVImpact_DaysAverted.pdf", 
        plot = Figure2, width = 9.25 + (9.25 * 1/3.75), height = 7.5)
 
 ## Supplementary Figure
@@ -310,7 +310,7 @@ deaths_supp_plot <- cowplot::plot_grid(absolute_deaths_plot_supp, deaths_averted
                                        nrow = 1, labels = c("B", "C"))
 supp_deaths_plot_final <- cowplot::plot_grid(NPI_plot_supp, deaths_supp_plot, nrow = 2, rel_heights = c(1, 3),
                                              labels = c("A", NA))
-ggsave(filename = "figures/Figure_2_FrameworkIntro/Supp_Figure1_NPI_Plot_Sensitivity.pdf",
+ggsave(filename = "figures/Figure_3_BPSV_SARS_X/Supp_Figure1_NPI_Plot_Sensitivity.pdf",
        plot = supp_deaths_plot_final,
        height = 8,
        width = 13)

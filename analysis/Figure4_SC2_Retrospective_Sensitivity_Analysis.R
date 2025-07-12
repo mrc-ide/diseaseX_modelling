@@ -283,7 +283,7 @@ supp_figure <- ggplot(overall_impact_deaths) +
   theme_bw() +
   scale_y_continuous(labels = c("1M", "2M", "3M", "4M", "5M", "6M"),
                      breaks = c(1e6, 2e6, 3e6, 4e6, 5e6, 6e6))
-ggsave(filename = "figures/Figure_3_BPSV_SC2_Impact/SuppFigure_VaryingStartTrigger_VaryingVaxRate.pdf",
+ggsave(filename = "figures/Figure_4_BPSV_SC2_Impact/SuppFigure_VaryingStartTrigger_VaryingVaxRate.pdf",
        plot = supp_figure,
        width = 10, height = 6)
 
@@ -483,7 +483,7 @@ row1_alt <- cowplot::plot_grid(c_alt_final, world_map + theme(legend.position = 
 row2_alt <- cowplot::plot_grid(ita_plot, irn_plot, bgd_plot, ncol = 3, labels = c("E", "F", "G"))
 full_plot_alt <- cowplot::plot_grid(row1_alt, row2_alt, nrow = 2, 
                                     rel_heights = c(1.25, 1), align = "v", axis = "lr")
-ggsave(filename = "figures/Figure_3_BPSV_SC2_Impact/Fig3_SC_BPSVImpact_Overall.pdf",
+ggsave(filename = "figures/Figure_4_BPSV_SC2_Impact/Fig4_SC2_BPSVImpact_Overall.pdf",
        plot = full_plot_alt,
        width = 10.27, height = 6)
 
