@@ -96,7 +96,7 @@ seed_infections <- function(squire_model, country, seeding_cases){
 get_country_draws <- function(country_iso = "IRN") {
   
   # Getting fits for country with excess deaths and extracting the Rt
-  excess <- readRDS(paste0("outputs/Figure3_SC2_Counterfactual_Impact/unprocessed_outputs/", country_iso, "_fit.rds"))
+  excess <- readRDS(paste0("outputs/Figure4_SC2_Counterfactual_Impact/unprocessed_outputs/", country_iso, "_fit.rds"))
   out <- squire.page:::generate_draws.rt_optimised(excess)
   daily <- get_deaths_infections_hosps_time(out) %>%
     group_by(replicate) %>%
@@ -173,10 +173,10 @@ get_country_draws <- function(country_iso = "IRN") {
 
 # Defining function
 evaluate_country_impact2 <- function(original_fit, country_iso = "IRN", vaccination_rate, bpsv_start_date, coverage,
-                                     efficacy_infection_bpsv = 0.35, efficacy_disease_bpsv = 0.75) {
+                                     efficacy_infection_bpsv, efficacy_disease_bpsv) {
   
   # Loading in various components for evaluating impact
-  excess <- readRDS(paste0("outputs/Figure3_SC2_Counterfactual_Impact/unprocessed_outputs/", country_iso, "_fit.rds"))
+  excess <- readRDS(paste0("outputs/Figure4_SC2_Counterfactual_Impact/unprocessed_outputs/", country_iso, "_fit.rds"))
   out <- original_fit$out
   rep_summary <- original_fit$model_fit
   daily <- original_fit$daily
