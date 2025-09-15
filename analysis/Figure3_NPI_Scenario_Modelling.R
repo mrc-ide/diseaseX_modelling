@@ -15,7 +15,7 @@ bp_df_long <- readRDS("outputs/Figure1_ringVaccination/bp_detection_times.rds")
 detection_threshold_inf <- unique(bp_df_long$detection)[detection_theshold_hosp]
 bp_subset <- bp_df_long %>%
   filter(R0 %in% R0_subset, detection == detection_threshold_inf, metric == "Daily Incidence") %>%
-  select(-iteration) %>%
+  # select(-iteration) %>%
   filter(!is.infinite(value)) %>%
   group_by(R0) %>%
   summarise(time_to_detection = round(mean(value)))
@@ -192,15 +192,34 @@ deaths_averted_plot <- absolute_deaths_plot +
 ## Calculating percent reduction in deaths
 subset(model_outputs2, R0 == 2.5 & specific_vaccine_start %in% 250) %>%
   mutate(perc_reduction = 100 * (deaths_spec - deaths_bpsv) / deaths_spec) %>%
-  select(NPI_int, perc_reduction) %>%
+  select(NPI_int3, composite_NPI_bpsv, perc_reduction) %>%
+  group_by(NPI_int3, composite_NPI_bpsv) %>%
   summarise(median = median(perc_reduction),
             mean = mean(perc_reduction))
 
-test <- subset(model_outputs2, R0 == 2.5 & specific_vaccine_start %in% spec_dev_scenarios)
+subset(model_outputs2, R0 == 3.5 & specific_vaccine_start %in% 250) %>%
+  mutate(perc_reduction = 100 * (deaths_spec - deaths_bpsv) / deaths_spec) %>%
+  select(NPI_int3, composite_NPI_bpsv, perc_reduction) %>%
+  group_by(NPI_int3, composite_NPI_bpsv) %>%
+  summarise(median = median(perc_reduction),
+            mean = mean(perc_reduction))
+
+subset(model_outputs2, R0 == 3.5 & specific_vaccine_start %in% 100) %>%
+  mutate(perc_reduction = 100 * (deaths_spec - deaths_bpsv) / deaths_spec) %>%
+  select(NPI_int3, composite_NPI_bpsv, deaths_spec, deaths_bpsv, bpsv_deaths_averted, perc_reduction) %>%
+  group_by(NPI_int3, composite_NPI_bpsv) %>%
+  summarise(median = median(perc_reduction),
+            mean = mean(perc_reduction),
+            deaths_spec = 1000 * deaths_spec /  default$population_size,
+            deaths_bpsv = 1000 * deaths_bpsv /  default$population_size)
+
+
+test <- subset(model_outputs2, R0 == 3.5 & specific_vaccine_start %in% spec_dev_scenarios)
 frontiers <- data.frame(specific_vaccine_start = test$specific_vaccine_start,
                         deaths = test$deaths_spec, 
                         NPI_int = test$NPI_int,
-                        NPI_days = test$composite_NPI_spec) %>% 
+                        NPI_days = test$composite_NPI_spec,
+                        NPI_days_raw = test$time_under_NPIs_bpsv) %>% 
   group_by(specific_vaccine_start) %>% 
   group_modify(~pareto_frontier(.x))
 frontiers$new_NPI_days <- floor(frontiers$NPI_days)
@@ -216,6 +235,10 @@ new_NPI_days_250 <- sapply(test_250$deaths_bpsv, function(x) {
   temp_df <- interpolated_frontiers_250[which.min(abs(x - interpolated_frontiers_250$deaths)), ]
   return(temp_df$new_NPI_days)
 })
+cepi_test_250 <- data.frame(specific_vaccine_start = as.factor(250), 
+                            NPI_int = test_250$NPI_int3, 
+                            new_NPI_days = new_NPI_days_250)
+
 test_100 <- test %>%
   filter(specific_vaccine_start == 100)
 interpolated_frontiers_100 <- interpolated_frontiers %>%
@@ -224,6 +247,9 @@ new_NPI_days_100 <- sapply(test_100$deaths_bpsv, function(x) {
   temp_df <- interpolated_frontiers_100[which.min(abs(x - interpolated_frontiers_100$deaths)), ]
   return(temp_df$new_NPI_days)
 })
+cepi_test_100 <- data.frame(specific_vaccine_start = as.factor(100), 
+                            NPI_int = test_100$NPI_int3, 
+                            new_NPI_days = new_NPI_days_100)
 
 new_NPI_days_250 - test_250$composite_NPI_bpsv
 ordering_250 <- NPI_composite_df$NPI_int[order(NPI_composite_df$composite)]
@@ -248,6 +274,16 @@ NPI_days_averted <- ggplot(new) +
         axis.text.x = element_blank(),
         axis.ticks.x = element_blank(),
         strip.background = element_rect(fill="white"))
+
+new %>% 
+  left_join(rbind(cepi_test_100, cepi_test_250), 
+            by = c("specific_vaccine_start", "NPI_int" = "NPI_int")) %>%
+  left_join(data.frame(specific_vaccine_start = test$specific_vaccine_start,
+                       NPI_int = test$NPI_int,
+                       NPI_days = test$composite_NPI_spec,
+                       NPI_days_raw = test$time_under_NPIs_bpsv),
+            by = c("specific_vaccine_start", "NPI_int" = "NPI_int")) %>%
+  mutate(perc_red = 100 * (NPI_days_averted /  new_NPI_days))
 
 x <- cowplot::plot_grid(deaths_averted_plot, NPI_days_averted,
                    nrow = 1, rel_widths = c(1.4, 2.4/3.75),
